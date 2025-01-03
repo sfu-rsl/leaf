@@ -13,6 +13,9 @@ members = [
 ]
 exclude = ["runtime/shim", "integration/libafl/fuzzers/*", "samples/crates/", "scripts"]
 
+[workspace.package]
+license = "MIT OR Apache-2.0"
+
 [workspace.dependencies]
 # Unless we specify the package, it won't be renamed.
 common = { path = "common", package = "common" }
