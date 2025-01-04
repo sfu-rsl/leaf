@@ -37,3 +37,28 @@ $ leafo_onetime --program ./hello_world --outdir ./next
 next/diverging_0.bin
 ```
 It runs the target program, and prints the names of the files generated as diverging input.
+
+
+## Pure Concolic Testing
+
+By repeating the above procedure for each generated input, more possible paths
+in the target program will be covered. We use the term *pure concolic* testing,
+as used by [SymCC](https://github.com/eurecom-s3/symcc) for this method of testing.
+
+If you are interested in finding possible crashes in your program using pure concolic testing,
+the project comes with a utility named `leaff_pure_conc`, which runs the loop for programs and captures those that cause a crash
+in them. Currently, it only supports programs with symbolic standard input (uses the one-time orchestrator).
+
+To run pure concolic testing loop for a target:
+1. Install the tool.
+    ```console
+    leaf$ cargo install --path ./integration/libafl/fuzzers/pure_concolic
+    ```
+1. Build your program with `leafc`.
+1. Pass the executable path to the tool. e.g.,
+    ```console
+    $ leaff_pure_conc --conc-program ./hello_world
+    ```
+1. The loop stops if no more new distinct input is found to be given to the program (can possibly run forever).
+
+We recommend looking at the options available for tuning the loop by passing `--help`.
