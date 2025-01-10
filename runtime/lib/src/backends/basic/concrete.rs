@@ -1,3 +1,5 @@
+use crate::abs::ConstraintKind;
+
 use super::{
     alias::{RRef, ValueRefBinaryExprBuilder},
     ConcreteValueRef, Constraint, SymValueRef, TraceManager,
@@ -29,7 +31,11 @@ impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
             .expr_builder
             .borrow_mut()
             .eq((value.0, concrete_value.0).into());
-        let constraint = Constraint::Bool(eq_expr.into());
+        // NOTE: We do not use equality constraint here because that is meant for switch cases.
+        let constraint = Constraint {
+            discr: eq_expr,
+            kind: ConstraintKind::Bool,
+        };
         self.trace_manager.borrow_mut().notify_step(
             Default::default(), /* TODO: A unique index like basic block index. */
             constraint,

@@ -21,7 +21,7 @@ pub(crate) mod z3 {
 
     use common::log_debug;
 
-    use crate::solvers::z3::{AstNode, TranslatedConstraint};
+    use crate::solvers::z3::{AstNode, TranslatedValue};
 
     use super::TAG;
 
@@ -46,7 +46,7 @@ pub(crate) mod z3 {
     }
 
     impl<'ctx, 'a> FnOnce<(&'a ValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedConstraint<'ctx, SymVarId>;
+        type Output = TranslatedValue<'ctx, SymVarId>;
         extern "rust-call" fn call_once(mut self, (value,): (&'a ValueRef,)) -> Self::Output {
             self.translate(value)
         }
@@ -58,19 +58,39 @@ pub(crate) mod z3 {
         }
     }
 
+    impl<'ctx> FnOnce<(ValueRef,)> for Z3ValueTranslator<'ctx> {
+        type Output = TranslatedValue<'ctx, SymVarId>;
+        extern "rust-call" fn call_once(mut self, (value,): (ValueRef,)) -> Self::Output {
+            self.translate(&value)
+        }
+    }
+
+    impl<'ctx> FnMut<(ValueRef,)> for Z3ValueTranslator<'ctx> {
+        extern "rust-call" fn call_mut(&mut self, (value,): (ValueRef,)) -> Self::Output {
+            self.translate(&value)
+        }
+    }
+
+    impl<'ctx> FnOnce<(ConstValue,)> for Z3ValueTranslator<'ctx> {
+        type Output = AstNode<'ctx>;
+        extern "rust-call" fn call_once(mut self, (value,): (ConstValue,)) -> Self::Output {
+            self.translate_const(&value)
+        }
+    }
+
+    impl<'ctx> FnMut<(ConstValue,)> for Z3ValueTranslator<'ctx> {
+        extern "rust-call" fn call_mut(&mut self, (value,): (ConstValue,)) -> Self::Output {
+            self.translate_const(&value)
+        }
+    }
+
     impl<'ctx> Z3ValueTranslator<'ctx> {
-        pub(crate) fn translate(
-            &mut self,
-            value: &ValueRef,
-        ) -> TranslatedConstraint<'ctx, SymVarId> {
+        pub(crate) fn translate(&mut self, value: &ValueRef) -> TranslatedValue<'ctx, SymVarId> {
             log_debug!(target: TAG, "Translating value: {}", value);
             let ast = self.translate_value(value);
-            match ast {
-                AstNode::Bool(ast) => TranslatedConstraint {
-                    constraint: ast,
-                    variables: self.variables.drain().collect(),
-                },
-                _ => panic!("Expected the value to be a boolean expression but it is a {ast:#?}.",),
+            TranslatedValue {
+                value: ast,
+                variables: self.variables.drain().collect(),
             }
         }
     }

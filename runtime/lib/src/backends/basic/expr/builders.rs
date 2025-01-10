@@ -1,7 +1,6 @@
-use delegate::delegate;
-
 use super::super::alias::{
     SymValueRefExprBuilder, TypeManager, ValueRefBinaryExprBuilder, ValueRefExprBuilder,
+    ValueRefUnaryExprBuilder,
 };
 use super::{BinaryOp as BasicBinaryOp, UnaryOp as BasicUnaryOp, *};
 use crate::abs::{
@@ -35,6 +34,8 @@ pub(crate) fn to_sym_expr_builder(expr_builder: RRef<DefaultExprBuilder>) -> Def
 impl ValueRefExprBuilder for DefaultExprBuilder {}
 
 impl ValueRefBinaryExprBuilder for DefaultExprBuilder {}
+
+impl ValueRefUnaryExprBuilder for DefaultExprBuilder {}
 
 mod toplevel {
     use super::{concrete::ConcreteBuilder, symbolic::SymbolicBuilder, *};

@@ -9,7 +9,7 @@ use std::{collections::HashMap, hash::Hash};
 
 use common::log_debug;
 
-use crate::abs::{backend, Constraint};
+use crate::abs::{backend, Constraint, ConstraintKind};
 
 use self::backend::SolveResult;
 
@@ -156,8 +156,8 @@ impl<'ctx> AstNode<'ctx> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TranslatedConstraint<'ctx, I> {
-    pub constraint: ast::Bool<'ctx>,
+pub(crate) struct TranslatedValue<'ctx, I> {
+    pub value: AstNode<'ctx>,
     pub variables: HashMap<I, AstNode<'ctx>>,
 }
 
@@ -193,12 +193,13 @@ where
     I: Eq + Hash + Clone,
     Self: 'ctx,
 {
-    type Value = TranslatedConstraint<'ctx, I>;
+    type Value = TranslatedValue<'ctx, I>;
+    type Case = AstNode<'ctx>;
     type Model = HashMap<I, AstNode<'ctx>>;
 
     fn check<'a, 'b>(
         &'a mut self,
-        constraints: impl Iterator<Item = &'b Constraint<Self::Value>>,
+        constraints: impl Iterator<Item = &'b Constraint<Self::Value, Self::Case>>,
     ) -> SolveResult<Self::Model>
     where
         Self: 'b,
@@ -206,19 +207,35 @@ where
         let mut all_vars = HashMap::<I, AstNode>::new();
         let asts = constraints
             .map(|constraint| {
-                let (value, is_negated) = constraint.destruct_ref();
-                let TranslatedConstraint {
-                    constraint: ast,
-                    variables,
-                } = value;
+                let Constraint { discr, kind } = constraint;
+                use ConstraintKind::*;
+                let (kind, negated) = match kind {
+                    Bool => (Bool, false),
+                    Not => (Bool, true),
+                    OneOf(options) => (OneOf(options.iter().collect()), false),
+                    NoneOf(options) => (OneOf(options.iter().collect()), true),
+                };
+
+                let ast = match kind {
+                    Bool => discr.value.as_bool().clone(),
+                    OneOf(cases) => {
+                        let value_ast = discr.value.ast();
+                        cases
+                            .iter()
+                            .map(|c| c.ast())
+                            .map(|c| value_ast._eq(&c))
+                            .reduce(|all, m| all.xor(&m))
+                            .unwrap()
+                    }
+                    _ => unreachable!(),
+                };
                 all_vars.extend(
-                    variables
+                    discr
+                        .variables
                         .iter()
                         .map(|(id, node)| (id.clone(), node.clone())),
                 );
-
-                let constraint = if is_negated { ast.not() } else { ast.clone() };
-                constraint
+                if negated { ast.not() } else { ast }
             })
             .collect::<Vec<_>>();
 

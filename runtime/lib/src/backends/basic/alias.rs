@@ -54,6 +54,12 @@ where
 {
 }
 
+pub(crate) trait ValueRefUnaryExprBuilder
+where
+    Self: for<'a> UnaryExprBuilder<ExprRef<'a> = ValueRef, Expr<'a> = ValueRef>,
+{
+}
+
 pub(crate) use super::expr::builders::DefaultExprBuilder as BasicExprBuilder;
 pub(crate) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
 

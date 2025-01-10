@@ -16,11 +16,12 @@ where
     F: FnMut(S::Model) -> MTo,
 {
     type Value = S::Value;
+    type Case = S::Case;
     type Model = MTo;
 
     fn check<'b>(
         &mut self,
-        constraints: impl Iterator<Item = &'b crate::abs::Constraint<Self::Value>>,
+        constraints: impl Iterator<Item = &'b crate::abs::Constraint<Self::Value, Self::Case>>,
     ) -> SolveResult<Self::Model>
     where
         Self: 'b,
@@ -46,12 +47,12 @@ pub(crate) trait SolverExt: Solver {
     fn map<MTo>(
         self,
         f: impl FnMut(Self::Model) -> MTo,
-    ) -> impl Solver<Value = Self::Value, Model = MTo>;
+    ) -> impl Solver<Value = Self::Value, Case = Self::Case, Model = MTo>;
 
     fn map_answers<I: Eq + Hash, AFrom, ATo>(
         self,
         mut f: impl FnMut(AFrom) -> ATo,
-    ) -> impl Solver<Value = Self::Value, Model = Model<I, ATo>>
+    ) -> impl Solver<Value = Self::Value, Case = Self::Case, Model = Model<I, ATo>>
     where
         Self: Solver<Model = Model<I, AFrom>> + Sized,
     {
@@ -62,7 +63,7 @@ impl<S: Solver> SolverExt for S {
     fn map<MTo>(
         self,
         f: impl FnMut(S::Model) -> MTo,
-    ) -> impl Solver<Value = S::Value, Model = MTo> {
+    ) -> impl Solver<Value = S::Value, Case = S::Case, Model = MTo> {
         MappedSolver {
             inner: self,
             f,

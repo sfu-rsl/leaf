@@ -28,14 +28,15 @@ impl<S: Solver, TS, AI> ConstraintSanityChecker<S, TS, AI> {
     }
 }
 
-impl<S: Solver, TS, AI, const PANIC: bool> TraceInspector<TS, S::Value>
+impl<S: Solver, TS, AI, const PANIC: bool> TraceInspector<TS, S::Value, S::Case>
     for ConstraintSanityChecker<S, TS, AI, PANIC>
 where
     S::Value: core::fmt::Debug,
-    for<'a> &'a mut AI: IntoIterator<Item = &'a Constraint<S::Value>>,
+    S::Case: core::fmt::Debug,
+    for<'a> &'a mut AI: IntoIterator<Item = &'a Constraint<S::Value, S::Case>>,
 {
     #[tracing::instrument(level = "debug", skip_all)]
-    fn inspect(&mut self, _steps: &[TS], constraints: &[Constraint<S::Value>]) {
+    fn inspect(&mut self, _steps: &[TS], constraints: &[Constraint<S::Value, S::Case>]) {
         let constrained = self.assumptions.into_iter().chain(constraints.into_iter());
         if !matches!(self.solver.check(constrained), SolveResult::Sat(_)) {
             if PANIC {

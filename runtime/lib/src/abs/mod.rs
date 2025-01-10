@@ -178,25 +178,66 @@ pub enum AssertKind<Operand> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Constraint<V> {
-    Bool(V),
-    Not(V),
+pub(crate) struct Constraint<V, C> {
+    pub discr: V,
+    pub kind: ConstraintKind<C>,
 }
 
-impl<V> Constraint<V> {
-    #[inline]
-    pub fn destruct_ref(&self) -> (&V, bool) {
-        match self {
-            Constraint::Bool(value) => (value, false),
-            Constraint::Not(value) => (value, true),
+impl<V, C> Constraint<V, C> {
+    pub fn equality(discr: V, value: C) -> Self {
+        Self {
+            discr,
+            kind: ConstraintKind::OneOf(vec![value]),
         }
     }
 
     #[inline]
-    pub fn not(self) -> Constraint<V> {
+    pub fn not(self) -> Self {
+        Self {
+            kind: self.kind.not(),
+            ..self
+        }
+    }
+
+    pub(crate) fn map<VTo, CTo>(
+        self,
+        f: &mut impl FnMut(V) -> VTo,
+        g: &mut impl FnMut(C) -> CTo,
+    ) -> Constraint<VTo, CTo> {
+        Constraint {
+            discr: f(self.discr),
+            kind: self.kind.map(g),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ConstraintKind<C> {
+    Bool,
+    Not,
+    OneOf(Vec<C>),
+    NoneOf(Vec<C>),
+}
+
+impl<C> ConstraintKind<C> {
+    #[inline]
+    pub fn not(self) -> Self {
+        use ConstraintKind::*;
         match self {
-            Constraint::Bool(value) => Constraint::Not(value),
-            Constraint::Not(value) => Constraint::Bool(value),
+            Bool => Not,
+            Not => Bool,
+            OneOf(matches) => NoneOf(matches),
+            NoneOf(options) => OneOf(options),
+        }
+    }
+
+    pub(crate) fn map<CTo>(self, f: &mut impl FnMut(C) -> CTo) -> ConstraintKind<CTo> {
+        use ConstraintKind::*;
+        match self {
+            Bool => Bool,
+            Not => Not,
+            OneOf(options) => OneOf(options.into_iter().map(f).collect()),
+            NoneOf(options) => NoneOf(options.into_iter().map(f).collect()),
         }
     }
 }

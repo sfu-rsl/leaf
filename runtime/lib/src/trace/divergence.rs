@@ -2,12 +2,9 @@ use core::iter;
 
 use common::{log_debug, log_info, log_warn};
 
-use crate::abs::{
-    backend::{SolveResult, Solver},
-    Constraint,
-};
+use crate::abs::backend::{SolveResult, Solver};
 
-use super::inspect::TraceInspector;
+use super::{inspect::TraceInspector, Constraint};
 
 pub(crate) trait DivergenceFilter<S> {
     fn should_find(&mut self, trace: &[S]) -> bool;
@@ -27,12 +24,13 @@ pub(crate) struct ImmediateDivergingAnswerFinder<S: Solver, TS, C> {
     _phantom: core::marker::PhantomData<TS>,
 }
 
-impl<S: Solver, TS, C: DivergenceFilter<TS>> TraceInspector<TS, S::Value>
+impl<S: Solver, TS, C: DivergenceFilter<TS>> TraceInspector<TS, S::Value, S::Case>
     for ImmediateDivergingAnswerFinder<S, TS, C>
 where
     S::Value: Clone,
+    S::Case: Clone,
 {
-    fn inspect(&mut self, steps: &[TS], constraints: &[Constraint<S::Value>]) {
+    fn inspect(&mut self, steps: &[TS], constraints: &[Constraint<S::Value, S::Case>]) {
         if !self.filter.should_find(steps) {
             return;
         }
@@ -83,7 +81,7 @@ impl<S: Solver, TS, C> ImmediateDivergingAnswerFinder<S, TS, C> {
 impl<S: Solver, TS, C> ImmediateDivergingAnswerFinder<S, TS, C> {
     pub(crate) fn check<'a>(
         solver: &mut S,
-        constraints: impl Iterator<Item = &'a Constraint<S::Value>>,
+        constraints: impl Iterator<Item = &'a Constraint<S::Value, S::Case>>,
         model_consumer: &'a mut dyn FnMut(S::Model),
     ) -> bool
     where

@@ -1000,22 +1000,32 @@ mod convert {
             Into::<Value>::into(self).to_value_ref()
         }
     }
+
+    impl TryFrom<abs::Constant> for ConstValue {
+        type Error = abs::Constant;
+
+        fn try_from(value: abs::Constant) -> Result<Self, Self::Error> {
+            use abs::Constant::*;
+            match value {
+                Bool(value) => Ok(Self::Bool(value)),
+                Char(value) => Ok(Self::Char(value)),
+                Int { bit_rep, ty } => Ok(Self::Int {
+                    bit_rep: Wrapping(bit_rep),
+                    ty,
+                }),
+                Float { bit_rep, ty } => Ok(Self::Float { bit_rep, ty }),
+                Zst | Str(..) | ByteStr(..) | Some => Err(value),
+            }
+        }
+    }
+
     impl From<abs::Constant> for ConcreteValue {
         #[inline]
         fn from(val: abs::Constant) -> Self {
             use abs::Constant::*;
             match val {
                 Zst | Str(..) | ByteStr(..) | Some => UnevalValue::Some.into(),
-                _ => Self::Const(match val {
-                    Bool(value) => value.into(),
-                    Char(value) => value.into(),
-                    Int { bit_rep, ty } => ConstValue::Int {
-                        bit_rep: Wrapping(bit_rep),
-                        ty,
-                    },
-                    Float { bit_rep, ty } => ConstValue::Float { bit_rep, ty },
-                    Zst | Str(..) | ByteStr(..) | Some => unreachable!(),
-                }),
+                _ => Self::Const(val.try_into().unwrap()),
             }
         }
     }

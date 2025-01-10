@@ -27,13 +27,14 @@ use super::{
     },
     expr::translators::z3::Z3ValueTranslator,
     sym_vars::SymVariablesManager,
-    Solver, SymVarId, ValueRef,
+    ConstValue, Solver, SymVarId, ValueRef,
 };
 
 pub(super) type Step = BasicBlockLocation;
 
 type CurrentSolver<'ctx> = Z3Solver<'ctx, SymVarId>;
 type CurrentSolverValue<'ctx> = <Z3Solver<'ctx, SymVarId> as Solver>::Value;
+type CurrentSolverCase<'ctx> = <Z3Solver<'ctx, SymVarId> as Solver>::Case;
 type CurrentSolverTranslator<'ctx> = Z3ValueTranslator<'ctx>;
 
 #[derive(Clone, Debug, dm::Deref)]
@@ -65,7 +66,7 @@ pub(super) fn new_trace_manager(
     trace_config: &ExecutionTraceConfig,
     output_config: &Vec<OutputConfig>,
     solver_config: &SolverImpl,
-) -> impl TraceManager<Step, ValueRef> {
+) -> impl TraceManager<Step, ValueRef, ConstValue> {
     let (solver, translator) = match solver_config {
         SolverImpl::Z3 { config } => {
             crate::solvers::z3::set_global_params(
@@ -101,7 +102,7 @@ pub(super) fn new_trace_manager(
 
     let inspector = CompoundTraceInspector::new(inspectors);
     AggregatorTraceManager::new(inspector)
-        .adapt_value(move |v| translator.clone().translate(&v))
+        .adapt(|s| s, translator.clone(), translator.clone())
         .into_logger()
         .adapt_step(move |s| Tagged {
             value: s,
@@ -114,7 +115,7 @@ fn create_sanity_checker<'ctx, S: 'ctx>(
     translator: CurrentSolverTranslator<'ctx>,
     config: ConstraintSanityCheckLevel,
     solver: CurrentSolver<'ctx>,
-) -> Box<dyn TraceInspector<S, CurrentSolverValue<'ctx>> + 'ctx> {
+) -> Box<dyn TraceInspector<S, CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>> + 'ctx> {
     let assumptions = ConcretizationConstraintsCache::new(sym_var_manager, translator);
     match config {
         ConstraintSanityCheckLevel::Warn => {
@@ -131,7 +132,7 @@ fn create_imm_diverging_ans_finder<'ctx>(
     solver: CurrentSolver<'ctx>,
     check_optimistic: bool,
     output_config: &Vec<OutputConfig>,
-) -> impl TraceInspector<Tagged<Step>, CurrentSolverValue<'ctx>> + 'ctx {
+) -> impl TraceInspector<Tagged<Step>, CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>> + 'ctx {
     let mut output_generator = super::outgen::BasicOutputGenerator::new(output_config);
     let model_consumer = move |mut model: Model<SymVarId, ValueRef>| {
         // Add missing answers.
@@ -180,13 +181,13 @@ impl<S: HasTags> DivergenceFilter<S> for DivergenceTagFilter {
     }
 }
 
-struct ConcretizationConstraintsCache<M: SymVariablesManager, T, V> {
+struct ConcretizationConstraintsCache<M: SymVariablesManager, T, V, C> {
     manager: RRef<M>,
     translator: T,
-    constraints: HashMap<SymVarId, Constraint<V>>,
+    constraints: HashMap<SymVarId, Constraint<V, C>>,
 }
 
-impl<M: SymVariablesManager, T, V> ConcretizationConstraintsCache<M, T, V> {
+impl<M: SymVariablesManager, T, V, C> ConcretizationConstraintsCache<M, T, V, C> {
     fn new(manager: RRef<M>, translator: T) -> Self {
         Self {
             manager,
@@ -201,22 +202,30 @@ impl<'a, 'ctx, M: SymVariablesManager> IntoIterator
         M,
         CurrentSolverTranslator<'ctx>,
         CurrentSolverValue<'ctx>,
+        CurrentSolverCase<'ctx>,
     >
 // FIXME: Could not make generics work here.
 {
-    type Item = &'a Constraint<CurrentSolverValue<'ctx>>;
+    type Item = &'a Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>;
 
-    type IntoIter =
-        std::collections::hash_map::Values<'a, SymVarId, Constraint<CurrentSolverValue<'ctx>>>;
+    type IntoIter = std::collections::hash_map::Values<
+        'a,
+        SymVarId,
+        Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>,
+    >;
 
     fn into_iter(self) -> Self::IntoIter {
         let manager: std::cell::Ref<'a, M> = self.manager.borrow();
         let all_constraints = manager.iter_concretization_constraints();
         if all_constraints.len() > self.constraints.len() {
-            self.constraints.extend(
-                all_constraints
-                    .map(|(k, v)| (*k, Constraint::Bool(self.translator.call_mut((v,))))),
-            );
+            self.constraints.extend(all_constraints.map(|(k, c)| {
+                (
+                    *k,
+                    c.clone()
+                        .map(&mut self.translator, &mut |c| c)
+                        .map(&mut |d| d, &mut self.translator),
+                )
+            }));
         }
 
         self.constraints.values()

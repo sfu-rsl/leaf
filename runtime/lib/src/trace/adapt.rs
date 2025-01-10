@@ -1,18 +1,27 @@
 use super::{Constraint, TraceManager};
 
 /// Adapts a trace manager to accept other types of steps and values (contravariance).
-pub(crate) struct AdapterTraceManager<F, SFrom, VFrom, STo, VTo, M: TraceManager<STo, VTo>> {
+pub(crate) struct AdapterTraceManager<
+    F,
+    SFrom,
+    VFrom,
+    CFrom,
+    STo,
+    VTo,
+    CTo,
+    M: TraceManager<STo, VTo, CTo>,
+> {
     inner: M,
     adapter: F,
-    _phantom: core::marker::PhantomData<(SFrom, VFrom, STo, VTo)>,
+    _phantom: core::marker::PhantomData<(SFrom, VFrom, CFrom, STo, VTo, CTo)>,
 }
 
-impl<F, SFrom, VFrom, STo, VTo, M: TraceManager<STo, VTo>>
-    AdapterTraceManager<F, SFrom, VFrom, STo, VTo, M>
+impl<F, SFrom, VFrom, CFrom, STo, VTo, CTo, M: TraceManager<STo, VTo, CTo>>
+    AdapterTraceManager<F, SFrom, VFrom, CFrom, STo, VTo, CTo, M>
 {
     pub fn new(inner: M, adapter: F) -> Self
     where
-        F: FnMut(SFrom, Constraint<VFrom>) -> (STo, Constraint<VTo>),
+        F: FnMut(SFrom, Constraint<VFrom, CFrom>) -> (STo, Constraint<VTo, CTo>),
     {
         Self {
             inner,
@@ -22,66 +31,65 @@ impl<F, SFrom, VFrom, STo, VTo, M: TraceManager<STo, VTo>>
     }
 }
 
-impl<F, SFrom, VFrom, STo, VTo, M: TraceManager<STo, VTo>> TraceManager<SFrom, VFrom>
-    for AdapterTraceManager<F, SFrom, VFrom, STo, VTo, M>
+impl<F, SFrom, VFrom, CFrom, STo, VTo, CTo, M: TraceManager<STo, VTo, CTo>>
+    TraceManager<SFrom, VFrom, CFrom>
+    for AdapterTraceManager<F, SFrom, VFrom, CFrom, STo, VTo, CTo, M>
 where
-    F: FnMut(SFrom, Constraint<VFrom>) -> (STo, Constraint<VTo>),
+    F: FnMut(SFrom, Constraint<VFrom, CFrom>) -> (STo, Constraint<VTo, CTo>),
 {
-    fn notify_step(&mut self, step: SFrom, constraint: Constraint<VFrom>) {
+    fn notify_step(&mut self, step: SFrom, constraint: Constraint<VFrom, CFrom>) {
         let (new_step, constraint) = (self.adapter)(step, constraint);
         self.inner.notify_step(new_step, constraint);
     }
 }
 
-pub(crate) trait TraceManagerExt<STo, VTo>: TraceManager<STo, VTo> {
-    fn adapt<SFrom, VFrom, SF, CF>(
+pub(crate) trait TraceManagerExt<STo, VTo, CTo>: TraceManager<STo, VTo, CTo> {
+    fn adapt<SFrom, VFrom, CFrom, SF, VF, CF>(
         self,
         step_adaptor: SF,
-        value_adaptor: CF,
-    ) -> impl TraceManager<SFrom, VFrom>
+        value_adaptor: VF,
+        case_adaptor: CF,
+    ) -> impl TraceManager<SFrom, VFrom, CFrom>
     where
         SF: FnMut(SFrom) -> STo,
-        CF: FnMut(VFrom) -> VTo,
+        VF: FnMut(VFrom) -> VTo,
+        CF: FnMut(CFrom) -> CTo,
         Self: Sized;
 
-    fn adapt_step<SFrom, SF>(self, step_adaptor: SF) -> impl TraceManager<SFrom, VTo>
+    fn adapt_step<SFrom, SF>(self, step_adaptor: SF) -> impl TraceManager<SFrom, VTo, CTo>
     where
         SF: FnMut(SFrom) -> STo,
         Self: Sized,
     {
-        self.adapt(step_adaptor, |v| v)
+        self.adapt(step_adaptor, |v| v, |c| c)
     }
 
-    fn adapt_value<VFrom, CF>(self, value_adaptor: CF) -> impl TraceManager<STo, VFrom>
+    fn adapt_value<VFrom, CF>(self, value_adaptor: CF) -> impl TraceManager<STo, VFrom, CTo>
     where
         CF: FnMut(VFrom) -> VTo,
         Self: Sized,
     {
-        self.adapt(|s| s, value_adaptor)
+        self.adapt(|s| s, value_adaptor, |c| c)
     }
 }
-impl<STo, VTo, M: TraceManager<STo, VTo>> TraceManagerExt<STo, VTo> for M {
-    fn adapt<SFrom, VFrom, SF, CF>(
+impl<STo, VTo, CTo, M: TraceManager<STo, VTo, CTo>> TraceManagerExt<STo, VTo, CTo> for M {
+    fn adapt<SFrom, VFrom, CFrom, SF, VF, CF>(
         self,
-        mut step_adapter: SF,
-        mut value_adapter: CF,
-    ) -> impl TraceManager<SFrom, VFrom>
+        mut step_adaptor: SF,
+        mut value_adaptor: VF,
+        mut case_adaptor: CF,
+    ) -> impl TraceManager<SFrom, VFrom, CFrom>
     where
         SF: FnMut(SFrom) -> STo,
-        CF: FnMut(VFrom) -> VTo,
+        VF: FnMut(VFrom) -> VTo,
+        CF: FnMut(CFrom) -> CTo,
         Self: Sized,
     {
         AdapterTraceManager::new(self, move |step, constraint| {
-            (step_adapter(step), constraint.map(&mut value_adapter))
+            (
+                step_adaptor(step),
+                constraint.map(&mut value_adaptor, &mut case_adaptor),
+            )
         })
-    }
-}
-
-impl<V> Constraint<V> {
-    fn map<VTo>(self, f: &mut impl FnMut(V) -> VTo) -> Constraint<VTo> {
-        match self {
-            Constraint::Bool(v) => Constraint::Bool(f(v)),
-            Constraint::Not(v) => Constraint::Not(f(v)),
-        }
     }
 }

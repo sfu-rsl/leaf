@@ -254,8 +254,8 @@ pub(crate) trait AnnotationHandler {
 }
 
 /// Keeps track of all the compounding constraints in a single trace
-pub(crate) trait TraceManager<S, V> {
-    fn notify_step(&mut self, step: S, constraint: Constraint<V>);
+pub(crate) trait TraceManager<S, V, C> {
+    fn notify_step(&mut self, step: S, constraint: Constraint<V, C>);
 }
 
 pub(crate) type Model<I, A> = HashMap<I, A>;
@@ -264,11 +264,12 @@ pub(crate) type Model<I, A> = HashMap<I, A>;
 /// It takes a set of constraints to check satisfiability of them together.
 pub(crate) trait Solver {
     type Value;
+    type Case;
     type Model;
 
     fn check<'a>(
         &mut self,
-        constraints: impl Iterator<Item = &'a Constraint<Self::Value>>,
+        constraints: impl Iterator<Item = &'a Constraint<Self::Value, Self::Case>>,
     ) -> SolveResult<Self::Model>
     where
         Self: 'a;

@@ -26,8 +26,8 @@ use sym_vars::SymVariablesManager;
 use crate::{
     abs::{
         self, backend::*, place::HasMetadata, AssertKind, BasicBlockLocation, CalleeDef, CastKind,
-        FieldIndex, FuncDef, IntType, Local, LocalIndex, PlaceUsage, SymVariable, Tag, TypeId,
-        UnaryOp, VariantIndex,
+        ConstraintKind, FieldIndex, FuncDef, IntType, Local, LocalIndex, PlaceUsage, SymVariable,
+        Tag, TypeId, UnaryOp, VariantIndex,
     },
     tyexp::{FieldsShapeInfoExt, TypeInfoExt},
     utils::alias::RRef,
@@ -36,8 +36,8 @@ use crate::{
 use self::{
     alias::{
         BasicExprBuilder, BasicSymExprBuilder, TypeManager,
-        ValueRefBinaryExprBuilder as BinaryExprBuilder,
         ValueRefExprBuilder as OperationalExprBuilder,
+        ValueRefUnaryExprBuilder as UnaryExprBuilder,
     },
     concrete::BasicConcretizer,
     config::BasicBackendConfig,
@@ -47,13 +47,13 @@ use self::{
     types::BasicTypeManager,
 };
 
-type TraceManager = dyn abs::backend::TraceManager<trace::Step, ValueRef>;
+type TraceManager = dyn abs::backend::TraceManager<trace::Step, ValueRef, ConstValue>;
 
 type BasicVariablesState = RawPointerVariableState<BasicSymExprBuilder>;
 
 type BasicCallStackManager = call::BasicCallStackManager<BasicVariablesState>;
 
-type BasicSymVariablesManager = sym_vars::BasicSymVariablesManager<BasicExprBuilder>;
+type BasicSymVariablesManager = sym_vars::BasicSymVariablesManager;
 
 type Place = place::PlaceWithMetadata;
 type Projection = place::Projection;
@@ -77,9 +77,7 @@ impl BasicBackend {
             type_manager_ref.clone(),
         )));
         let expr_builder = expr_builder_ref.clone();
-        let sym_var_manager = Rc::new(RefCell::new(BasicSymVariablesManager::new(
-            expr_builder_ref.clone(),
-        )));
+        let sym_var_manager = Rc::new(RefCell::new(BasicSymVariablesManager::new()));
 
         let tags_ref = Rc::new(RefCell::new(Vec::new()));
         let type_manager = type_manager_ref.clone();
@@ -597,7 +595,7 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
     }
 }
 
-pub(crate) struct BasicConstraintHandler<'a, EB: BinaryExprBuilder> {
+pub(crate) struct BasicConstraintHandler<'a, EB> {
     location: BasicBlockLocation,
     trace_manager: RefMut<'a, TraceManager>,
     expr_builder: RRef<EB>,
@@ -613,13 +611,14 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
     }
 }
 
-impl<'a, EB: BinaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
+impl<'a, EB: UnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
     type Operand = ValueRef;
     type SwitchHandler = BasicSwitchHandler<'a, EB>;
 
     fn switch(self, discriminant: Self::Operand) -> Self::SwitchHandler {
+        let discr = self.expr_builder.borrow_mut().no_op(discriminant);
         BasicSwitchHandler {
-            discriminant,
+            discr,
             parent: self,
         }
     }
@@ -635,11 +634,11 @@ impl<'a, EB: BinaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a,
         if cond.is_symbolic() {
             // NOTE: This is a trick to pass the value through the expression builder
             // to ensure value resolving and simplifications.
-            let expr = self
-                .expr_builder
-                .borrow_mut()
-                .eq((cond.clone(), ConstValue::Bool(true).to_value_ref()));
-            let mut constraint = Constraint::Bool(expr);
+            let expr = self.expr_builder.borrow_mut().no_op(cond);
+            let mut constraint = Constraint {
+                discr: expr,
+                kind: ConstraintKind::Bool,
+            };
             if !expected {
                 constraint = constraint.not();
             }
@@ -649,20 +648,20 @@ impl<'a, EB: BinaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a,
     }
 }
 
-impl<'a, EB: BinaryExprBuilder> BasicConstraintHandler<'a, EB> {
+impl<'a, EB> BasicConstraintHandler<'a, EB> {
     fn notify_constraint(&mut self, constraint: Constraint) {
         self.trace_manager.notify_step(self.location, constraint);
     }
 }
 
-pub(crate) struct BasicSwitchHandler<'a, EB: BinaryExprBuilder> {
-    discriminant: ValueRef,
+pub(crate) struct BasicSwitchHandler<'a, EB> {
+    discr: ValueRef,
     parent: BasicConstraintHandler<'a, EB>,
 }
 
-impl<'a, EB: BinaryExprBuilder> SwitchHandler for BasicSwitchHandler<'a, EB> {
+impl<'a, EB> SwitchHandler for BasicSwitchHandler<'a, EB> {
     fn take(mut self, value: Self::Constant) {
-        if !self.discriminant.is_symbolic() {
+        if !self.discr.is_symbolic() {
             return;
         }
 
@@ -671,7 +670,7 @@ impl<'a, EB: BinaryExprBuilder> SwitchHandler for BasicSwitchHandler<'a, EB> {
     }
 
     fn take_otherwise(mut self, non_values: Vec<Self::Constant>) {
-        if !self.discriminant.is_symbolic() {
+        if !self.discr.is_symbolic() {
             return;
         }
 
@@ -680,18 +679,21 @@ impl<'a, EB: BinaryExprBuilder> SwitchHandler for BasicSwitchHandler<'a, EB> {
     }
 }
 
-impl<'a, EB: BinaryExprBuilder> BasicSwitchHandler<'a, EB> {
+impl<'a, EB> BasicSwitchHandler<'a, EB> {
     fn create_constraint(&mut self, values: Vec<<Self as SwitchHandler>::Constant>) -> Constraint {
-        let mut expr_builder = self.parent.expr_builder.as_ref().borrow_mut();
-        let expr = values
-            .into_iter()
-            .fold(ConstValue::Bool(false).to_value_ref(), |acc, v| {
-                let first = self.discriminant.clone();
-                let second = ConcreteValue::from(v).to_value_ref();
-                let expr = expr_builder.eq((first, second).into());
-                expr_builder.or((acc, expr).into()).into()
-            });
-        Constraint::Bool(expr)
+        let kind = match values.first().unwrap() {
+            abs::Constant::Bool(false) => ConstraintKind::Not,
+            _ => ConstraintKind::OneOf(
+                values
+                    .into_iter()
+                    .map(|c| ConstValue::try_from(c).unwrap())
+                    .collect(),
+            ),
+        };
+        Constraint {
+            discr: self.discr.clone(),
+            kind,
+        }
     }
 }
 
@@ -873,7 +875,7 @@ impl<'a> AnnotationHandler for BasicAnnotationHandler<'a> {
     }
 }
 
-type Constraint = crate::abs::Constraint<ValueRef>;
+type Constraint = crate::abs::Constraint<ValueRef, ConstValue>;
 
 pub(crate) struct TagPlaceWithInfo(PlaceValueRef, &'static common::tyexp::TagInfo);
 

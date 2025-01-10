@@ -130,14 +130,40 @@ impl Display for UnaryOp {
     }
 }
 
-impl<V> Display for Constraint<V>
+impl<V, C> Display for Constraint<V, C>
 where
     V: Display,
+    C: Display,
 {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        match self {
-            Constraint::Bool(value) => write!(f, "{{{}}}", value),
-            Constraint::Not(value) => write!(f, "!{{{}}}", value),
+        use ConstraintKind::*;
+        match &self.kind {
+            Bool => write!(f, "{{{}}}", self.discr),
+            Not => write!(f, "!{{{}}}", self.discr),
+            OneOf(options) => {
+                if options.len() == 1 {
+                    write!(f, "{{{} == {}}}", self.discr, options[0])
+                } else {
+                    write!(
+                        f,
+                        "{{{}}} in {{{}}}",
+                        self.discr,
+                        comma_separated(options.iter())
+                    )
+                }
+            }
+            NoneOf(options) => {
+                if options.len() == 1 {
+                    write!(f, "{{{} != {}}}", self.discr, options[0])
+                } else {
+                    write!(
+                        f,
+                        "{{{}}} !in {{{}}}",
+                        self.discr,
+                        comma_separated(options.iter())
+                    )
+                }
+            }
         }
     }
 }
