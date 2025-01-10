@@ -83,6 +83,7 @@ impl BinaryOp {
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
 pub enum UnaryOp {
+    NoOp,
     Not = common::pri::UnaryOp::NOT.as_u8(),
     Neg = common::pri::UnaryOp::NEG.as_u8(),
     PtrMetadata = common::pri::UnaryOp::PTR_METADATA.as_u8(),

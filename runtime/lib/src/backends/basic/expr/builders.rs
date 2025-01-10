@@ -393,7 +393,7 @@ mod adapters {
         where
             F: for<'s> FnH<<Self::Target as UEB>::ExprRef<'s>, <Self::Target as UEB>::Expr<'s>>,
         {
-            Value::from(build(operand)).to_value_ref()
+            build(operand).into()
         }
     }
 
@@ -765,17 +765,19 @@ mod core {
 
     impl UnaryExprBuilder for CoreBuilder {
         type ExprRef<'a> = SymValueRef;
-        type Expr<'a> = Expr;
+        type Expr<'a> = SymValueRef;
 
         fn unary_op<'a>(&mut self, operand: Self::ExprRef<'a>, op: AbsUnaryOp) -> Self::Expr<'a> {
             use AbsUnaryOp::*;
             match op {
+                NoOp => operand,
                 Neg | Not | BitReverse | TrailingZeros | NonZeroTrailingZeros | LeadingZeros
                 | NonZeroLeadingZeros | CountOnes => Expr::Unary {
                     operator: op.try_into().unwrap(),
                     operand: operand,
-                },
-                PtrMetadata => Expr::PtrMetadata(operand.into()),
+                }
+                .to_value_ref(),
+                PtrMetadata => Expr::PtrMetadata(operand.into()).to_value_ref(),
             }
         }
 

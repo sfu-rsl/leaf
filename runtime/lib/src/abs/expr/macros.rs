@@ -125,6 +125,7 @@ macro_rules! impl_general_unary_op_through_singulars {
         ) -> Self::Expr<'a> {
             use crate::abs::UnaryOp::*;
             match op {
+                NoOp => self.no_op(operand),
                 Not => self.not(operand),
                 Neg => self.neg(operand),
                 PtrMetadata => self.ptr_metadata(operand),
@@ -155,6 +156,7 @@ macro_rules! impl_singular_unary_ops_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_unary_op_through_general;
+            (no_op = crate::abs::UnaryOp::NoOp)
             (not = crate::abs::UnaryOp::Not)
             (neg = crate::abs::UnaryOp::Neg)
             (ptr_metadata = crate::abs::UnaryOp::PtrMetadata)
