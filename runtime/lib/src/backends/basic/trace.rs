@@ -103,7 +103,7 @@ pub(super) fn new_trace_manager(
     let inspector = CompoundTraceInspector::new(inspectors);
     AggregatorTraceManager::new(inspector)
         .adapt(|s| s, translator.clone(), translator.clone())
-        .into_logger()
+        .logged()
         .adapt_step(move |s| Tagged {
             value: s,
             tags: tags.borrow().clone(),

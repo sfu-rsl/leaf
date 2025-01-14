@@ -1,13 +1,51 @@
-use super::Constraint;
+use super::{Constraint, TraceManager};
+
+pub(crate) trait StepInspector<S, V, C> {
+    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>);
+}
 
 pub(crate) trait TraceInspector<S, V, C> {
     fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]);
 }
 
-pub(crate) type NoopTraceInspector = ();
+pub(crate) type NoopInspector = ();
 
-impl<S, V, C> TraceInspector<S, V, C> for NoopTraceInspector {
+impl<S, V, C> StepInspector<S, V, C> for NoopInspector {
+    fn inspect(&mut self, _step: &S, _constraint: &Constraint<V, C>) {}
+}
+
+impl<S, V, C> TraceInspector<S, V, C> for NoopInspector {
     fn inspect(&mut self, _steps: &[S], _constraints: &[Constraint<V, C>]) {}
+}
+
+impl<S, V, C, F> StepInspector<S, V, C> for F
+where
+    F: FnMut(&S, &Constraint<V, C>),
+{
+    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+        self(step, constraint);
+    }
+}
+
+pub(crate) struct InspectedTraceManager<
+    S,
+    V,
+    C,
+    M: TraceManager<S, V, C>,
+    I: StepInspector<S, V, C>,
+> {
+    inner: M,
+    inspector: I,
+    _phantom: core::marker::PhantomData<(S, V, C)>,
+}
+
+impl<S, V, C, M: TraceManager<S, V, C>, I: StepInspector<S, V, C>> TraceManager<S, V, C>
+    for InspectedTraceManager<S, V, C, M, I>
+{
+    fn notify_step(&mut self, step: S, constraint: Constraint<V, C>) {
+        self.inspector.inspect(&step, &constraint);
+        self.inner.notify_step(step, constraint);
+    }
 }
 
 pub(crate) struct StaticCompoundTraceInspector<
@@ -57,6 +95,25 @@ impl<S, V, C> TraceInspector<S, V, C> for CompoundTraceInspector<S, V, C> {
     fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
         for inspector in self.inspectors.iter_mut() {
             inspector.inspect(steps, constraints);
+        }
+    }
+}
+
+pub(crate) trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
+    fn inspected_by(self, inspector: impl StepInspector<S, V, C>) -> impl TraceManager<S, V, C>
+    where
+        Self: Sized;
+}
+
+impl<S, V, C, M: TraceManager<S, V, C>> TraceManagerExt<S, V, C> for M {
+    fn inspected_by(self, inspector: impl StepInspector<S, V, C>) -> impl TraceManager<S, V, C>
+    where
+        Self: Sized,
+    {
+        InspectedTraceManager {
+            inner: self,
+            inspector,
+            _phantom: Default::default(),
         }
     }
 }
