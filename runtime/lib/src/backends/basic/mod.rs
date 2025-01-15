@@ -650,7 +650,8 @@ impl<'a, EB: UnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, 
 
 impl<'a, EB> BasicConstraintHandler<'a, EB> {
     fn notify_constraint(&mut self, constraint: Constraint) {
-        self.trace_manager.notify_step(self.location, constraint);
+        self.trace_manager
+            .notify_step(self.location.into(), constraint);
     }
 }
 

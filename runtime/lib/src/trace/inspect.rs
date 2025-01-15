@@ -1,3 +1,5 @@
+use crate::utils::alias::RRef;
+
 use super::{Constraint, TraceManager};
 
 pub(crate) trait StepInspector<S, V, C> {
@@ -24,6 +26,40 @@ where
 {
     fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
         self(step, constraint);
+    }
+}
+
+impl<S, V, C> StepInspector<S, V, C> for Box<dyn StepInspector<S, V, C>> {
+    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+        self.as_mut().inspect(step, constraint);
+    }
+}
+
+impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for RRef<I> {
+    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+        self.borrow_mut().inspect(step, constraint);
+    }
+}
+
+impl<S, V, C> TraceInspector<S, V, C> for Box<dyn TraceInspector<S, V, C>> {
+    fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
+        self.as_mut().inspect(steps, constraints);
+    }
+}
+
+impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for Vec<I> {
+    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+        for inspector in self.iter_mut() {
+            inspector.inspect(step, constraint);
+        }
+    }
+}
+
+impl<S, V, C, I: TraceInspector<S, V, C>> TraceInspector<S, V, C> for Vec<I> {
+    fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
+        for inspector in self.iter_mut() {
+            inspector.inspect(steps, constraints);
+        }
     }
 }
 
@@ -78,24 +114,6 @@ impl<S, V, C, I: TraceInspector<S, V, C>, J: TraceInspector<S, V, C>> TraceInspe
     fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
         self.first.inspect(steps, constraints);
         self.second.inspect(steps, constraints);
-    }
-}
-
-pub(crate) struct CompoundTraceInspector<S, V, C> {
-    inspectors: Vec<Box<dyn TraceInspector<S, V, C>>>,
-}
-
-impl<S, V, C> CompoundTraceInspector<S, V, C> {
-    pub(crate) fn new(inspectors: Vec<Box<dyn TraceInspector<S, V, C>>>) -> Self {
-        Self { inspectors }
-    }
-}
-
-impl<S, V, C> TraceInspector<S, V, C> for CompoundTraceInspector<S, V, C> {
-    fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
-        for inspector in self.inspectors.iter_mut() {
-            inspector.inspect(steps, constraints);
-        }
     }
 }
 

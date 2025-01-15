@@ -133,6 +133,9 @@ pub(crate) enum TraceInspectorType {
         #[serde(default = "default_diverging_input_check_optimistic")]
         check_optimistic: bool,
     },
+    BranchCoverage {
+        output: Option<OutputConfig>,
+    },
 }
 
 #[derive(Debug, Default, Clone, Copy, Deserialize, PartialEq, PartialOrd)]

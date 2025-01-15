@@ -1,4 +1,5 @@
 use derive_more as dm;
+use serde::Serialize;
 
 pub(crate) mod backend;
 pub(crate) mod expr;
@@ -211,7 +212,7 @@ impl<V, C> Constraint<V, C> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) enum ConstraintKind<C> {
     Bool,
     Not,
@@ -287,7 +288,7 @@ impl ValueType {
  * Enums are not much a favorable option, since they are against the abstract
  * representation of integers and floats in the engine.
  */
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
 pub(crate) struct IntType {
     pub bit_size: u64,
     pub is_signed: bool,

@@ -140,28 +140,32 @@ where
         match &self.kind {
             Bool => write!(f, "{{{}}}", self.discr),
             Not => write!(f, "!{{{}}}", self.discr),
+            _ => write!(f, "{{{} {}}}", self.discr, self.kind),
+        }
+    }
+}
+
+impl<C> Display for ConstraintKind<C>
+where
+    C: Display,
+{
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        use ConstraintKind::*;
+        match self {
+            Bool => write!(f, "{}", true),
+            Not => write!(f, "{}", false),
             OneOf(options) => {
                 if options.len() == 1 {
-                    write!(f, "{{{} == {}}}", self.discr, options[0])
+                    write!(f, "== {}", options[0])
                 } else {
-                    write!(
-                        f,
-                        "{{{}}} in {{{}}}",
-                        self.discr,
-                        comma_separated(options.iter())
-                    )
+                    write!(f, "in {}", comma_separated(options.iter()))
                 }
             }
             NoneOf(options) => {
                 if options.len() == 1 {
-                    write!(f, "{{{} != {}}}", self.discr, options[0])
+                    write!(f, "!= {}", options[0])
                 } else {
-                    write!(
-                        f,
-                        "{{{}}} !in {{{}}}",
-                        self.discr,
-                        comma_separated(options.iter())
-                    )
+                    write!(f, "!in {}", comma_separated(options.iter()))
                 }
             }
         }
