@@ -1,6 +1,6 @@
 use super::{
     expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
-    LazyTypeInfo,
+    ConstValue, LazyTypeInfo,
 };
 use crate::abs::{
     self,
@@ -73,5 +73,14 @@ impl<'t, T> TypeManager for T where
     T: abs::backend::TypeManager<Key = TypeId, Value = &'static TypeInfo>
         + CoreTypeProvider<&'static TypeInfo>
         + CoreTypeProvider<LazyTypeInfo>
+{
+}
+
+pub(crate) trait TraceManager:
+    abs::backend::TraceManager<super::trace::Step, ValueRef, ConstValue> + Shutdown
+{
+}
+impl<T> TraceManager for T where
+    T: abs::backend::TraceManager<super::trace::Step, ValueRef, ConstValue> + Shutdown
 {
 }

@@ -1,7 +1,10 @@
 use super::utils::{DefaultRefManager, RefManager};
 use super::{OperandRef, PlaceHandler, PlaceRef, SwitchInfo};
 use crate::abs::{
-    backend::{AssignmentHandler, ConstraintHandler, OperandHandler, PlaceBuilder, RuntimeBackend},
+    backend::{
+        AssignmentHandler, ConstraintHandler, OperandHandler, PlaceBuilder, RuntimeBackend,
+        Shutdown,
+    },
     BasicBlockLocation, PlaceUsage,
 };
 use crate::backends::basic::BasicPlaceBuilder;
@@ -77,6 +80,11 @@ pub(super) fn init_backend() {
         }
         log_info!("Basic backend initialized");
     });
+}
+
+pub(super) fn shutdown_backend() {
+    // FIXME: We can drop the here.
+    perform_on_backend(|r| r.shutdown())
 }
 
 const CONFIG_FILENAME: &str = "leaf_config";

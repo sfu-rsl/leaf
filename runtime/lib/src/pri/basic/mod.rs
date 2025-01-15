@@ -36,7 +36,7 @@ impl ProgramRuntimeInterface for BasicPri {
     }
 
     fn shutdown_runtime_lib() {
-        log_warn!("Shutting down has no effect on the basic backend.");
+        shutdown_backend();
     }
 
     #[tracing::instrument(target = "pri", skip_all, level = "trace")]

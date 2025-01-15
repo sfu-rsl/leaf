@@ -25,6 +25,7 @@ macro_rules! late_init {
         $(#[$($attr)*])*
         #[inline(always)]
         fn shutdown_runtime_lib ($($(#[$($arg_attr)*])* $arg : $arg_type),*) $(-> $ret_ty)? {
+            MainPri::shutdown_runtime_lib($($arg.into()),*);
             unsafe { IS_ACTIVE = false; }
         }
     };

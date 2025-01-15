@@ -2,7 +2,7 @@ use crate::abs::ConstraintKind;
 
 use super::{
     alias::{RRef, ValueRefBinaryExprBuilder},
-    ConcreteValueRef, Constraint, SymValueRef, TraceManager,
+    BasicTraceManager, ConcreteValueRef, Constraint, SymValueRef,
 };
 use common::log_debug;
 
@@ -12,11 +12,11 @@ pub(super) trait Concretizer {
 
 pub(super) struct BasicConcretizer<EB: ValueRefBinaryExprBuilder> {
     expr_builder: RRef<EB>,
-    trace_manager: RRef<TraceManager>,
+    trace_manager: RRef<BasicTraceManager>,
 }
 
 impl<EB: ValueRefBinaryExprBuilder> BasicConcretizer<EB> {
-    pub fn new(expr_builder: RRef<EB>, trace_manager: RRef<TraceManager>) -> Self {
+    pub fn new(expr_builder: RRef<EB>, trace_manager: RRef<BasicTraceManager>) -> Self {
         Self {
             expr_builder,
             trace_manager,

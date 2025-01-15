@@ -18,7 +18,7 @@ use std::{
 };
 
 use common::{
-    log_debug,
+    log_debug, log_info,
     tyexp::{FieldsShapeInfo, StructShape, TypeInfo},
 };
 use sym_vars::SymVariablesManager;
@@ -35,7 +35,7 @@ use crate::{
 
 use self::{
     alias::{
-        BasicExprBuilder, BasicSymExprBuilder, TypeManager,
+        BasicExprBuilder, BasicSymExprBuilder, TraceManager, TypeManager,
         ValueRefExprBuilder as OperationalExprBuilder,
         ValueRefUnaryExprBuilder as UnaryExprBuilder,
     },
@@ -47,7 +47,7 @@ use self::{
     types::BasicTypeManager,
 };
 
-type TraceManager = dyn abs::backend::TraceManager<trace::Step, ValueRef, ConstValue>;
+type BasicTraceManager = dyn TraceManager;
 
 type BasicVariablesState = RawPointerVariableState<BasicSymExprBuilder>;
 
@@ -63,7 +63,7 @@ const LOG_TAG_TAGS: &str = "tags";
 
 pub struct BasicBackend {
     call_stack_manager: BasicCallStackManager,
-    trace_manager: RRef<TraceManager>,
+    trace_manager: RRef<BasicTraceManager>,
     expr_builder: RRef<BasicExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeManager>,
@@ -597,7 +597,7 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
 
 pub(crate) struct BasicConstraintHandler<'a, EB> {
     location: BasicBlockLocation,
-    trace_manager: RefMut<'a, TraceManager>,
+    trace_manager: RefMut<'a, BasicTraceManager>,
     expr_builder: RRef<EB>,
 }
 
@@ -872,6 +872,13 @@ impl<'a> AnnotationHandler for BasicAnnotationHandler<'a> {
     fn pop_tag(mut self) {
         self.tags.pop();
         self.log_current_tags();
+    }
+}
+
+impl Shutdown for BasicBackend {
+    fn shutdown(&mut self) {
+        log_info!("Shutting down the basic backend");
+        self.trace_manager.borrow_mut().shutdown();
     }
 }
 

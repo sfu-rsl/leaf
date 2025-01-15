@@ -6,7 +6,7 @@ use super::{
     VariantIndex,
 };
 
-pub(crate) trait RuntimeBackend {
+pub(crate) trait RuntimeBackend: Shutdown {
     type PlaceHandler<'a>: for<'b> PlaceHandler<PlaceInfo<'b> = Self::PlaceInfo, Place = Self::Place>
     where
         Self: 'a;
@@ -251,6 +251,10 @@ pub(crate) trait AnnotationHandler {
     fn push_tag(self, tag: Tag);
 
     fn pop_tag(self);
+}
+
+pub(crate) trait Shutdown {
+    fn shutdown(&mut self);
 }
 
 /// Keeps track of all the compounding constraints in a single trace
