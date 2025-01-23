@@ -64,9 +64,9 @@ pub(crate) trait TraceManagerExt<STo, VTo, CTo>: TraceManager<STo, VTo, CTo> {
         self.adapt(step_adaptor, |v| v, |c| c)
     }
 
-    fn adapt_value<VFrom, CF>(self, value_adaptor: CF) -> impl TraceManager<STo, VFrom, CTo>
+    fn adapt_value<VFrom, VF>(self, value_adaptor: VF) -> impl TraceManager<STo, VFrom, CTo>
     where
-        CF: FnMut(VFrom) -> VTo,
+        VF: FnMut(VFrom) -> VTo,
         Self: Sized,
     {
         self.adapt(|s| s, value_adaptor, |c| c)
