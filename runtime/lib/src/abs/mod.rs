@@ -376,7 +376,7 @@ pub(crate) struct CalleeDef(common::pri::CalleeDef);
 pub(crate) trait HasTags {
     fn tags(&self) -> &[Tag];
 
-    fn has_tag(&self, tag: Tag) -> bool {
-        self.tags().contains(&tag)
+    fn has_tag<T: PartialEq<Tag>>(&self, tag: &T) -> bool {
+        self.tags().iter().any(|t| tag == t)
     }
 }

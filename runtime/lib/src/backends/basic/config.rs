@@ -112,6 +112,7 @@ pub(crate) enum TraceInspectorType {
     DivergingInput {
         #[serde(default = "default_diverging_input_check_optimistic")]
         check_optimistic: bool,
+        filters: Vec<DivergenceFilterType>,
     },
     BranchCoverage {
         output: Option<OutputConfig>,
@@ -130,6 +131,24 @@ fn default_diverging_input_check_optimistic() -> bool {
     true
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DivergenceFilterType {
+    Tags {
+        exclude_any_of: Vec<String>,
+    },
+    BranchDepthDistance {
+        #[serde(default = "default_branch_depth_distance_factor")]
+        distance_threshold_factor: f32,
+        persistence: Option<OutputConfig>,
+    },
+}
+
+fn default_branch_depth_distance_factor() -> f32 {
+    2.0
+}
+
 fn default_trace_inspectors() -> Vec<TraceInspectorType> {
     vec![
         TraceInspectorType::SanityChecker {
@@ -137,6 +156,7 @@ fn default_trace_inspectors() -> Vec<TraceInspectorType> {
         },
         TraceInspectorType::DivergingInput {
             check_optimistic: default_diverging_input_check_optimistic(),
+            filters: vec![],
         },
     ]
 }

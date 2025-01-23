@@ -1,7 +1,11 @@
 use derive_more as dm;
+use serde::Serialize;
 
-use core::fmt::Display;
-use std::collections::HashMap;
+use core::{
+    borrow::Borrow,
+    fmt::{Debug, Display},
+};
+use std::{cell::RefCell, collections::HashMap};
 
 use common::{log_debug, pri::BasicBlockLocation};
 
@@ -18,45 +22,19 @@ use crate::{
 };
 
 use super::{
-    config::{
-        ConstraintSanityCheckLevel, ExecutionTraceConfig, OutputConfig, SolverImpl,
-        TraceInspectorType,
-    },
+    config::{self, ExecutionTraceConfig, OutputConfig, SolverImpl, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
     sym_vars::SymVariablesManager,
     ConstValue, Solver, SymVarId, TraceManager, ValueRef,
 };
 
-#[derive(PartialEq, Eq, Hash, Clone, Debug, Default, dm::Deref, dm::From, dm::Display)]
-pub(super) struct Step(BasicBlockLocation);
+pub(crate) use helpers::Step;
+use helpers::*;
 
 type CurrentSolver<'ctx> = Z3Solver<'ctx, SymVarId>;
-type CurrentSolverValue<'ctx> = <Z3Solver<'ctx, SymVarId> as Solver>::Value;
-type CurrentSolverCase<'ctx> = <Z3Solver<'ctx, SymVarId> as Solver>::Case;
+type CurrentSolverValue<'ctx> = <CurrentSolver<'ctx> as Solver>::Value;
+type CurrentSolverCase<'ctx> = <CurrentSolver<'ctx> as Solver>::Case;
 type CurrentSolverTranslator<'ctx> = Z3ValueTranslator<'ctx>;
-
-#[derive(Clone, Debug, dm::Deref)]
-struct Tagged<T> {
-    #[deref]
-    value: T,
-    tags: Vec<Tag>,
-}
-
-impl HasTags for Tagged<Step> {
-    fn tags(&self) -> &[Tag] {
-        &self.tags
-    }
-}
-
-impl<T: Display> Display for Tagged<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.tags.is_empty() {
-            return self.value.fmt(f);
-        } else {
-            write!(f, "{} #[{}]", self.value, self.tags.join(", "))
-        }
-    }
-}
 
 pub(super) fn new_trace_manager(
     tags: RRef<Vec<Tag>>,
@@ -77,7 +55,26 @@ pub(super) fn new_trace_manager(
     };
     let sym_var_manager_ref = sym_var_manager;
 
+    let mut dumpers: Vec<Box<dyn Dumper>> = vec![];
+
+    let mut cov_inspector = None;
     let inspectors = trace_config
+        .inspectors
+        .iter()
+        .filter(|t| !is_inner_inspector(t))
+        .map(|t| match t {
+            TraceInspectorType::BranchCoverage { output, .. } => {
+                let (inspector, dumper) =
+                    coverage::create_branch_coverage_collector::<ValueRef>(output);
+                cov_inspector = Some(inspector.clone());
+                dumpers.extend_opt(dumper);
+                Box::new(inspector) as Box<dyn StepInspector<_, _, _>>
+            }
+            _ => unreachable!(),
+        })
+        .collect::<Vec<_>>();
+
+    let inner_inspectors = trace_config
         .inspectors
         .iter()
         .filter(|t| is_inner_inspector(t))
@@ -88,47 +85,45 @@ pub(super) fn new_trace_manager(
                 *level,
                 solver.clone(),
             ),
-            TraceInspectorType::DivergingInput { check_optimistic } => {
-                Box::new(divergence::create_imm_diverging_ans_finder(
+            TraceInspectorType::DivergingInput {
+                check_optimistic,
+                filters,
+            } => {
+                let (inspector, dumper) = divergence::create_imm_diverging_ans_finder(
                     sym_var_manager_ref.clone(),
                     solver.clone(),
                     *check_optimistic,
+                    filters,
+                    cov_inspector.clone(),
                     output_config,
-                ))
+                );
+                dumpers.push(Box::new(dumper));
+                Box::new(inspector)
             }
             _ => unreachable!(),
         })
         .collect::<Vec<_>>();
 
-    let core_manager = AggregatorTraceManager::new(inspectors)
-        .adapt(|s| s, translator.clone(), translator.clone())
-        .logged()
-        .adapt_step(move |s| Tagged {
-            value: s,
-            tags: tags.borrow().clone(),
-        });
+    let mut value_translator = translator.clone();
+    let mut case_translator = translator.clone();
+    let core_manager = AggregatorTraceManager::new(inner_inspectors).adapt(
+        |s| s,
+        move |v| Translation::of(v, &mut value_translator),
+        move |c: ConstValue| Translation::of(c, &mut case_translator),
+    );
 
     let manager = core_manager;
 
-    let mut cov_dumper = None;
-    let inspectors = trace_config
-        .inspectors
-        .iter()
-        .filter(|t| !is_inner_inspector(t))
-        .map(|t| match t {
-            TraceInspectorType::BranchCoverage { output } => {
-                let (cov_inspector, dumper) = coverage::create_branch_coverage_collector(output);
-                cov_dumper = dumper;
-                Box::new(cov_inspector) as Box<dyn StepInspector<_, _, _>>
-            }
-            _ => unreachable!(),
+    manager
+        .logged()
+        .adapt_step(move |s| Tagged {
+            value: s,
+            tags: RefCell::borrow(&tags).clone(),
         })
-        .collect::<Vec<_>>();
-    manager.inspected_by(inspectors).on_shutdown(move || {
-        if let Some(ref mut dumper) = cov_dumper {
-            dumper().expect("Could not dump branch coverage");
-        }
-    })
+        .inspected_by(inspectors)
+        .on_shutdown(move || {
+            dumpers.dump().expect("Problem with dumping information");
+        })
 }
 
 fn is_inner_inspector(t: &TraceInspectorType) -> bool {
@@ -140,14 +135,22 @@ fn is_inner_inspector(t: &TraceInspectorType) -> bool {
 }
 
 mod sanity_check {
-    use super::*;
+    use std::cell::RefCell;
 
-    pub(super) fn create_sanity_checker<'ctx, S: 'ctx>(
+    use super::{config::ConstraintSanityCheckLevel, *};
+
+    pub(super) fn create_sanity_checker<'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
         sym_var_manager: RRef<impl SymVariablesManager + 'ctx>,
         translator: CurrentSolverTranslator<'ctx>,
         config: ConstraintSanityCheckLevel,
         solver: CurrentSolver<'ctx>,
-    ) -> Box<dyn TraceInspector<S, CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>> + 'ctx> {
+    ) -> Box<dyn TraceInspector<S, V, C> + 'ctx>
+    where
+        V: Borrow<CurrentSolverValue<'ctx>>,
+        C: Borrow<CurrentSolverCase<'ctx>>,
+        V: Debug,
+        C: Debug,
+    {
         let assumptions = ConcretizationConstraintsCache::new(sym_var_manager, translator);
         match config {
             ConstraintSanityCheckLevel::Warn => {
@@ -182,18 +185,16 @@ mod sanity_check {
             CurrentSolverValue<'ctx>,
             CurrentSolverCase<'ctx>,
         >
-    // FIXME: Could not make generics work here.
     {
-        type Item = &'a Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>;
+        // FIXME: Could not make generics work here.
+        type Item = Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>;
 
-        type IntoIter = std::collections::hash_map::Values<
-            'a,
-            SymVarId,
-            Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>,
+        type IntoIter = Box<
+            dyn Iterator<Item = Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>> + 'a,
         >;
 
         fn into_iter(self) -> Self::IntoIter {
-            let manager: std::cell::Ref<'a, M> = self.manager.borrow();
+            let manager: std::cell::Ref<'a, M> = RefCell::borrow(&self.manager);
             let all_constraints = manager.iter_concretization_constraints();
             if all_constraints.len() > self.constraints.len() {
                 self.constraints.extend(all_constraints.map(|(k, c)| {
@@ -206,28 +207,42 @@ mod sanity_check {
                 }));
             }
 
-            self.constraints.values()
+            Box::new(self.constraints.values().cloned())
         }
     }
 }
 
 mod divergence {
-    use super::super::outgen::BasicOutputGenerator;
+    use std::rc::Rc;
+
+    use crate::trace::divergence::{
+        filter::all, BranchCoverageDepthDivergenceFilter, DepthProvider,
+    };
 
     use super::*;
+    use super::{super::outgen::BasicOutputGenerator, config::DivergenceFilterType};
 
-    pub(super) fn create_imm_diverging_ans_finder<'ctx>(
+    pub(super) fn create_imm_diverging_ans_finder<'ctx, V: 'ctx, C: 'ctx>(
         sym_var_manager: RRef<impl SymVariablesManager + 'static>,
         solver: CurrentSolver<'ctx>,
         check_optimistic: bool,
+        filters_config: &Vec<DivergenceFilterType>,
+        branch_depth_provider: Option<RRef<impl DepthProvider<Step, ConstValue> + 'ctx>>,
         output_config: &Vec<OutputConfig>,
-    ) -> impl TraceInspector<Tagged<Step>, CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>> + 'ctx
+    ) -> (
+        impl TraceInspector<Tagged<Step>, V, C> + 'ctx,
+        impl Dumper + 'ctx,
+    )
+    where
+        V: Borrow<CurrentSolverValue<'ctx>>,
+        C: Borrow<CurrentSolverCase<'ctx>>,
+        C: Borrow<ConstValue>,
     {
         let mut output_generator = BasicOutputGenerator::new(output_config);
         let model_consumer = move |mut model: Model<SymVarId, ValueRef>| {
             // Add missing answers.
             // FIXME: Performance can be improved.
-            let all_sym_values = sym_var_manager.borrow();
+            let all_sym_values = RefCell::borrow(&sym_var_manager);
             let missing_answers = all_sym_values
                 .iter_variables()
                 .filter(|(id, _, _)| !model.contains_key(id))
@@ -237,74 +252,144 @@ mod divergence {
 
             output_generator.generate(&model)
         };
-        let divergence_filter = DivergenceTagFilter {
-            exclude_with_any_of: vec![common::pri::tags::NO_DIVERGE],
-        };
 
-        ImmediateDivergingAnswerFinder::new(
+        let mut filters: Vec<Box<dyn DivergenceFilter<Tagged<Step>, V, C> + '_>> = vec![];
+        let mut dumpers: Vec<Box<dyn Dumper>> = vec![];
+
+        // This filter is builtin and not overridable.
+        filters.push(Box::new(DivergenceTagFilter::new(&[
+            common::pri::tags::NO_DIVERGE.to_owned(),
+        ])));
+
+        filters.extend(
+            filters_config
+                .iter()
+                .map::<Box<dyn DivergenceFilter<_, _, _>>, _>(|f| match f {
+                    DivergenceFilterType::Tags { exclude_any_of } => {
+                        Box::new(DivergenceTagFilter::new(&exclude_any_of))
+                    }
+                    DivergenceFilterType::BranchDepthDistance {
+                        distance_threshold_factor,
+                        persistence,
+                    } => {
+                        let (filter, dumper) = create_branch_depth_filter(
+                            branch_depth_provider.clone().expect(
+                                "Branch coverage info is required. Check if the inspector is added correctly.",
+                            ),
+                            *distance_threshold_factor,
+                            persistence.as_ref(),
+                        );
+                        dumpers.extend_opt(dumper);
+                        Box::new(filter)
+                    }
+                }),
+        );
+
+        let inspector = ImmediateDivergingAnswerFinder::new(
             solver.clone().map_answers(ValueRef::from),
-            divergence_filter,
+            all(filters),
             check_optimistic.then(|| solver.clone().map_answers(ValueRef::from)),
             Box::new(model_consumer),
-        )
+        );
+        (inspector, dumpers)
     }
 
     struct DivergenceTagFilter {
-        exclude_with_any_of: Vec<Tag>,
+        exclude_with_any_of: Vec<String>,
     }
 
-    impl<S: HasTags> DivergenceFilter<S> for DivergenceTagFilter {
-        fn should_find(&mut self, trace: &[S]) -> bool {
+    impl DivergenceTagFilter {
+        fn new(exclude_with_any_of: &[String]) -> Self {
+            Self {
+                exclude_with_any_of: exclude_with_any_of.to_vec(),
+            }
+        }
+    }
+
+    impl<S: HasTags, V, C> DivergenceFilter<S, V, C> for DivergenceTagFilter {
+        fn should_find(&mut self, trace: &[S], _constraints: &[Constraint<V, C>]) -> bool {
             let latest = trace.last().unwrap();
             let exclude = self
                 .exclude_with_any_of
                 .iter()
-                .any(|tag| latest.has_tag(tag));
-
-            if exclude {
-                log_debug!(
-                    "Filtering out step with tags {:?} from divergence",
-                    latest.tags()
-                );
-            }
+                .filter(|t| latest.has_tag(t))
+                .inspect(|t| {
+                    log_debug!(
+                        "Filtering out step with tags {:?} by `{}` from divergence",
+                        latest.tags(),
+                        t,
+                    )
+                })
+                .next()
+                .is_some();
             !exclude
         }
+    }
+
+    fn create_branch_depth_filter<'ctx, V: 'ctx, C: 'ctx>(
+        branch_depth_provider: RRef<impl DepthProvider<Step, ConstValue> + 'ctx>,
+        distance_threshold_factor: f32,
+        persistence: Option<&OutputConfig>,
+    ) -> (
+        impl DivergenceFilter<Tagged<Step>, V, C> + 'ctx,
+        Option<impl Dumper>,
+    )
+    where
+        V: Borrow<CurrentSolverValue<'ctx>>,
+        C: Borrow<ConstValue>,
+    {
+        let filter = BranchCoverageDepthDivergenceFilter::new(
+            branch_depth_provider,
+            distance_threshold_factor,
+            |s: &Tagged<Step>| s.value.clone(),
+            |v: &V| {
+                v.borrow()
+                    .variables
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<SymVarId>>()
+            },
+            |c: &C| -> &ConstValue { c.borrow() },
+        );
+        let filter_ref = Rc::new(RefCell::new(filter));
+        let filter = filter_ref.clone();
+
+        let dumper = persistence.map(|cfg| {
+            create_ser_dumper!(cfg, "Coverage Depth".to_owned(), "branch_cov_depth", || {
+                filter_ref
+                    .as_ref()
+                    .borrow()
+                    .get_last_depths()
+                    .iter()
+                    .collect::<Vec<_>>()
+            })
+        });
+        (filter, dumper)
     }
 }
 
 mod coverage {
-    use std::{cell::RefCell, fs, rc::Rc};
+    use std::{cell::RefCell, rc::Rc};
 
-    use serde::{ser::SerializeStruct, Serialize, Serializer};
+    use serde::{Serialize, Serializer};
 
-    use crate::{abs::IntType, backends::basic::config::OutputFileFormat};
+    use crate::abs::IntType;
 
     use super::*;
 
-    type Dumper = Box<dyn FnMut() -> Result<(), String>>;
+    pub(super) type Inspector = BranchCoverageStepInspector<Step, ConstValue>;
 
-    type Inspector = BranchCoverageStepInspector<Step, ValueRef, ConstValue>;
-
-    pub(super) fn create_branch_coverage_collector(
+    pub(super) fn create_branch_coverage_collector<V>(
         output_config: &Option<OutputConfig>,
-    ) -> (RRef<Inspector>, Option<Dumper>) {
+    ) -> (RRef<Inspector>, Option<impl Dumper>)
+    where
+        Inspector: StepInspector<Step, V, ConstValue>,
+    {
         let inspector_ref = Rc::new(RefCell::new(BranchCoverageStepInspector::new()));
         let dumper = output_config
             .as_ref()
             .map(|cfg| create_serializer(cfg, inspector_ref.clone()));
         (inspector_ref.clone(), dumper)
-    }
-
-    impl Serialize for Step {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: Serializer,
-        {
-            let mut s = serializer.serialize_struct(stringify!(BasicBlockLocation), 2)?;
-            s.serialize_field("body", &(self.body.0, self.body.1))?;
-            s.serialize_field("index", &self.index)?;
-            s.end()
-        }
     }
 
     impl Serialize for ConstValue {
@@ -333,38 +418,15 @@ mod coverage {
         }
     }
 
-    fn create_serializer(config: &OutputConfig, inspector: RRef<Inspector>) -> Dumper {
-        match config {
-            OutputConfig::File(file_config) => match file_config.format {
-                OutputFileFormat::Json => {
-                    let file = fs::File::create(
-                        file_config.directory.join(
-                            file_config
-                                .prefix
-                                .clone()
-                                .unwrap_or("branch_cov".to_owned())
-                                + &file_config.extension.clone().unwrap_or(".json".to_owned()),
-                        ),
-                    )
-                    .expect("Could not create file for branch coverage");
-                    let mut serializer = serde_json::Serializer::new(file);
-                    Box::new(move || {
-                        log_debug!("Dumping branch coverage to file");
-                        inspector
-                            .borrow()
-                            .get_coverage()
-                            .iter()
-                            .collect::<Vec<_>>()
-                            .serialize(&mut serializer)
-                            .map(|_| ())
-                            .map_err(|e| e.to_string())
-                    })
-                }
-                OutputFileFormat::Binary => {
-                    unimplemented!("Binary output format is not supported yet")
-                }
-            },
-        }
+    fn create_serializer(config: &OutputConfig, inspector: RRef<Inspector>) -> impl Dumper {
+        create_ser_dumper!(config, "Branch Coverage".to_owned(), "branch_cov", || {
+            inspector
+                .as_ref()
+                .borrow()
+                .get_coverage()
+                .iter()
+                .collect::<Vec<_>>()
+        })
     }
 }
 
@@ -416,3 +478,160 @@ mod shutdown {
     }
 }
 use shutdown::TraceManagerExt as ShutdownTraceManagerExt;
+
+mod helpers {
+    use std::fs;
+
+    use super::*;
+
+    #[derive(PartialEq, Eq, Hash, Clone, Debug, Default, dm::Deref, dm::From, dm::Display)]
+    pub(crate) struct Step(BasicBlockLocation);
+
+    impl Serialize for Step {
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: serde::Serializer,
+        {
+            let mut s = serializer.serialize_struct(stringify!(BasicBlockLocation), 2)?;
+            s.serialize_field("body", &(self.body.0, self.body.1))?;
+            s.serialize_field("index", &self.index)?;
+            s.end()
+        }
+    }
+
+    #[derive(Clone, Debug, dm::Deref)]
+    pub(super) struct Tagged<T> {
+        #[deref]
+        pub value: T,
+        pub tags: Vec<Tag>,
+    }
+
+    impl HasTags for Tagged<Step> {
+        fn tags(&self) -> &[Tag] {
+            &self.tags
+        }
+    }
+
+    impl<T: Display> Display for Tagged<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            if self.tags.is_empty() {
+                return self.value.fmt(f);
+            } else {
+                write!(f, "{} #[{}]", self.value, self.tags.join(", "))
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    pub(super) struct Translation<V, T>(V, T);
+
+    impl<V, T> Translation<V, T> {
+        pub fn of(value: V, translator: impl FnOnce(&V) -> T) -> Self {
+            let translated = translator(&value);
+            Self(value, translated)
+        }
+    }
+
+    impl<T> Borrow<ValueRef> for Translation<ValueRef, T> {
+        fn borrow(&self) -> &ValueRef {
+            &self.0
+        }
+    }
+
+    impl<T> Borrow<ConstValue> for Translation<ConstValue, T> {
+        fn borrow(&self) -> &ConstValue {
+            &self.0
+        }
+    }
+
+    impl<'ctx, V> Borrow<CurrentSolverValue<'ctx>> for Translation<V, CurrentSolverValue<'ctx>> {
+        fn borrow(&self) -> &CurrentSolverValue<'ctx> {
+            &self.1
+        }
+    }
+
+    impl<'ctx, V> Borrow<CurrentSolverCase<'ctx>> for Translation<V, CurrentSolverCase<'ctx>> {
+        fn borrow(&self) -> &CurrentSolverCase<'ctx> {
+            &self.1
+        }
+    }
+
+    pub(super) trait Dumper {
+        fn dump(&mut self) -> Result<(), String>;
+    }
+
+    impl Dumper for Box<dyn Dumper + '_> {
+        fn dump(&mut self) -> Result<(), String> {
+            self.as_mut().dump()
+        }
+    }
+
+    impl<F: FnMut() -> Result<(), String>> Dumper for F {
+        fn dump(&mut self) -> Result<(), String> {
+            self.call_mut(())
+        }
+    }
+
+    impl<D: Dumper> Dumper for Vec<D> {
+        fn dump(&mut self) -> Result<(), String> {
+            for dumper in self.iter_mut() {
+                dumper.dump()?
+            }
+            Ok(())
+        }
+    }
+
+    pub(super) trait DumperListExt {
+        fn extend_opt<'a>(&mut self, dumper: Option<impl Dumper + 'a>)
+        where
+            Self: Extend<Box<dyn Dumper + 'a>>;
+    }
+    impl<'b> DumperListExt for Vec<Box<dyn Dumper + 'b>> {
+        fn extend_opt<'a>(&mut self, dumper: Option<impl Dumper + 'a>)
+        where
+            Self: Extend<Box<dyn Dumper + 'a>>,
+        {
+            Extend::extend(
+                self,
+                dumper
+                    .into_iter()
+                    .map(Box::new)
+                    .map(|d| d as Box<dyn Dumper>),
+            )
+        }
+    }
+
+    macro_rules! create_ser_dumper {
+        ($config: expr, $name: expr, $default_filename: expr, || {$data: expr}) => {{
+            use crate::utils::file::FileFormat;
+
+            let create_serializer =
+                |config: &OutputConfig, name: String, default_filename: &str| match config {
+                    OutputConfig::File(file_config) => {
+                        let file = file_config
+                            .create_single_empty(&default_filename)
+                            .unwrap_or_else(|e| panic!("Could not create file for {name}: {e}"));
+
+                        match file_config.format {
+                            FileFormat::Json => {
+                                let mut serializer = serde_json::Serializer::new(file);
+                                Box::new(move || {
+                                    $data
+                                        .serialize(&mut serializer)
+                                        .map(|_| ())
+                                        .map_err(|e| format!("{}: {}", name, e.to_string()))
+                                })
+                            }
+                            FileFormat::Binary => {
+                                unimplemented!("Binary output format is not supported yet")
+                            }
+                        }
+                    }
+                };
+
+            create_serializer($config, $name, $default_filename)
+        }};
+    }
+    pub(super) use create_ser_dumper;
+    use serde::ser::SerializeStruct;
+}

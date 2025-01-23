@@ -21,7 +21,7 @@ pub(crate) mod z3 {
 
     use common::log_debug;
 
-    use crate::solvers::z3::{AstNode, TranslatedValue};
+    use crate::solvers::z3::{AstAndVars, AstNode};
 
     use super::TAG;
 
@@ -45,8 +45,10 @@ pub(crate) mod z3 {
         }
     }
 
+    type TranslatedValue<'ctx> = AstAndVars<'ctx, SymVarId>;
+
     impl<'ctx, 'a> FnOnce<(&'a ValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedValue<'ctx, SymVarId>;
+        type Output = TranslatedValue<'ctx>;
         extern "rust-call" fn call_once(mut self, (value,): (&'a ValueRef,)) -> Self::Output {
             self.translate(value)
         }
@@ -59,7 +61,7 @@ pub(crate) mod z3 {
     }
 
     impl<'ctx> FnOnce<(ValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedValue<'ctx, SymVarId>;
+        type Output = TranslatedValue<'ctx>;
         extern "rust-call" fn call_once(mut self, (value,): (ValueRef,)) -> Self::Output {
             self.translate(&value)
         }
@@ -68,6 +70,19 @@ pub(crate) mod z3 {
     impl<'ctx> FnMut<(ValueRef,)> for Z3ValueTranslator<'ctx> {
         extern "rust-call" fn call_mut(&mut self, (value,): (ValueRef,)) -> Self::Output {
             self.translate(&value)
+        }
+    }
+
+    impl<'ctx, 'a> FnOnce<(&'a ConstValue,)> for Z3ValueTranslator<'ctx> {
+        type Output = AstNode<'ctx>;
+        extern "rust-call" fn call_once(mut self, (value,): (&'a ConstValue,)) -> Self::Output {
+            self.translate_const(value)
+        }
+    }
+
+    impl<'ctx, 'a> FnMut<(&'a ConstValue,)> for Z3ValueTranslator<'ctx> {
+        extern "rust-call" fn call_mut(&mut self, (value,): (&'a ConstValue,)) -> Self::Output {
+            self.translate_const(value)
         }
     }
 
@@ -85,10 +100,10 @@ pub(crate) mod z3 {
     }
 
     impl<'ctx> Z3ValueTranslator<'ctx> {
-        pub(crate) fn translate(&mut self, value: &ValueRef) -> TranslatedValue<'ctx, SymVarId> {
+        pub(crate) fn translate(&mut self, value: &ValueRef) -> AstAndVars<'ctx, SymVarId> {
             log_debug!(target: TAG, "Translating value: {}", value);
             let ast = self.translate_value(value);
-            TranslatedValue {
+            AstAndVars {
                 value: ast,
                 variables: self.variables.drain().collect(),
             }
