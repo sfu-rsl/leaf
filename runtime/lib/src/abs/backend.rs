@@ -271,12 +271,10 @@ pub(crate) trait Solver {
     type Case;
     type Model;
 
-    fn check<'a>(
+    fn check(
         &mut self,
-        constraints: impl Iterator<Item = &'a Constraint<Self::Value, Self::Case>>,
-    ) -> SolveResult<Self::Model>
-    where
-        Self: 'a;
+        constraints: impl Iterator<Item = Constraint<Self::Value, Self::Case>>,
+    ) -> SolveResult<Self::Model>;
 }
 
 /// The result of the checking performed by [`Solver`].

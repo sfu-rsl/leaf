@@ -1,6 +1,9 @@
 use core::hash::Hash;
 
-use crate::abs::backend::{Model, SolveResult};
+use crate::abs::{
+    backend::{Model, SolveResult},
+    Constraint,
+};
 
 use super::Solver;
 
@@ -8,7 +11,7 @@ use super::Solver;
 pub(crate) struct MappedSolver<F, MTo, S: Solver> {
     inner: S,
     f: F,
-    _phantom: core::marker::PhantomData<MTo>,
+    _phantom: core::marker::PhantomData<(MTo)>,
 }
 
 impl<F, MTo, S: Solver> Solver for MappedSolver<F, MTo, S>
@@ -19,13 +22,10 @@ where
     type Case = S::Case;
     type Model = MTo;
 
-    fn check<'b>(
+    fn check(
         &mut self,
-        constraints: impl Iterator<Item = &'b crate::abs::Constraint<Self::Value, Self::Case>>,
-    ) -> SolveResult<Self::Model>
-    where
-        Self: 'b,
-    {
+        constraints: impl Iterator<Item = Constraint<Self::Value, Self::Case>>,
+    ) -> SolveResult<Self::Model> {
         self.inner.check(constraints).map(&mut self.f)
     }
 }
@@ -43,11 +43,13 @@ impl<MFrom> SolveResult<MFrom> {
     }
 }
 
-pub(crate) trait SolverExt: Solver {
+pub(crate) trait SolverExt {
     fn map<MTo>(
         self,
         f: impl FnMut(Self::Model) -> MTo,
-    ) -> impl Solver<Value = Self::Value, Case = Self::Case, Model = MTo>;
+    ) -> impl Solver<Value = Self::Value, Case = Self::Case, Model = MTo>
+    where
+        Self: Solver;
 
     fn map_answers<I: Eq + Hash, AFrom, ATo>(
         self,

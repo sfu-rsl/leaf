@@ -138,7 +138,7 @@ where
     fn fmt(&self, f: &mut Formatter) -> Result {
         use ConstraintKind::*;
         match &self.kind {
-            Bool => write!(f, "{{{}}}", self.discr),
+            True => write!(f, "{{{}}}", self.discr),
             Not => write!(f, "!{{{}}}", self.discr),
             _ => write!(f, "{{{} {}}}", self.discr, self.kind),
         }
@@ -152,7 +152,7 @@ where
     fn fmt(&self, f: &mut Formatter) -> Result {
         use ConstraintKind::*;
         match self {
-            Bool => write!(f, "{}", true),
+            True => write!(f, "{}", true),
             Not => write!(f, "{}", false),
             OneOf(options) => {
                 if options.len() == 1 {

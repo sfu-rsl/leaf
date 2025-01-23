@@ -34,7 +34,7 @@ impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
         // NOTE: We do not use equality constraint here because that is meant for switch cases.
         let constraint = Constraint {
             discr: eq_expr,
-            kind: ConstraintKind::Bool,
+            kind: ConstraintKind::True,
         };
         self.trace_manager.borrow_mut().notify_step(
             Default::default(), /* TODO: A unique index like basic block index. */

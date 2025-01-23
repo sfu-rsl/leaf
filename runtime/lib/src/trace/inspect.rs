@@ -3,7 +3,7 @@ use crate::utils::alias::RRef;
 use super::{Constraint, TraceManager};
 
 pub(crate) trait StepInspector<S, V, C> {
-    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>);
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>);
 }
 
 pub(crate) trait TraceInspector<S, V, C> {
@@ -13,7 +13,7 @@ pub(crate) trait TraceInspector<S, V, C> {
 pub(crate) type NoopInspector = ();
 
 impl<S, V, C> StepInspector<S, V, C> for NoopInspector {
-    fn inspect(&mut self, _step: &S, _constraint: &Constraint<V, C>) {}
+    fn inspect(&mut self, _step: &S, _constraint: Constraint<&V, &C>) {}
 }
 
 impl<S, V, C> TraceInspector<S, V, C> for NoopInspector {
@@ -22,21 +22,21 @@ impl<S, V, C> TraceInspector<S, V, C> for NoopInspector {
 
 impl<S, V, C, F> StepInspector<S, V, C> for F
 where
-    F: FnMut(&S, &Constraint<V, C>),
+    F: FnMut(&S, Constraint<&V, &C>),
 {
-    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
         self(step, constraint);
     }
 }
 
 impl<S, V, C> StepInspector<S, V, C> for Box<dyn StepInspector<S, V, C>> {
-    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
         self.as_mut().inspect(step, constraint);
     }
 }
 
 impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for RRef<I> {
-    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
         self.borrow_mut().inspect(step, constraint);
     }
 }
@@ -48,9 +48,9 @@ impl<S, V, C> TraceInspector<S, V, C> for Box<dyn TraceInspector<S, V, C>> {
 }
 
 impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for Vec<I> {
-    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
         for inspector in self.iter_mut() {
-            inspector.inspect(step, constraint);
+            inspector.inspect(step, constraint.clone());
         }
     }
 }
@@ -79,7 +79,7 @@ impl<S, V, C, M: TraceManager<S, V, C>, I: StepInspector<S, V, C>> TraceManager<
     for InspectedTraceManager<S, V, C, M, I>
 {
     fn notify_step(&mut self, step: S, constraint: Constraint<V, C>) {
-        self.inspector.inspect(&step, &constraint);
+        self.inspector.inspect(&step, constraint.as_ref());
         self.inner.notify_step(step, constraint);
     }
 }

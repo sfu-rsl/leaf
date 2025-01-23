@@ -637,7 +637,7 @@ impl<'a, EB: UnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, 
             let expr = self.expr_builder.borrow_mut().no_op(cond);
             let mut constraint = Constraint {
                 discr: expr,
-                kind: ConstraintKind::Bool,
+                kind: ConstraintKind::True,
             };
             if !expected {
                 constraint = constraint.not();

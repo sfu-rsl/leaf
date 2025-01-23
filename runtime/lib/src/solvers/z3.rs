@@ -156,7 +156,7 @@ impl<'ctx> AstNode<'ctx> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct TranslatedValue<'ctx, I> {
+pub(crate) struct AstAndVars<'ctx, I> {
     pub value: AstNode<'ctx>,
     pub variables: HashMap<I, AstNode<'ctx>>,
 }
@@ -164,7 +164,7 @@ pub(crate) struct TranslatedValue<'ctx, I> {
 pub(crate) struct Z3Solver<'ctx, I> {
     pub(crate) context: &'ctx Context,
     solver: Solver<'ctx>,
-    _phantom: core::marker::PhantomData<I>,
+    _phantom: core::marker::PhantomData<(I)>,
 }
 
 impl<'ctx, I> Z3Solver<'ctx, I> {
@@ -188,36 +188,33 @@ impl<'ctx, I> Clone for Z3Solver<'ctx, I> {
     }
 }
 
-impl<'ctx, I> backend::Solver for Z3Solver<'ctx, I>
+impl<'a, 'ctx: 'a, I> backend::Solver for Z3Solver<'ctx, I>
 where
     I: Eq + Hash + Clone,
     Self: 'ctx,
 {
-    type Value = TranslatedValue<'ctx, I>;
+    type Value = AstAndVars<'ctx, I>;
     type Case = AstNode<'ctx>;
     type Model = HashMap<I, AstNode<'ctx>>;
 
-    fn check<'a, 'b>(
-        &'a mut self,
-        constraints: impl Iterator<Item = &'b Constraint<Self::Value, Self::Case>>,
-    ) -> SolveResult<Self::Model>
-    where
-        Self: 'b,
-    {
+    fn check(
+        &mut self,
+        constraints: impl Iterator<Item = Constraint<Self::Value, Self::Case>>,
+    ) -> SolveResult<Self::Model> {
         let mut all_vars = HashMap::<I, AstNode>::new();
         let asts = constraints
             .map(|constraint| {
                 let Constraint { discr, kind } = constraint;
                 use ConstraintKind::*;
                 let (kind, negated) = match kind {
-                    Bool => (Bool, false),
-                    Not => (Bool, true),
-                    OneOf(options) => (OneOf(options.iter().collect()), false),
-                    NoneOf(options) => (OneOf(options.iter().collect()), true),
+                    True => (True, false),
+                    Not => (True, true),
+                    OneOf(options) => (OneOf(options), false),
+                    NoneOf(options) => (OneOf(options), true),
                 };
 
                 let ast = match kind {
-                    Bool => discr.value.as_bool().clone(),
+                    True => discr.value.as_bool().clone(),
                     OneOf(cases) => {
                         let value_ast = discr.value.ast();
                         cases

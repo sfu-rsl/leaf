@@ -17,7 +17,7 @@ impl<S, V, C> Default for LoggerTraceManager<S, V, C> {
 }
 
 impl<S: Display, V: Display, C: Display> StepInspector<S, V, C> for LoggerTraceManager<S, V, C> {
-    fn inspect(&mut self, step: &S, constraint: &Constraint<V, C>) {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
         log_info!("Notified about constraint {} at step {}", constraint, step,);
     }
 }
