@@ -20,9 +20,29 @@ level = "panic"
 type = "diverging_input"
 check_optimistic = true
 
+# Example of branch depth filter (requires the branch coverage inspector)
+# [[exe_trace.inspectors.filters]]
+# type = "branch_depth_distance"
+# distance_threshold_factor = 1.5
+# [exe_trace.inspectors.filters.persistence]
+# type = "file"
+# directory = "leaf_out"
+# format = "json"
+
+# Example of custom divergence exclusion tags
+# [[exe_trace.inspectors.filters]]
+# type = "tags"
+# exclude_any_of = ["test_no_diverge"]
+
+[[exe_trace.inspectors]]
+type = "branch_coverage"
+[exe_trace.inspectors.output]
+type = "file"
+directory = "leaf_out"
+format = "json"
+
 [solver]
 type = "z3"
 [solver.global_params]
 timeout = 10000
 "solver.smtlib2_log" = "queries.smt2"
-
