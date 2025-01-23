@@ -1,4 +1,5 @@
 use std::{
+    assert_matches::debug_assert_matches,
     collections::HashMap,
     io::{self, Write},
     path::PathBuf,
@@ -6,12 +7,13 @@ use std::{
 
 use common::{log_debug, log_info, log_warn};
 
-use crate::{abs::IntType, outgen};
-
-use super::{
-    config::{OutputConfig, OutputFileFormat},
-    expr::prelude::*,
+use crate::{
+    abs::IntType,
+    outgen,
+    utils::file::{FileFormat, FileGenConfig},
 };
+
+use super::{config::OutputConfig, expr::prelude::*};
 
 pub(super) struct BasicOutputGenerator {
     writers: Vec<Box<dyn AnswersWriter>>,
@@ -23,12 +25,8 @@ impl BasicOutputGenerator {
 
         writers.extend(configs.iter().map(|c| match c {
             OutputConfig::File(file_config) => match file_config.format {
-                OutputFileFormat::Json => todo!("Not implemented yet"),
-                OutputFileFormat::Binary => Box::new(BinaryFileAnswersWriter::new(
-                    file_config.directory.clone(),
-                    file_config.prefix.clone(),
-                    file_config.extension.clone(),
-                )),
+                FileFormat::Json => todo!("Not implemented yet"),
+                FileFormat::Binary => Box::new(BinaryFileAnswersWriter::new(file_config)),
             },
         } as Box<dyn AnswersWriter>));
 
@@ -63,31 +61,34 @@ struct BinaryFileAnswersWriter {
 }
 
 impl BinaryFileAnswersWriter {
-    fn new(dir_path: PathBuf, file_prefix: Option<String>, file_ext: Option<String>) -> Self {
+    fn new(config: &FileGenConfig) -> Self {
+        debug_assert_matches!(config.format, FileFormat::Binary);
+
+        let dir_path = config.ensure_dir().unwrap();
+
         log_info!(
             "Setting up binary output writing to directory: {}",
             dir_path.display()
         );
-        std::fs::create_dir_all(&dir_path).unwrap();
         let dir_path = std::fs::canonicalize(dir_path).unwrap();
 
-        let file_ext = file_ext.unwrap_or_else(|| ".bin".to_string());
-
-        Self::check_out_dir(&dir_path, file_prefix.as_ref(), &file_ext);
+        let file_ext = config.format.default_extension();
+        Self::check_out_dir(&dir_path, config.prefix.as_ref(), &file_ext);
 
         Self {
             dir_path,
             counter: 0,
             enabled: true,
-            prefix: file_prefix.unwrap_or_default(),
-            extension: file_ext,
+            prefix: config.prefix.clone().unwrap_or_default(),
+            extension: file_ext.to_owned(),
         }
     }
 
     fn write(&mut self, values: &[u8]) {
         let path = self
             .dir_path
-            .join(format!("{}{}{}", self.prefix, self.counter, self.extension));
+            .join(format!("{}{}", self.prefix, self.counter))
+            .with_added_extension(&self.extension);
         log_debug!("Writing values to file: {}.", path.display());
         let mut file = std::fs::File::create(path).unwrap();
         file.write(&values).unwrap();

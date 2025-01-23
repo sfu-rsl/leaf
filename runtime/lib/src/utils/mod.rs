@@ -1,6 +1,7 @@
 use derive_more as dm;
 
 pub(crate) mod alias;
+pub(crate) mod file;
 pub(crate) mod logging;
 pub(crate) mod meta;
 

@@ -5,6 +5,8 @@ use std::collections::HashMap;
 
 use common::log_debug;
 
+use crate::utils::file::FileGenConfig;
+
 impl TryFrom<::config::Config> for super::BasicBackend {
     type Error = ::config::ConfigError;
 
@@ -91,29 +93,7 @@ pub(crate) enum SymbolicPlaceStrategy {
 #[serde(tag = "type")]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum OutputConfig {
-    File(FileOutputConfig),
-}
-
-#[derive(Debug, Default, Clone, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum OutputFileFormat {
-    #[default]
-    Json,
-    /// # Remarks
-    /// Requires all symbolic values to be byte (u8).
-    Binary,
-}
-
-#[derive(Debug, Default, Clone, Deserialize)]
-pub(crate) struct FileOutputConfig {
-    /// The folder to write file outputs to.
-    pub directory: std::path::PathBuf,
-    /// The format to write the file outputs in.
-    pub format: OutputFileFormat,
-    /// The prefix to use for the name of the output files.
-    pub prefix: Option<String>,
-    /// The extension to use for the name of the output files.
-    pub extension: Option<String>,
+    File(FileGenConfig),
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
