@@ -6,12 +6,6 @@ pub(crate) trait DivergenceFilter<S, V, C> {
     fn should_find(&mut self, trace: &[S], constraints: &[Constraint<V, C>]) -> bool;
 }
 
-// impl<S, V, C, T: FnMut(&[S], &[Constraint<V, C>]) -> bool> DivergenceFilter<S, V, C> for T {
-//     fn should_find(&mut self, trace: &[S], constraints: &[Constraint<V, C>]) -> bool {
-//         self(trace, constraints)
-//     }
-// }
-
 impl<S, V, C> DivergenceFilter<S, V, C> for Box<dyn DivergenceFilter<S, V, C> + '_> {
     fn should_find(&mut self, trace: &[S], constraints: &[Constraint<V, C>]) -> bool {
         self.as_mut().should_find(trace, constraints)

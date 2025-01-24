@@ -22,7 +22,7 @@ where
 }
 
 pub(crate) struct BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
-    last_divergence_depths: HashMap<(SC, VC), usize>,
+    last_accepted_depths: HashMap<(SC, VC), usize>,
     depth_provider: DP,
     distance_threshold_factor: f32,
     step_classifier: Box<dyn Fn(&S) -> SC>,
@@ -46,7 +46,7 @@ impl<S, SC, V, VC, C, CC, DP> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, 
     {
         assert!(distance_factor_threshold >= 1.0);
         Self {
-            last_divergence_depths: snapshot.unwrap_or_default(),
+            last_accepted_depths: snapshot.unwrap_or_default(),
             depth_provider,
             distance_threshold_factor: distance_factor_threshold,
             step_classifier: Box::new(step_classifier),
@@ -56,7 +56,7 @@ impl<S, SC, V, VC, C, CC, DP> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, 
     }
 
     pub(crate) fn get_last_depths(&self) -> &HashMap<(SC, VC), usize> {
-        &self.last_divergence_depths
+        &self.last_accepted_depths
     }
 }
 
@@ -71,26 +71,28 @@ where
         let (step, constraint) = (trace.last().unwrap(), constraints.last().unwrap());
         let step_class = (self.step_classifier)(step);
         let discr_class = (self.discr_classifier)(&constraint.discr);
-        let classified_decision = constraint.kind.as_ref().map(&mut self.case_classifier);
+        let kind_class = constraint.kind.as_ref().map(&mut self.case_classifier);
 
-        let current_depth = self
-            .depth_provider
-            .last_depth(&step_class, classified_decision);
-        let last_depth = self
-            .last_divergence_depths
+        let current = self.depth_provider.last_depth(&step_class, kind_class);
+        let last_accepted = self
+            .last_accepted_depths
             .entry((step_class, discr_class))
             .or_insert(0);
 
+        let decision =
+            if current >= (*last_accepted as f32 * self.distance_threshold_factor) as usize {
+                *last_accepted = current;
+                true
+            } else {
+                false
+            };
+
         log_debug!(
-            "Deciding convergence based on depth distance: Current = {}, Last = {}",
-            current_depth,
-            last_depth,
+            "Evaluated branch depth for divergence: Current = {}, Last Accepted = {}",
+            current,
+            last_accepted,
         );
-        if current_depth >= (*last_depth as f32 * self.distance_threshold_factor) as usize {
-            *last_depth = current_depth;
-            true
-        } else {
-            false
-        }
+
+        decision
     }
 }

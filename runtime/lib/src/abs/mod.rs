@@ -233,6 +233,7 @@ impl<V, C> Constraint<&V, &C> {
 pub(crate) enum ConstraintKind<C> {
     True,
     False,
+    // FIXME: Good candidates for stack-based vectors
     OneOf(Vec<C>),
     NoneOf(Vec<C>),
 }
