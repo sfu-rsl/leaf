@@ -13,6 +13,7 @@
 #![feature(exposed_provenance)]
 #![feature(iter_map_windows)]
 #![feature(path_add_extension)]
+#![feature(seek_stream_len)]
 
 pub mod abs;
 mod backends;

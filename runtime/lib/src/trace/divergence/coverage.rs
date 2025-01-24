@@ -30,9 +30,10 @@ pub(crate) struct BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
     case_classifier: Box<dyn Fn(&C) -> &CC>,
 }
 
-impl<S, SC, V, VC, C, CC, P> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, P> {
+impl<S, SC, V, VC, C, CC, DP> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
     pub(crate) fn new(
-        depth_provider: P,
+        snapshot: Option<HashMap<(SC, VC), usize>>,
+        depth_provider: DP,
         distance_factor_threshold: f32,
         step_classifier: impl Fn(&S) -> SC + 'static,
         discr_classifier: impl Fn(&V) -> VC + 'static,
@@ -41,11 +42,11 @@ impl<S, SC, V, VC, C, CC, P> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C
     where
         SC: Eq + Hash + Clone,
         VC: Eq + Hash,
-        P: DepthProvider<SC, CC>,
+        DP: DepthProvider<SC, CC>,
     {
         assert!(distance_factor_threshold >= 1.0);
         Self {
-            last_divergence_depths: Default::default(),
+            last_divergence_depths: snapshot.unwrap_or_default(),
             depth_provider,
             distance_threshold_factor: distance_factor_threshold,
             step_classifier: Box::new(step_classifier),
@@ -59,12 +60,12 @@ impl<S, SC, V, VC, C, CC, P> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C
     }
 }
 
-impl<S, SC, V, VC, C, CC, P> DivergenceFilter<S, V, C>
-    for BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, P>
+impl<S, SC, V, VC, C, CC, DP> DivergenceFilter<S, V, C>
+    for BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP>
 where
     SC: Eq + Hash + Clone,
     VC: Eq + Hash,
-    P: DepthProvider<SC, CC>,
+    DP: DepthProvider<SC, CC>,
 {
     fn should_find(&mut self, trace: &[S], constraints: &[super::Constraint<V, C>]) -> bool {
         let (step, constraint) = (trace.last().unwrap(), constraints.last().unwrap());

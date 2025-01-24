@@ -4,8 +4,9 @@ use serde::Serialize;
 use core::{
     borrow::Borrow,
     fmt::{Debug, Display},
+    time::Duration,
 };
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use common::{log_debug, pri::BasicBlockLocation};
 
@@ -16,7 +17,8 @@ use crate::{
         divergence::{DivergenceFilter, ImmediateDivergingAnswerFinder},
         sanity_check::ConstraintSanityChecker,
         AdapterTraceManagerExt, AggregatorTraceManager, BranchCoverageStepInspector,
-        InspectionTraceManagerExt, LoggerTraceManagerExt, StepInspector, TraceInspector,
+        FilterStepInspectorExt, InspectionTraceManagerExt, LoggerTraceManagerExt, StepInspector,
+        TraceInspector,
     },
     utils::alias::RRef,
 };
@@ -28,6 +30,7 @@ use super::{
     ConstValue, Solver, SymVarId, TraceManager, ValueRef,
 };
 
+use dumping::*;
 pub(crate) use helpers::Step;
 use helpers::*;
 
@@ -114,6 +117,8 @@ pub(super) fn new_trace_manager(
 
     let manager = core_manager;
 
+    let dumpers_ref = Rc::new(RefCell::new(dumpers));
+
     manager
         .logged()
         .adapt_step(move |s| Tagged {
@@ -121,9 +126,13 @@ pub(super) fn new_trace_manager(
             tags: RefCell::borrow(&tags).clone(),
         })
         .inspected_by(inspectors)
-        .on_shutdown(move || {
-            dumpers.dump().expect("Problem with dumping information");
-        })
+        .inspected_by(dumping::create_timer_dumper_inspector(
+            dumpers_ref.clone(),
+            trace_config
+                .dump_interval
+                .map(|i| Duration::from_secs(i.into())),
+        ))
+        .on_shutdown(move || dump(&dumpers_ref))
 }
 
 fn is_inner_inspector(t: &TraceInspectorType) -> bool {
@@ -214,6 +223,8 @@ mod sanity_check {
 
 mod divergence {
     use std::rc::Rc;
+
+    use common::log_info;
 
     use crate::trace::divergence::{
         filter::all, BranchCoverageDepthDivergenceFilter, DepthProvider,
@@ -338,16 +349,42 @@ mod divergence {
         V: Borrow<CurrentSolverValue<'ctx>>,
         C: Borrow<ConstValue>,
     {
+        const FILENAME_DEFAULT: &str = "branch_cov_depth";
+
+        let persistence = persistence.map(|cfg| match cfg {
+            OutputConfig::File(cfg) => cfg,
+        });
+
+        let snapshot = persistence.and_then(|cfg| {
+            deserialize_snapshot::<Vec<((Step, Vec<SymVarId>), usize)>>(cfg, FILENAME_DEFAULT)
+                .map(|r| r.expect("Problem in loading branch coverage depth snapshot"))
+                .inspect(|s| {
+                    log_info!(
+                        "Previous branch coverage depth snapshot loaded with {} entries",
+                        s.len()
+                    )
+                })
+                .map(|s| HashMap::from_iter(s))
+                .or_else(|| {
+                    log_debug!("No previous branch coverage depth snapshot found");
+                    None
+                })
+        });
+
         let filter = BranchCoverageDepthDivergenceFilter::new(
+            snapshot,
             branch_depth_provider,
             distance_threshold_factor,
             |s: &Tagged<Step>| s.value.clone(),
             |v: &V| {
-                v.borrow()
+                let mut vars = v
+                    .borrow()
                     .variables
                     .keys()
                     .cloned()
-                    .collect::<Vec<SymVarId>>()
+                    .collect::<Vec<SymVarId>>();
+                vars.sort();
+                vars
             },
             |c: &C| -> &ConstValue { c.borrow() },
         );
@@ -355,7 +392,7 @@ mod divergence {
         let filter = filter_ref.clone();
 
         let dumper = persistence.map(|cfg| {
-            create_ser_dumper!(cfg, "Coverage Depth".to_owned(), "branch_cov_depth", || {
+            create_ser_dumper!(cfg, "Coverage Depth".to_owned(), FILENAME_DEFAULT, || {
                 filter_ref
                     .as_ref()
                     .borrow()
@@ -419,6 +456,9 @@ mod coverage {
     }
 
     fn create_serializer(config: &OutputConfig, inspector: RRef<Inspector>) -> impl Dumper {
+        let config = match config {
+            OutputConfig::File(cfg) => cfg,
+        };
         create_ser_dumper!(config, "Branch Coverage".to_owned(), "branch_cov", || {
             inspector
                 .as_ref()
@@ -479,25 +519,219 @@ mod shutdown {
 }
 use shutdown::TraceManagerExt as ShutdownTraceManagerExt;
 
-mod helpers {
+mod dumping {
     use std::fs;
+
+    use common::pri::{BasicBlockIndex, DefId};
+    use serde::{de::DeserializeOwned, Deserialize};
+
+    use crate::utils::file::{FileFormat, FileGenConfig};
 
     use super::*;
 
-    #[derive(PartialEq, Eq, Hash, Clone, Debug, Default, dm::Deref, dm::From, dm::Display)]
-    pub(crate) struct Step(BasicBlockLocation);
+    pub(super) trait Dumper {
+        fn dump(&mut self) -> Result<(), String>;
+    }
+
+    impl Dumper for Box<dyn Dumper + '_> {
+        fn dump(&mut self) -> Result<(), String> {
+            self.as_mut().dump()
+        }
+    }
+
+    impl<F: FnMut() -> Result<(), String>> Dumper for F {
+        fn dump(&mut self) -> Result<(), String> {
+            self.call_mut(())
+        }
+    }
+
+    impl<D: Dumper> Dumper for Vec<D> {
+        fn dump(&mut self) -> Result<(), String> {
+            for dumper in self.iter_mut() {
+                dumper.dump()?
+            }
+            Ok(())
+        }
+    }
+
+    pub(super) trait DumperListExt {
+        fn extend_opt<'a>(&mut self, dumper: Option<impl Dumper + 'a>)
+        where
+            Self: Extend<Box<dyn Dumper + 'a>>;
+    }
+    impl<'b> DumperListExt for Vec<Box<dyn Dumper + 'b>> {
+        fn extend_opt<'a>(&mut self, dumper: Option<impl Dumper + 'a>)
+        where
+            Self: Extend<Box<dyn Dumper + 'a>>,
+        {
+            Extend::extend(
+                self,
+                dumper
+                    .into_iter()
+                    .map(Box::new)
+                    .map(|d| d as Box<dyn Dumper>),
+            )
+        }
+    }
+
+    macro_rules! create_ser_dumper {
+        ($config: expr, $name: expr, $default_filename: expr, || {$data: expr}) => {{
+            use std::io::{Seek, Write};
+
+            use crate::utils::file::{FileFormat, FileGenConfig};
+
+            let create_serializer = |config: &FileGenConfig,
+                                     name: String,
+                                     default_filename: &str| {
+                let mut file = config
+                    .open_or_create_single(&default_filename)
+                    .unwrap_or_else(|e| panic!("Could not create file for {name}: {e}"));
+
+                match config.format {
+                    FileFormat::Json => {
+                        // FIXME: Introduce a naive journaling to prevent corruption
+                        let mut serializer = serde_json::Serializer::new(file.try_clone().unwrap());
+                        Box::new(move || {
+                            file.rewind().and_then(|_| file.set_len(0)).map_err(|e| {
+                                format!("{}: Could not truncate file: {}", name, e.to_string())
+                            })?;
+                            $data
+                                .serialize(&mut serializer)
+                                .map(|_| ())
+                                .map_err(|e| format!("{}: {}", name, e.to_string()))?;
+                            file.flush().map_err(|e| {
+                                format!("{}: Could not flush file: {}", name, e.to_string(),)
+                            })?;
+                            Ok(())
+                        })
+                    }
+                    FileFormat::Binary => {
+                        unimplemented!("Binary output format is not supported yet")
+                    }
+                }
+            };
+
+            create_serializer($config, $name, $default_filename)
+        }};
+    }
+    pub(super) use create_ser_dumper;
+
+    pub(super) fn deserialize_snapshot<T: DeserializeOwned + Default>(
+        config: &FileGenConfig,
+        default_filename: &str,
+    ) -> Option<Result<T, String>> {
+        use std::io::Seek;
+
+        let file_path = config.single_file_path(&default_filename);
+        if !file_path.exists() {
+            return None;
+        }
+
+        let deserialize = || -> Result<T, String> {
+            let mut file = fs::File::open(&file_path).map_err(|e| {
+                format!(
+                    "Problem in opening the file `{}`:{}",
+                    file_path.display(),
+                    e.to_string()
+                )
+            })?;
+
+            if file.stream_len().is_ok_and(|l| l == 0) {
+                return Ok(T::default());
+            }
+
+            let snapshot = match config.format {
+                FileFormat::Json => serde_json::from_reader(file)
+                    .map_err(|e| format!("Problem in parsing the file: {}", e.to_string())),
+                FileFormat::Binary => {
+                    unimplemented!("Binary output format is not supported yet")
+                }
+            };
+            snapshot
+        };
+
+        Some(deserialize())
+    }
+
+    pub(super) fn dump(dumper: &RRef<impl Dumper>) {
+        log_debug!("Dumped trace managing data");
+        dumper
+            .as_ref()
+            .borrow_mut()
+            .dump()
+            .expect("Problem with dumping information")
+    }
+
+    pub(super) fn create_timer_dumper_inspector<'a, S: 'a, V: 'a, C: 'a>(
+        dumper: RRef<impl Dumper + 'a>,
+        interval: Option<Duration>,
+    ) -> Box<dyn StepInspector<S, V, C> + 'a> {
+        if let Some(interval) = interval {
+            Box::new(create_dumper_inspector(dumper).timer_freq_filtered(interval))
+        } else {
+            Box::new(()) // NoopInspector
+        }
+    }
+
+    fn create_dumper_inspector<'a, S, V, C>(
+        dumper: RRef<impl Dumper + 'a>,
+    ) -> impl StepInspector<S, V, C> {
+        move |_: &S, _: Constraint<&V, &C>| dump(&dumper)
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct BasicBlockLocationSer {
+        pub body: (u32, u32),
+        pub index: BasicBlockIndex,
+    }
+
+    impl From<BasicBlockLocation> for BasicBlockLocationSer {
+        fn from(value: BasicBlockLocation) -> Self {
+            Self {
+                body: (value.body.0, value.body.1),
+                index: value.index,
+            }
+        }
+    }
+
+    impl Into<BasicBlockLocation> for BasicBlockLocationSer {
+        fn into(self) -> BasicBlockLocation {
+            BasicBlockLocation {
+                body: DefId(self.body.0, self.body.1),
+                index: self.index,
+            }
+        }
+    }
 
     impl Serialize for Step {
         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where
             S: serde::Serializer,
         {
-            let mut s = serializer.serialize_struct(stringify!(BasicBlockLocation), 2)?;
-            s.serialize_field("body", &(self.body.0, self.body.1))?;
-            s.serialize_field("index", &self.index)?;
-            s.end()
+            BasicBlockLocationSer::from(Into::<BasicBlockLocation>::into(*self))
+                .serialize(serializer)
         }
     }
+
+    impl<'de> Deserialize<'de> for Step {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            Ok(Step::from(Into::<BasicBlockLocation>::into(
+                BasicBlockLocationSer::deserialize(deserializer)?,
+            )))
+        }
+    }
+}
+
+mod helpers {
+    use super::*;
+
+    #[derive(
+        PartialEq, Eq, Hash, Clone, Copy, Debug, Default, dm::Deref, dm::From, dm::Into, dm::Display,
+    )]
+    pub(crate) struct Step(BasicBlockLocation);
 
     #[derive(Clone, Debug, dm::Deref)]
     pub(super) struct Tagged<T> {
@@ -555,83 +789,4 @@ mod helpers {
             &self.1
         }
     }
-
-    pub(super) trait Dumper {
-        fn dump(&mut self) -> Result<(), String>;
-    }
-
-    impl Dumper for Box<dyn Dumper + '_> {
-        fn dump(&mut self) -> Result<(), String> {
-            self.as_mut().dump()
-        }
-    }
-
-    impl<F: FnMut() -> Result<(), String>> Dumper for F {
-        fn dump(&mut self) -> Result<(), String> {
-            self.call_mut(())
-        }
-    }
-
-    impl<D: Dumper> Dumper for Vec<D> {
-        fn dump(&mut self) -> Result<(), String> {
-            for dumper in self.iter_mut() {
-                dumper.dump()?
-            }
-            Ok(())
-        }
-    }
-
-    pub(super) trait DumperListExt {
-        fn extend_opt<'a>(&mut self, dumper: Option<impl Dumper + 'a>)
-        where
-            Self: Extend<Box<dyn Dumper + 'a>>;
-    }
-    impl<'b> DumperListExt for Vec<Box<dyn Dumper + 'b>> {
-        fn extend_opt<'a>(&mut self, dumper: Option<impl Dumper + 'a>)
-        where
-            Self: Extend<Box<dyn Dumper + 'a>>,
-        {
-            Extend::extend(
-                self,
-                dumper
-                    .into_iter()
-                    .map(Box::new)
-                    .map(|d| d as Box<dyn Dumper>),
-            )
-        }
-    }
-
-    macro_rules! create_ser_dumper {
-        ($config: expr, $name: expr, $default_filename: expr, || {$data: expr}) => {{
-            use crate::utils::file::FileFormat;
-
-            let create_serializer =
-                |config: &OutputConfig, name: String, default_filename: &str| match config {
-                    OutputConfig::File(file_config) => {
-                        let file = file_config
-                            .create_single_empty(&default_filename)
-                            .unwrap_or_else(|e| panic!("Could not create file for {name}: {e}"));
-
-                        match file_config.format {
-                            FileFormat::Json => {
-                                let mut serializer = serde_json::Serializer::new(file);
-                                Box::new(move || {
-                                    $data
-                                        .serialize(&mut serializer)
-                                        .map(|_| ())
-                                        .map_err(|e| format!("{}: {}", name, e.to_string()))
-                                })
-                            }
-                            FileFormat::Binary => {
-                                unimplemented!("Binary output format is not supported yet")
-                            }
-                        }
-                    }
-                };
-
-            create_serializer($config, $name, $default_filename)
-        }};
-    }
-    pub(super) use create_ser_dumper;
-    use serde::ser::SerializeStruct;
 }

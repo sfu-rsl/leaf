@@ -1,7 +1,7 @@
 use derive_more as dm;
 use serde::Deserialize;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, num::NonZero};
 
 use common::log_debug;
 
@@ -100,6 +100,12 @@ pub(crate) enum OutputConfig {
 pub(crate) struct ExecutionTraceConfig {
     #[serde(default = "default_trace_inspectors")]
     pub inspectors: Vec<TraceInspectorType>,
+    /// The time interval between dumping inspectors' data (e.g., snapshots) during the execution
+    /// and not merely in the end.
+    /// # Remarks
+    /// This is useful for executions that possibly take long to finish and may get stopped
+    /// prematurely.
+    pub dump_interval: Option<NonZero<u64>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

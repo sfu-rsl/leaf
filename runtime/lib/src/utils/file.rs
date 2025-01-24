@@ -20,25 +20,37 @@ pub(crate) struct FileGenConfig {
 }
 
 impl FileGenConfig {
-    pub(crate) fn ensure_dir(&self) -> io::Result<PathBuf> {
-        if let Some(dir) = self.directory.clone() {
-            fs::create_dir_all(&dir).map(|_| dir)
-        } else {
-            std::env::current_dir()
-        }
+    pub(crate) fn dir_or_default(&self) -> PathBuf {
+        self.directory.clone().unwrap_or_else(|| {
+            std::env::current_dir().expect("Cannot get current working directory")
+        })
     }
 
-    pub(crate) fn create_single_empty(&self, default_filename: &str) -> std::io::Result<fs::File> {
+    pub(crate) fn ensure_dir(&self) -> io::Result<PathBuf> {
+        let dir = self.dir_or_default();
+        fs::create_dir_all(&dir).map(|_| dir)
+    }
+
+    pub(crate) fn single_file_path(&self, default_filename: &str) -> PathBuf {
         let filename = self
             .prefix
             .as_ref()
             .map(AsRef::<Path>::as_ref)
             .unwrap_or(default_filename.as_ref());
-        self.ensure_dir().and_then(|dir| {
-            fs::File::create(
-                dir.join(filename)
-                    .with_added_extension(self.extension_or_default()),
-            )
+        self.dir_or_default()
+            .join(filename)
+            .with_added_extension(self.extension_or_default())
+    }
+
+    pub(crate) fn open_or_create_single(
+        &self,
+        default_filename: &str,
+    ) -> std::io::Result<fs::File> {
+        self.ensure_dir().and_then(|_| {
+            fs::File::options()
+                .write(true)
+                .create(true)
+                .open(self.single_file_path(default_filename))
         })
     }
 

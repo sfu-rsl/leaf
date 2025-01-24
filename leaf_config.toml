@@ -12,6 +12,9 @@ type = "file"
 directory = "leaf_out"
 format = "binary"
 
+[exe_trace]
+dump_interval = 5
+
 [[exe_trace.inspectors]]
 type = "sanity_checker"
 level = "panic"
