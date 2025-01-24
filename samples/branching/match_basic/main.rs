@@ -1,5 +1,7 @@
+use leaf::annotations::*;
+
 fn main() {
-    let x = get_num();
+    let x = 10i32.mark_symbolic();
 
     match x % 3 {
         2 => foo(),
@@ -13,19 +15,12 @@ fn main() {
         _ => foo(),
     }
 
-    let y = get_char();
+    let y = 'b'.mark_symbolic();
     match y {
         'a' => foo(),
         'x' => foo(),
         _ => foo(),
     }
-}
-
-fn get_num() -> i32 {
-    10
-}
-fn get_char() -> char {
-    'x'
 }
 
 fn foo() {}
