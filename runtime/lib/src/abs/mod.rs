@@ -232,7 +232,7 @@ impl<V, C> Constraint<&V, &C> {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) enum ConstraintKind<C> {
     True,
-    Not,
+    False,
     OneOf(Vec<C>),
     NoneOf(Vec<C>),
 }
@@ -242,8 +242,8 @@ impl<C> ConstraintKind<C> {
     pub fn not(self) -> Self {
         use ConstraintKind::*;
         match self {
-            True => Not,
-            Not => True,
+            True => False,
+            False => True,
             OneOf(matches) => NoneOf(matches),
             NoneOf(options) => OneOf(options),
         }
@@ -253,7 +253,7 @@ impl<C> ConstraintKind<C> {
         use ConstraintKind::*;
         match self {
             True => True,
-            Not => Not,
+            False => False,
             OneOf(options) => OneOf(options.into_iter().map(f).collect()),
             NoneOf(options) => NoneOf(options.into_iter().map(f).collect()),
         }
@@ -263,7 +263,7 @@ impl<C> ConstraintKind<C> {
         use ConstraintKind::*;
         match self {
             True => True,
-            Not => Not,
+            False => False,
             OneOf(options) => OneOf(options.iter().collect()),
             NoneOf(options) => NoneOf(options.iter().collect()),
         }

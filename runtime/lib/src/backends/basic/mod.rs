@@ -683,7 +683,7 @@ impl<'a, EB> SwitchHandler for BasicSwitchHandler<'a, EB> {
 impl<'a, EB> BasicSwitchHandler<'a, EB> {
     fn create_constraint(&mut self, values: Vec<<Self as SwitchHandler>::Constant>) -> Constraint {
         let kind = match values.first().unwrap() {
-            abs::Constant::Bool(false) => ConstraintKind::Not,
+            abs::Constant::Bool(false) => ConstraintKind::False,
             _ => ConstraintKind::OneOf(
                 values
                     .into_iter()

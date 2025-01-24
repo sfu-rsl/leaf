@@ -139,7 +139,7 @@ where
         use ConstraintKind::*;
         match &self.kind {
             True => write!(f, "{{{}}}", self.discr),
-            Not => write!(f, "!{{{}}}", self.discr),
+            False => write!(f, "!{{{}}}", self.discr),
             _ => write!(f, "{{{} {}}}", self.discr, self.kind),
         }
     }
@@ -153,7 +153,7 @@ where
         use ConstraintKind::*;
         match self {
             True => write!(f, "{}", true),
-            Not => write!(f, "{}", false),
+            False => write!(f, "{}", false),
             OneOf(options) => {
                 if options.len() == 1 {
                     write!(f, "== {}", options[0])

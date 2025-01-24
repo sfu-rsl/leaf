@@ -208,7 +208,7 @@ where
                 use ConstraintKind::*;
                 let (kind, negated) = match kind {
                     True => (True, false),
-                    Not => (True, true),
+                    False => (True, true),
                     OneOf(options) => (OneOf(options), false),
                     NoneOf(options) => (OneOf(options), true),
                 };
