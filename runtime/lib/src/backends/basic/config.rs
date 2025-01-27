@@ -105,6 +105,7 @@ pub(crate) struct ExecutionTraceConfig {
     /// # Remarks
     /// This is useful for executions that possibly take long to finish and may get stopped
     /// prematurely.
+    #[serde(default)]
     pub dump_interval: Option<NonZero<u64>>,
 }
 
@@ -113,14 +114,17 @@ pub(crate) struct ExecutionTraceConfig {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum TraceInspectorType {
     SanityChecker {
+        #[serde(default)]
         level: ConstraintSanityCheckLevel,
     },
     DivergingInput {
         #[serde(default = "default_diverging_input_check_optimistic")]
         check_optimistic: bool,
+        #[serde(default)]
         filters: Vec<DivergenceFilterType>,
     },
     BranchCoverage {
+        #[serde(default)]
         output: Option<OutputConfig>,
     },
 }
@@ -147,6 +151,7 @@ pub(crate) enum DivergenceFilterType {
     BranchDepthDistance {
         #[serde(default = "default_branch_depth_distance_factor")]
         distance_threshold_factor: f32,
+        #[serde(default)]
         persistence: Option<OutputConfig>,
     },
 }
