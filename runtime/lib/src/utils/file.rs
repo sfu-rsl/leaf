@@ -9,13 +9,17 @@ use serde::Deserialize;
 pub(crate) struct FileGenConfig {
     /// The folder to write file outputs to.
     /// Defaults to the current working directory.
+    #[serde(default)]
     pub directory: Option<std::path::PathBuf>,
     /// The format to write the file outputs in.
+    #[serde(default)]
     pub format: FileFormat,
     /// The prefix to use for the name of the output files.
     /// Translates to the file name if a single file gets generated.
+    #[serde(default)]
     pub prefix: Option<String>,
     /// The extension to use for the name of the output files.
+    #[serde(default)]
     pub extension: Option<String>,
 }
 
