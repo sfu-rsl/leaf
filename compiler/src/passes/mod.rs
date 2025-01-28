@@ -28,7 +28,6 @@ pub(crate) use logger::CompilationPassLogExt;
 #[allow(unused)]
 pub(crate) use noop::NoOpPass;
 pub(crate) use noop::OverrideFlagsForcePass;
-pub(crate) use runtime_adder::LeafToolAdder;
 pub(crate) use runtime_adder::RuntimeExternCrateAdder;
 pub(crate) use tyexp::TypeExporter;
 
@@ -200,7 +199,7 @@ mod implementation {
     use rustc_driver::Compilation;
     use rustc_hir::def_id::DefId;
     use rustc_middle::query::TyCtxtAt;
-    use rustc_span::def_id::LocalDefId;
+    use rustc_span::{Symbol, def_id::LocalDefId};
 
     use std::cell::Cell;
     type RRef<T> = std::rc::Rc<std::cell::RefCell<T>>;
@@ -270,10 +269,10 @@ mod implementation {
              Option<fn(&Session, &mut rustc_middle::util::Providers)>,
          > = Cell::new(None);
          static ORIGINAL_OPTIMIZED_MIR: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, LocalDefId) -> &mir::Body<'tcx>
+             for<'tcx> fn(TyCtxt<'tcx>, LocalDefId) -> &'tcx mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_EXTERN_OPTIMIZED_MIR: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, DefId) -> &mir::Body<'tcx>
+             for<'tcx> fn(TyCtxt<'tcx>, DefId) -> &'tcx mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_MIR_SHIMS: Cell<
              for<'tcx> fn(TyCtxt<'tcx>, mir_ty::InstanceKind<'tcx>) -> mir::Body<'tcx>
@@ -282,8 +281,11 @@ mod implementation {
              for<'tcx> fn(TyCtxtAt<'tcx>, mir_ty::Instance<'tcx>) -> bool
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_COLLECT_PARTITION: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, ()) -> (&rustc_data_structures::unord::UnordSet<DefId>, &[CodegenUnit])
+             for<'tcx> fn(TyCtxt<'tcx>, ()) -> (&'tcx rustc_data_structures::unord::UnordSet<DefId>, &'tcx [CodegenUnit])
          > = Cell::new(|_, _| unreachable!());
+         static ORIGINAL_REGISTERED_TOOLS: Cell<
+            for <'tcx> fn(TyCtxt<'tcx>, ()) -> mir_ty::RegisteredTools
+         > = Cell::new(|_,_| unreachable!());
     }
 
     struct PassHolder<T: CompilationPass + ?Sized>(Arc<Mutex<T>>);
@@ -389,6 +391,11 @@ mod implementation {
                         ORIGINAL_COLLECT_PARTITION.set(providers.collect_and_partition_mono_items);
                         providers.collect_and_partition_mono_items =
                             Self::collect_and_partition_mono_items;
+                    }
+
+                    {
+                        ORIGINAL_REGISTERED_TOOLS.set(providers.registered_tools);
+                        providers.registered_tools = Self::registered_tools;
                     }
                 },
             );
@@ -518,6 +525,21 @@ mod implementation {
             let mut units = units.iter().map(clone_cgu).collect::<Vec<_>>();
             T::visit_codegen_units(tcx, &mut units, &mut global::get_storage());
             (items, tcx.arena.alloc_from_iter(units))
+        }
+
+        fn registered_tools(tcx: TyCtxt, _: ()) -> mir_ty::RegisteredTools {
+            // FIXME: Make it configurable
+            const TOOL_NAME: &str = crate::constants::TOOL_LEAF;
+
+            let mut tools = ORIGINAL_REGISTERED_TOOLS.get()(tcx, ()).clone();
+
+            // #![register_tool(leaf_attr)]
+            tools.insert(rustc_span::Ident {
+                name: Symbol::intern(TOOL_NAME),
+                span: rustc_span::DUMMY_SP,
+            });
+
+            tools
         }
     }
 

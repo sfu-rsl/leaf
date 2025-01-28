@@ -216,7 +216,6 @@ mod driver_callbacks {
 
         let passes = chain!(
             prerequisites_pass,
-            <LeafToolAdder>,
             <TypeExporter>,
             nctfe_pass,
             Instrumentor::new(true, None /* FIXME */, config.instr_rules.clone()),

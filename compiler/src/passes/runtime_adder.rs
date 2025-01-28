@@ -1,9 +1,8 @@
-use rustc_ast::{ast, attr, ptr::P, Item, ItemKind, Visibility, VisibilityKind, DUMMY_NODE_ID};
+use rustc_ast::{DUMMY_NODE_ID, Item, ItemKind, Visibility, VisibilityKind, ptr::P};
 use rustc_session::Session;
 use rustc_span::{
-    sym,
-    symbol::{Ident, Symbol},
     DUMMY_SP,
+    symbol::{Ident, Symbol},
 };
 
 use crate::pri_utils::sym::RUNTIME_LIB_CRATE;
@@ -65,42 +64,5 @@ impl CompilationPass for RuntimeExternCrateAdder {
             *RUNTIME_LIB_CRATE,
             crate_name
         );
-    }
-}
-
-// FIXME: Make it configurable
-const TOOL_NAME: &str = crate::constants::TOOL_LEAF;
-
-#[derive(Debug, Default)]
-pub(crate) struct LeafToolAdder;
-
-impl CompilationPass for LeafToolAdder {
-    fn transform_ast(
-        &mut self,
-        session: &Session,
-        krate: &mut rustc_ast::Crate,
-        _storage: &mut dyn super::Storage,
-    ) {
-        // #![feature(register_tool)]
-        let generator = &session.psess.attr_id_generator;
-        krate.attrs.push(attr::mk_attr_nested_word(
-            &generator,
-            ast::AttrStyle::Inner,
-            ast::Safety::Default,
-            sym::feature,
-            sym::register_tool,
-            DUMMY_SP,
-        ));
-        // #![register_tool(leaf)]
-        krate.attrs.push(attr::mk_attr_nested_word(
-            generator,
-            ast::AttrStyle::Inner,
-            ast::Safety::Default,
-            sym::register_tool,
-            Symbol::intern(TOOL_NAME),
-            DUMMY_SP,
-        ));
-
-        log_info!("Added tool registration attributes to the crate.");
     }
 }
