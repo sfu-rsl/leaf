@@ -11,7 +11,7 @@ use crate::{
         place::HasMetadata,
     },
     backends::basic::{
-        expr::{place::*, SliceIndex},
+        expr::{SliceIndex, place::*},
         place::PlaceMetadata,
     },
 };

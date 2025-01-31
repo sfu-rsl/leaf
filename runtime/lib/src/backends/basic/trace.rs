@@ -11,23 +11,23 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use common::{log_debug, pri::BasicBlockLocation};
 
 use crate::{
-    abs::{backend::Model, Constraint, HasTags, Tag},
-    solvers::{z3::Z3Solver, MapSolverExt},
+    abs::{Constraint, HasTags, Tag, backend::Model},
+    solvers::{MapSolverExt, z3::Z3Solver},
     trace::{
-        divergence::{DivergenceFilter, ImmediateDivergingAnswerFinder},
-        sanity_check::ConstraintSanityChecker,
         AdapterTraceManagerExt, AggregatorTraceManager, BranchCoverageStepInspector,
         FilterStepInspectorExt, InspectionTraceManagerExt, LoggerTraceManagerExt, StepInspector,
         TraceInspector,
+        divergence::{DivergenceFilter, ImmediateDivergingAnswerFinder},
+        sanity_check::ConstraintSanityChecker,
     },
     utils::alias::RRef,
 };
 
 use super::{
+    ConstValue, Solver, SymVarId, TraceManager, ValueRef,
     config::{self, ExecutionTraceConfig, OutputConfig, SolverImpl, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
     sym_vars::SymVariablesManager,
-    ConstValue, Solver, SymVarId, TraceManager, ValueRef,
 };
 
 use dumping::*;
@@ -227,7 +227,7 @@ mod divergence {
     use common::log_info;
 
     use crate::trace::divergence::{
-        filter::all, BranchCoverageDepthDivergenceFilter, DepthProvider,
+        BranchCoverageDepthDivergenceFilter, DepthProvider, filter::all,
     };
 
     use super::*;
@@ -523,7 +523,7 @@ mod dumping {
     use std::fs;
 
     use common::pri::{BasicBlockIndex, DefId};
-    use serde::{de::DeserializeOwned, Deserialize};
+    use serde::{Deserialize, de::DeserializeOwned};
 
     use crate::utils::file::{FileFormat, FileGenConfig};
 

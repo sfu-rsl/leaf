@@ -15,7 +15,7 @@ use sha2::{self, Digest, Sha256};
 use libafl::{
     executors::command::CommandConfigurator, prelude::*, stages::mutational::MultiMutationalStage,
 };
-use libafl_bolts::{current_nanos, nonzero, rands::StdRand, tuples::tuple_list, AsSlice, Named};
+use libafl_bolts::{AsSlice, Named, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
 use libafl_leaf::DivergingMutator;
 
 const NAME_ORCHESTRATOR: &str = "leafo_onetime";

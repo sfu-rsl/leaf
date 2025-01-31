@@ -1,7 +1,7 @@
 use std::{
     collections::{
-        btree_map::{Cursor, CursorMut, Entry},
         BTreeMap,
+        btree_map::{Cursor, CursorMut, Entry},
     },
     fmt::{self, Debug, Display},
     ops::{Bound, Range},

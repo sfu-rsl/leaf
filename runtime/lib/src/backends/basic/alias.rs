@@ -1,12 +1,11 @@
 use super::{
-    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
     ConstValue, LazyTypeInfo,
+    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
 };
 use crate::abs::{
-    self,
+    self, FloatType, IntType, TypeId,
     backend::*,
     expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder},
-    FloatType, IntType, TypeId,
 };
 use common::tyexp::TypeInfo;
 

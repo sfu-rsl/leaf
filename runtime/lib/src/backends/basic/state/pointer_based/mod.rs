@@ -8,23 +8,23 @@ use std::{
 use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
     backends::basic::{
+        GenericVariablesState,
         alias::{SymValueRefExprBuilder, TypeManager},
         config::{SymbolicPlaceConfig, SymbolicPlaceStrategy},
         expr::{
             lazy::RawPointerRetriever,
             place::{DeterministicPlaceValue, SymbolicPlaceValue},
         },
-        GenericVariablesState,
     },
     tyexp::TypeInfoExt,
-    utils::{alias::RRef, InPlaceSelfHierarchical},
+    utils::{InPlaceSelfHierarchical, alias::RRef},
 };
 use common::tyexp::{FieldsShapeInfo, StructShape, TypeInfo, UnionShape};
 
 use super::super::{
+    ValueRef,
     expr::prelude::*,
     place::{LocalWithMetadata, PlaceWithMetadata, Projection},
-    ValueRef,
 };
 
 mod memory;
@@ -205,13 +205,10 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
 
     #[tracing::instrument(level = "debug", skip(self))]
     fn ref_place(&self, place: &Place, usage: PlaceUsage) -> PlaceValueRef {
-        self.get_place(
-            place,
-            match usage {
-                PlaceUsage::Read => self.sym_read_handler.borrow_mut(),
-                PlaceUsage::Write => self.sym_write_handler.borrow_mut(),
-            },
-        )
+        self.get_place(place, match usage {
+            PlaceUsage::Read => self.sym_read_handler.borrow_mut(),
+            PlaceUsage::Write => self.sym_write_handler.borrow_mut(),
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -221,14 +218,10 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
         ptr_type_id: TypeId,
         usage: PlaceUsage,
     ) -> PlaceValueRef {
-        self.get_deref_of_ptr(
-            ptr,
-            ptr_type_id,
-            match usage {
-                PlaceUsage::Read => self.sym_read_handler.borrow_mut(),
-                PlaceUsage::Write => self.sym_write_handler.borrow_mut(),
-            },
-        )
+        self.get_deref_of_ptr(ptr, ptr_type_id, match usage {
+            PlaceUsage::Read => self.sym_read_handler.borrow_mut(),
+            PlaceUsage::Write => self.sym_write_handler.borrow_mut(),
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self))]

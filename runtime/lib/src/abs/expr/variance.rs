@@ -2,8 +2,8 @@
 /// that work as adapters. Most of the adapters provide non-trivial covariance and contravariance
 /// over the input and output types of the wrapped expression builder.
 use super::{
-    macros::macro_rules_method_with_optional_args, BinaryExprBuilder, CastExprBuilder,
-    TernaryExprBuilder, UnaryExprBuilder,
+    BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder,
+    macros::macro_rules_method_with_optional_args,
 };
 use crate::abs::{BinaryOp, CastKind, TernaryOp, UnaryOp};
 use std::ops::DerefMut;

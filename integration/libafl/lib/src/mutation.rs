@@ -5,9 +5,9 @@ use std::{
 };
 
 use libafl::{
+    Error,
     inputs::{HasMutatorBytes, Input},
     mutators::MultiMutator,
-    Error,
 };
 use libafl_bolts::Named;
 

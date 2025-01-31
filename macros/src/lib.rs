@@ -2,8 +2,8 @@ use ignore::WalkBuilder;
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use regex::Regex;
-use std::path::{Path, MAIN_SEPARATOR};
-use syn::{parse_macro_input, Attribute, ImplItem, ItemFn, ItemImpl, LitStr};
+use std::path::{MAIN_SEPARATOR, Path};
+use syn::{Attribute, ImplItem, ItemFn, ItemImpl, LitStr, parse_macro_input};
 
 #[proc_macro_attribute]
 pub fn gen_tests_rs(input_path: TokenStream, input_fn: TokenStream) -> TokenStream {

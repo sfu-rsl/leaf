@@ -116,7 +116,7 @@ fn main() -> ExitCode {
 
 fn watch_diverging_inputs(dir: &Path) -> notify::RecommendedWatcher {
     use notify::{
-        event::CreateKind, recommended_watcher, Event, EventKind, RecursiveMode, Result, Watcher,
+        Event, EventKind, RecursiveMode, Result, Watcher, event::CreateKind, recommended_watcher,
     };
     use std::sync::mpsc;
 

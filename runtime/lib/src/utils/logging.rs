@@ -6,8 +6,8 @@ pub(crate) fn comma_separated<T: Display>(iter: impl Iterator<Item = T>) -> Stri
 }
 
 pub(crate) fn init_logging() {
-    use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-    use tracing_tree::{time::FormatTime, HierarchicalLayer};
+    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
+    use tracing_tree::{HierarchicalLayer, time::FormatTime};
 
     const ENV_LOG: &str = "LEAF_LOG";
     const ENV_WRITE_STYLE: &str = "LEAF_LOG_STYLE";

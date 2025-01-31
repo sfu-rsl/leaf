@@ -1,15 +1,14 @@
 use derive_more as dm;
 use z3::{
-    self,
+    self, Context, SatResult, Solver,
     ast::{self, Ast},
-    Context, SatResult, Solver,
 };
 
 use std::{collections::HashMap, hash::Hash};
 
 use common::log_debug;
 
-use crate::abs::{backend, Constraint, ConstraintKind};
+use crate::abs::{Constraint, ConstraintKind, backend};
 
 use self::backend::SolveResult;
 

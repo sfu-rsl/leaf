@@ -6,8 +6,8 @@ use common::{log_debug, log_info, pri::*};
 
 use self::instance::*;
 use crate::abs::{
-    self, backend::*, AssertKind, CastKind, Constant, FloatType, IntType, Local, SymVariable,
-    ValueType,
+    self, AssertKind, CastKind, Constant, FloatType, IntType, Local, SymVariable, ValueType,
+    backend::*,
 };
 use common::log_warn;
 use leaf_macros::trait_log_fn;

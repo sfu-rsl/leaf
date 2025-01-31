@@ -7,15 +7,15 @@ use std::{
 use common::{log_warn, types::RawAddress};
 
 use crate::abs::{
+    Local, TypeId, TypeSize, ValueType,
     backend::{
-        implementation::{DefaultPlaceBuilder, DefaultPlaceProjectionHandler},
         PlaceBuilder, PlaceProjectionHandler,
+        implementation::{DefaultPlaceBuilder, DefaultPlaceProjectionHandler},
     },
     place::HasMetadata,
-    Local, TypeId, TypeSize, ValueType,
 };
 
-use super::{expr::place::DeterPlaceValueRef, PlaceValueRef};
+use super::{PlaceValueRef, expr::place::DeterPlaceValueRef};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PlaceMetadata {

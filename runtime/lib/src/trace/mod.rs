@@ -1,4 +1,4 @@
-use crate::abs::{backend::TraceManager, Constraint};
+use crate::abs::{Constraint, backend::TraceManager};
 
 mod adapt;
 mod agg;

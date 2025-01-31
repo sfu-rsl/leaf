@@ -1,8 +1,8 @@
 use std::{env, format, string::ToString};
 
 use config::{
-    builder::DefaultState, Config, ConfigBuilder, ConfigError, Environment, File, FileFormat,
-    FileStoredFormat,
+    Config, ConfigBuilder, ConfigError, Environment, File, FileFormat, FileStoredFormat,
+    builder::DefaultState,
 };
 
 use crate::{log_debug, log_warn};

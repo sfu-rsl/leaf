@@ -16,7 +16,7 @@ pub(super) const TAG_INSTR_DECISION: &str = concatcp!(super::TAG_INSTRUMENTATION
 const TOOL_NAME: &str = crate::constants::TOOL_LEAF;
 const ATTR_NAME: &str = "instrument";
 
-pub(super) use rules::{get_baked_dyn_def_rules, KEY_RULES};
+pub(super) use rules::{KEY_RULES, get_baked_dyn_def_rules};
 
 pub(super) fn should_instrument<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -82,8 +82,8 @@ fn decide_instance_kind(kind: &InstanceKind) -> bool {
 /// that are currently problematic to instrument.
 fn get_exceptional_exclusions() -> Vec<WholeBodyFilter> {
     use crate::config::{
-        rules::{AllFormula, AnyFormula, LogicFormula::*, PatternMatch},
         EntityLocationFilter,
+        rules::{AllFormula, AnyFormula, LogicFormula::*, PatternMatch},
     };
 
     fn def_path_pattern(pattern: &str) -> EntityLocationFilter {
@@ -865,15 +865,15 @@ mod intrinsics {
         }
     }
 }
-pub(super) use intrinsics::{decide_intrinsic_call, AtomicIntrinsicKind, IntrinsicDecision};
+pub(super) use intrinsics::{AtomicIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
 
 mod rules {
     use std::ops::DerefMut;
 
     use crate::{
         config::{
-            rules::LogicFormula, CrateFilter, EntityFilter, EntityLocationFilter,
-            InstrumentationRules, MethodDynDefinitionFilter, WholeBodyFilter,
+            CrateFilter, EntityFilter, EntityLocationFilter, InstrumentationRules,
+            MethodDynDefinitionFilter, WholeBodyFilter, rules::LogicFormula,
         },
         passes::StorageExt,
         utils::rules::{Predicate, ToPredicate},

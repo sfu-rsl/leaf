@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-use common::tyexp::{pass_core_type_names_to, CoreTypes, TypeExport, TypesData};
+use common::tyexp::{CoreTypes, TypeExport, TypesData, pass_core_type_names_to};
 
 use crate::{
-    abs::{backend::TypeManager, IntType},
+    abs::{IntType, backend::TypeManager},
     tyexp,
 };
 

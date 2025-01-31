@@ -1,7 +1,7 @@
 const LOG_ENV: &str = "LEAFO_LOG";
 
 pub fn init_logging() {
-    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
     let env_filter = EnvFilter::builder()
         .with_env_var(LOG_ENV.to_string())
         .from_env_lossy();

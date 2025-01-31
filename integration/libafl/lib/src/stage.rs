@@ -1,14 +1,14 @@
 use std::{borrow::Cow, marker::PhantomData, sync::mpsc, thread};
 
 use libafl::{
+    Error, Evaluator, HasNamedMetadata,
     corpus::Corpus,
     mutators::MultiMutator,
     stages::{
-        mutational::{MutatedTransform, MutatedTransformPost},
         RetryCountRestartHelper, Stage,
+        mutational::{MutatedTransform, MutatedTransformPost},
     },
     state::{HasCorpus, HasCurrentTestcase, HasRand, UsesState},
-    Error, Evaluator, HasNamedMetadata,
 };
 use libafl_bolts::Named;
 
