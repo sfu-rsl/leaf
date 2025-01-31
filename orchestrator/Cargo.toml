@@ -23,4 +23,4 @@ sha2 = "0.10.8"
 clap = { workspace = true }
 derive_more = { workspace = true }
 glob = "0.3.1"
-notify = "7.0.0"
+notify = "8.0.0"
