@@ -41,7 +41,7 @@ impl<'tcx> BasicBlockDataSplitExt<'tcx> for BasicBlockData<'tcx> {
     fn split_with(self, predicate: impl Fn(&Statement) -> bool) -> Vec<BasicBlockData<'tcx>> {
         let mut result = Vec::new();
 
-        let mut empty_block = BasicBlockData::new(None);
+        let mut empty_block = BasicBlockData::new(None, false);
         empty_block.is_cleanup = self.is_cleanup;
 
         let mut new_block = empty_block.clone();

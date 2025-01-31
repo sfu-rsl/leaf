@@ -24,7 +24,6 @@ mod visit;
 extern crate rustc_abi;
 extern crate rustc_apfloat;
 extern crate rustc_ast;
-extern crate rustc_attr;
 extern crate rustc_codegen_ssa;
 extern crate rustc_const_eval;
 extern crate rustc_data_structures;
@@ -46,8 +45,6 @@ extern crate rustc_trait_selection;
 extern crate rustc_type_ir;
 extern crate thin_vec;
 
-use rustc_driver::RunCompiler;
-
 use common::log_info;
 
 use std::env;
@@ -65,7 +62,7 @@ fn main() {
 
 fn init_logging() {
     use env;
-    use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
     let env = env::var(constants::ENV_LOG).unwrap_or("warn".to_string());
 
     let off_tags = [LOG_PASS_OBJECTS_TAG, LOG_PRI_DISCOVERY_TAG, LOG_BB_JUMP_TAG]
@@ -86,7 +83,7 @@ fn init_logging() {
 }
 
 pub fn set_up_compiler() {
-    use rustc_session::{config::ErrorOutputType, EarlyDiagCtxt};
+    use rustc_session::{EarlyDiagCtxt, config::ErrorOutputType};
 
     rustc_driver::init_rustc_env_logger(&EarlyDiagCtxt::new(ErrorOutputType::default()));
     rustc_driver::install_ice_hook(URL_BUG_REPORT, |_| ());
@@ -103,7 +100,10 @@ pub fn run_compiler(args: impl IntoIterator<Item = String>) -> i32 {
         &driver_args::ArgsExt::parse_crate_options(&args),
     );
 
-    rustc_driver::catch_with_exit_code(|| RunCompiler::new(&args, callbacks.as_mut()).run())
+    rustc_driver::catch_with_exit_code(|| {
+        rustc_driver::run_compiler(&args, callbacks.as_mut());
+        Ok(())
+    })
 }
 
 /// Returns `true` if the crate is ineffective for symbolic execution of the target.
@@ -339,9 +339,8 @@ mod driver_callbacks {
                     let search_path = make_search_path_for_transitive_deps(&rlib_path);
 
                     log_debug!(
-                        "Runtime shim path: {}, with {} transitive deps found at: {}",
+                        "Runtime shim path: {} found at: {}",
                         rlib_path.display(),
-                        search_path.files.len(),
                         search_path.dir.display()
                     );
 
@@ -374,28 +373,11 @@ mod driver_callbacks {
         }
 
         fn make_search_path_for_transitive_deps(lib_file_path: &Path) -> SearchPath {
-            // The `deps` folder next to the library file
-            let deps_path = lib_file_path.parent().unwrap().join(DIR_DEPS);
-            // Source: rustc_session::search_paths::SearchPath::new
-            let files = std::fs::read_dir(&deps_path)
-                .map(|files| {
-                    files
-                        .filter_map(|e| {
-                            e.ok().and_then(|e| {
-                                e.file_name().to_str().map(|s| SearchPathFile {
-                                    path: e.path(),
-                                    file_name_str: s.to_string(),
-                                })
-                            })
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
-            SearchPath {
-                kind: PathKind::Dependency,
-                dir: deps_path,
-                files,
-            }
+            SearchPath::new(
+                PathKind::Dependency,
+                // The `deps` folder next to the library file
+                lib_file_path.parent().unwrap().join(DIR_DEPS),
+            )
         }
     }
 
@@ -490,7 +472,7 @@ mod driver_callbacks {
 
             let result: PathBuf = toolchain_build::build_toolchain(
                 current_sysroot,
-                rustc_config.opts.target_triple.triple(),
+                rustc_config.opts.target_triple.tuple(),
                 rustc_config.output_dir.as_deref(),
             )
             .unwrap_or_else(|e| {

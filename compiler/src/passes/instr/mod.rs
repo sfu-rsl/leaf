@@ -546,6 +546,7 @@ where
 
     fn visit_inline_asm(
         &mut self,
+        _asm_macro: &mir::InlineAsmMacro,
         _template: &[rustc_ast::InlineAsmTemplatePiece],
         _operands: &[mir::InlineAsmOperand<'tcx>],
         _options: &rustc_ast::InlineAsmOptions,
@@ -758,9 +759,9 @@ where
         self.call_adder.by_thread_local_ref(def_id);
     }
 
-    fn visit_raw_ptr(&mut self, mutability: &rustc_ast::Mutability, place: &Place<'tcx>) {
+    fn visit_raw_ptr(&mut self, kind: &mir::RawPtrKind, place: &Place<'tcx>) {
         let place_ref = self.call_adder.reference_place(place);
-        self.call_adder.by_raw_ptr(place_ref, mutability.is_mut());
+        self.call_adder.by_raw_ptr(place_ref, kind.to_mutbl_lossy().is_mut());
     }
 
     fn visit_len(&mut self, place: &Place<'tcx>) {
@@ -780,7 +781,7 @@ where
         match kind {
             IntToInt | FloatToInt => call_adder.to_int(*ty),
             IntToFloat | FloatToFloat => call_adder.to_float(*ty),
-            PointerCoercion(coercion) => {
+            PointerCoercion(coercion, _source) => {
                 use rustc_middle::ty::adjustment::PointerCoercion::*;
                 match coercion {
                     Unsize => call_adder.through_unsizing(),
@@ -797,12 +798,12 @@ where
                         ));
                         call_adder.to_another_ptr(*ty, *kind)
                     }
+                    DynStar => call_adder.through_sized_dynamization(*ty),
                 }
             }
             PointerExposeProvenance => call_adder.expose_prov(),
             PointerWithExposedProvenance => call_adder.with_exposed_prov(*ty),
             PtrToPtr | FnPtrToPtr => call_adder.to_another_ptr(*ty, *kind),
-            DynStar => call_adder.through_sized_dynamization(*ty),
             Transmute => call_adder.transmuted(*ty),
         }
     }

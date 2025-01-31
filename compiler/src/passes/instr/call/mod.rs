@@ -682,15 +682,18 @@ mod implementation {
             destination: Place<'tcx>,
             target: Option<BasicBlock>,
         ) -> BasicBlockData<'tcx> {
-            BasicBlockData::new(Some(terminator::call(
-                self.context.tcx(),
-                func_id,
-                generic_args,
-                args,
-                destination,
-                target,
-                self.context.source_info(),
-            )))
+            BasicBlockData::new(
+                Some(terminator::call(
+                    self.context.tcx(),
+                    func_id,
+                    generic_args,
+                    args,
+                    destination,
+                    target,
+                    self.context.source_info(),
+                )),
+                false,
+            )
         }
     }
 
@@ -893,7 +896,7 @@ mod implementation {
         ) -> Vec<BasicBlockData<'tcx>> {
             if unlikely(!place_ty.is_sized(self.tcx(), self.current_param_env())) {
                 log_warn!("Encountered unsized type. Skipping size setting.");
-                return vec![BasicBlockData::new(Some(terminator::goto(None)))];
+                return vec![BasicBlockData::new(Some(terminator::goto(None)), false)];
             }
 
             let (get_call_block, size_local) = self.make_bb_for_helper_call_with_all(
@@ -3395,7 +3398,7 @@ mod implementation {
                     let assignment = assignment::create(
                         Place::from(local),
                         Rvalue::RawPtr(
-                            mir::Mutability::Not,
+                            mir::RawPtrKind::Const,
                             if is_self_ref {
                                 receiver_place.project_deeper(&[ProjectionElem::Deref], tcx)
                             } else {
@@ -3403,7 +3406,7 @@ mod implementation {
                             },
                         ),
                     );
-                    let mut block = BasicBlockData::new(Some(terminator::goto(None)));
+                    let mut block = BasicBlockData::new(Some(terminator::goto(None)), false);
                     block.statements.push(assignment);
                     (block, local)
                 } else {
@@ -3620,15 +3623,18 @@ mod implementation {
             } else {
                 context.pri_helper_funcs().f64_to_bits
             };
-            let block = BasicBlockData::new(Some(terminator::call(
-                tcx,
-                conversion_func.def_id,
-                iter::empty(),
-                vec![operand::const_from_existing(constant)],
-                bit_rep_local.into(),
-                None,
-                context.source_info(),
-            )));
+            let block = BasicBlockData::new(
+                Some(terminator::call(
+                    tcx,
+                    conversion_func.def_id,
+                    iter::empty(),
+                    vec![operand::const_from_existing(constant)],
+                    bit_rep_local.into(),
+                    None,
+                    context.source_info(),
+                )),
+                false,
+            );
             (bit_rep_local, block)
         }
 
@@ -3641,7 +3647,7 @@ mod implementation {
             let ptr_local = local_manager.add_local(Ty::new_imm_ptr(tcx, place_ty));
             let ptr_assignment = assignment::create(
                 Place::from(ptr_local),
-                mir::Rvalue::RawPtr(rustc_ast::Mutability::Not, place.clone()),
+                mir::Rvalue::RawPtr(mir::RawPtrKind::Const, place.clone()),
             );
 
             (ptr_assignment, ptr_local)
