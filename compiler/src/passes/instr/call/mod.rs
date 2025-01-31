@@ -532,8 +532,18 @@ mod implementation {
             fn_def_ty
         }
 
-        fn current_param_env(&self) -> mir_ty::ParamEnv<'tcx> {
-            self.context.tcx().param_env(self.current_func_id())
+        fn current_typing_env(&self) -> mir_ty::TypingEnv<'tcx> {
+            let body_def_id = self.current_func_id();
+            mir_ty::TypingEnv {
+                typing_mode: if let Some(body_def_id) = body_def_id.as_local() {
+                    self.tcx().typing_mode_for_body(body_def_id)
+                } else {
+                    // It looks like that the type will be resolved at the crate level,
+                    // so for external bodies they should be already resolved.
+                    mir_ty::TypingMode::non_body_analysis()
+                },
+                param_env: self.context.tcx().param_env(self.current_func_id()),
+            }
         }
     }
 
@@ -894,7 +904,7 @@ mod implementation {
             place_ref: Local,
             place_ty: Ty<'tcx>,
         ) -> Vec<BasicBlockData<'tcx>> {
-            if unlikely(!place_ty.is_sized(self.tcx(), self.current_param_env())) {
+            if unlikely(!place_ty.is_sized(self.tcx(), self.current_typing_env())) {
                 log_warn!("Encountered unsized type. Skipping size setting.");
                 return vec![BasicBlockData::new(Some(terminator::goto(None)), false)];
             }
@@ -1945,7 +1955,7 @@ mod implementation {
                 let BlocksAndResult(def_blocks, def_local) = func::definition_of_callee(
                     tcx,
                     self,
-                    self.current_param_env(),
+                    self.current_typing_env(),
                     func,
                     args.first().map(|a| &a.node),
                 );
@@ -1969,7 +1979,7 @@ mod implementation {
                 self,
                 func,
                 args.iter().map(|a| &a.node),
-                self.current_param_env(),
+                self.current_typing_env(),
             );
 
             let mut block = self.make_bb_for_call(
@@ -2001,7 +2011,7 @@ mod implementation {
 
             let def_local = {
                 let BlocksAndResult(def_blocks, def_local) =
-                    func::definition_of_func(tcx, self, fn_def_ty, self.current_param_env());
+                    func::definition_of_func(tcx, self, fn_def_ty, self.current_typing_env());
                 blocks.extend(def_blocks);
                 def_local
             };
@@ -2822,7 +2832,7 @@ mod implementation {
 
             pub trait TyExt<'tcx> {
                 fn is_trivially_tuple(self) -> bool;
-                fn is_tuple(self, tcx: TyCtxt<'tcx>, param_env: ParamEnv<'tcx>) -> bool;
+                fn is_tuple(self, tcx: TyCtxt<'tcx>, typing_env: TypingEnv<'tcx>) -> bool;
             }
 
             impl<'tcx> TyExt<'tcx> for Ty<'tcx> {
@@ -2831,12 +2841,12 @@ mod implementation {
                     matches!(self.kind(), TyKind::Tuple(..))
                 }
 
-                fn is_tuple(self, tcx: TyCtxt<'tcx>, param_env: ParamEnv<'tcx>) -> bool {
+                fn is_tuple(self, tcx: TyCtxt<'tcx>, typing_env: TypingEnv<'tcx>) -> bool {
                     self.is_trivially_tuple()
                         || is_trait(
                             tcx,
                             self,
-                            param_env,
+                            typing_env,
                             tcx.lang_items().tuple_trait().unwrap(),
                         )
                 }
@@ -2849,13 +2859,13 @@ mod implementation {
             pub fn size_of<'tcx>(
                 tcx: TyCtxt<'tcx>,
                 ty: Ty<'tcx>,
-                param_env: ParamEnv<'tcx>,
+                typing_env: TypingEnv<'tcx>,
             ) -> Size {
-                tcx.layout_of(param_env.and(ty)).unwrap().size
+                tcx.layout_of(typing_env.as_query_input(ty)).unwrap().size
             }
 
             pub fn ebit_sbit_size<'tcx>(ty: Ty<'tcx>) -> (u64, u64) {
-                use rustc_apfloat::{ieee::*, Float};
+                use rustc_apfloat::{Float, ieee::*};
                 let mir_ty::Float(float_ty) = ty.kind() else {
                     panic!("Expected floating point type but received: {}", ty)
                 };
@@ -3027,15 +3037,15 @@ mod implementation {
             pub(super) fn is_trait<'tcx>(
                 tcx: TyCtxt<'tcx>,
                 ty: Ty<'tcx>,
-                param_env: ParamEnv<'tcx>,
+                typing_env: TypingEnv<'tcx>,
                 trait_def_id: DefId,
             ) -> bool {
                 use rustc_infer::infer::TyCtxtInferExt;
                 use rustc_trait_selection::infer::InferCtxtExt;
 
                 tcx.infer_ctxt()
-                    .build()
-                    .type_implements_trait(trait_def_id, [ty], param_env)
+                    .build(typing_env.typing_mode)
+                    .type_implements_trait(trait_def_id, [ty], typing_env.param_env)
                     .must_apply_modulo_regions()
             }
         }
@@ -3089,7 +3099,7 @@ mod implementation {
 
         pub(super) mod func {
             use common::log_info;
-            use mir_ty::{AssocItem, ExistentialTraitRef, TraitRef};
+            use mir_ty::{AssocItem, ExistentialTraitRef, TraitRef, TypingEnv};
             use rustc_trait_selection::traits::is_vtable_safe_method;
 
             use crate::passes::instr::decision::get_baked_dyn_def_rules;
@@ -3106,7 +3116,7 @@ mod implementation {
                          + StorageProvider
                      ),
                 fn_def_ty: Ty<'tcx>,
-                param_env: mir_ty::ParamEnv<'tcx>,
+                typing_env: mir_ty::TypingEnv<'tcx>,
             ) -> BlocksAndResult<'tcx> {
                 let TyKind::FnDef(def_id, generic_args) = *fn_def_ty.kind() else {
                     unreachable!(
@@ -3118,7 +3128,7 @@ mod implementation {
                 let fn_value = operand::func(tcx, def_id, generic_args);
 
                 if let Some((trait_ref, trait_item)) = as_dyn_compatible_method(tcx, def_id)
-                    && trait_ref.self_ty().is_sized(tcx, param_env)
+                    && trait_ref.self_ty().is_sized(tcx, typing_env)
                 {
                     let ruled_out = get_baked_dyn_def_rules(call_adder.storage())
                         .accept(&(tcx, def_id))
@@ -3133,7 +3143,7 @@ mod implementation {
                         def_of_dyn_compatible_method(
                             tcx,
                             call_adder,
-                            param_env,
+                            typing_env,
                             fn_value,
                             trait_ref,
                             trait_item.def_id,
@@ -3172,7 +3182,7 @@ mod implementation {
                          + MirCallAdder<'tcx>
                          + PriItemsProvider<'tcx>
                      ),
-                param_env: ParamEnv<'tcx>,
+                typing_env: TypingEnv<'tcx>,
                 fn_value: Operand<'tcx>,
                 trait_ref: TraitRef<'tcx>,
                 method_id: DefId,
@@ -3184,7 +3194,7 @@ mod implementation {
                 let (raw_ptr_of_receiver_block, raw_ptr_of_receiver_local) = raw_ptr_of_receiver(
                     tcx,
                     call_adder,
-                    param_env,
+                    typing_env,
                     call_adder
                         .body()
                         .args_iter()
@@ -3233,7 +3243,7 @@ mod implementation {
                     .impl_of_method(def_id)
                     .and_then(|impl_id| tcx.impl_trait_ref(impl_id))
                     .map(|trait_ref| trait_ref.instantiate_identity())
-                    .filter(|trait_ref| tcx.is_object_safe(trait_ref.def_id))
+                    .filter(|trait_ref| tcx.is_dyn_compatible(trait_ref.def_id))
                     .filter(|trait_ref| {
                         trait_ref.def_id != tcx.lang_items().deref_trait().unwrap()
                     })?;
@@ -3247,7 +3257,7 @@ mod implementation {
                 call_adder: &mut (
                          impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>
                      ),
-                param_env: ParamEnv<'tcx>,
+                typing_env: TypingEnv<'tcx>,
                 fn_value: Operand<'tcx>,
                 first_arg: Option<&Operand<'tcx>>,
             ) -> BlocksAndResult<'tcx> {
@@ -3269,7 +3279,7 @@ mod implementation {
                             def_of_possibly_virtual_callee(
                                 tcx,
                                 call_adder,
-                                param_env,
+                                typing_env,
                                 fn_value,
                                 item.def_id,
                                 self_ty,
@@ -3311,7 +3321,7 @@ mod implementation {
                 call_adder: &mut (
                          impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>
                      ),
-                param_env: ParamEnv<'tcx>,
+                typing_env: TypingEnv<'tcx>,
                 fn_value: Operand<'tcx>,
                 method_id: DefId,
                 self_ty: Ty<'tcx>,
@@ -3322,7 +3332,7 @@ mod implementation {
 
                 let (receiver_raw_ptr_block, receiver_raw_ptr_local) = match receiver {
                     Operand::Copy(place) | Operand::Move(place) => {
-                        raw_ptr_of_receiver(tcx, call_adder, param_env, *place, self_ty)
+                        raw_ptr_of_receiver(tcx, call_adder, typing_env, *place, self_ty)
                     }
                     Operand::Constant(..) => {
                         let receiver_local = call_adder.add_local(receiver.ty(call_adder, tcx));
@@ -3333,7 +3343,7 @@ mod implementation {
                         let (mut block, local) = raw_ptr_of_receiver(
                             tcx,
                             call_adder,
-                            param_env,
+                            typing_env,
                             receiver_local.into(),
                             self_ty,
                         );
@@ -3376,14 +3386,14 @@ mod implementation {
                          + MirCallAdder<'tcx>
                          + PriItemsProvider<'tcx>
                      ),
-                param_env: ParamEnv<'tcx>,
+                typing_env: TypingEnv<'tcx>,
                 receiver_place: Place<'tcx>,
                 self_ty: Ty<'tcx>,
             ) -> (BasicBlockData<'tcx>, Local) {
-                let self_ty = tcx.normalize_erasing_regions(param_env, self_ty);
+                let self_ty = tcx.normalize_erasing_regions(typing_env, self_ty);
 
                 let receiver_ty = receiver_place.ty(call_adder, tcx).ty;
-                let receiver_ty = tcx.normalize_erasing_regions(param_env, receiver_ty);
+                let receiver_ty = tcx.normalize_erasing_regions(typing_env, receiver_ty);
 
                 let is_self_ref = if let TyKind::Ref(_, pointee, _) = receiver_ty.kind()
                     && *pointee == self_ty
@@ -3422,7 +3432,7 @@ mod implementation {
                     let is_pin = tcx
                         .lang_items()
                         .pin_type()
-                        .zip(receiver_ty.ty_def_id())
+                        .zip(receiver_ty.def_id_for_ty_in_cycle())
                         .is_some_and(|(a, b)| a == b);
                     let converter_func = if is_pin {
                         call_adder.pri_helper_funcs().receiver_pin_to_raw_ptr
@@ -3509,7 +3519,7 @@ mod implementation {
                 local_manager: &impl HasLocalDecls<'tcx>,
                 callee: &Operand<'tcx>,
                 args: impl Iterator<Item = &'a Operand<'tcx>>,
-                param_env: mir_ty::ParamEnv<'tcx>,
+                typing_env: mir_ty::TypingEnv<'tcx>,
             ) -> bool {
                 // Tupling is only observed in fn trait (closure) calls.
                 if !is_fn_trait_method_call(tcx, callee.ty(local_manager, tcx)) {
@@ -3523,7 +3533,7 @@ mod implementation {
                     args.last()
                         .unwrap()
                         .ty(local_manager, tcx)
-                        .is_tuple(tcx, param_env),
+                        .is_tuple(tcx, typing_env),
                     "Fn trait method call without tupled arguments observed. {:?}, {:?}",
                     callee,
                     args.iter()

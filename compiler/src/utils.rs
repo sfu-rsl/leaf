@@ -26,13 +26,14 @@ macro_rules! chain {
 pub(crate) use chain;
 
 pub(crate) mod mir {
-    use rustc_hir::definitions::DisambiguatedDefPathData;
-    use rustc_middle::ty::TyCtxt;
-    use rustc_span::def_id::DefId;
+    use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
+    use rustc_middle::ty::{TyCtxt, TypingMode};
+    use rustc_span::def_id::{DefId, LocalDefId};
 
     pub(crate) trait TyCtxtExt<'tcx> {
         fn is_llvm_intrinsic(self, def_id: DefId) -> bool;
         fn module_of(self, def_id: DefId) -> impl Iterator<Item = DisambiguatedDefPathData>;
+        fn typing_mode_for_body(self, def_id: LocalDefId) -> TypingMode<'tcx>;
     }
 
     impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
@@ -51,6 +52,44 @@ pub(crate) mod mir {
                 .data
                 .into_iter()
                 .take_while(|p| matches!(p.data, DefPathData::TypeNs(_)))
+        }
+
+        // A safe wrapper around `opaque_types_defined_by`
+        fn typing_mode_for_body(self, item: LocalDefId) -> TypingMode<'tcx> {
+            let kind = self.def_kind(item);
+            match kind {
+                DefKind::AssocFn
+                | DefKind::Fn
+                | DefKind::Static { .. }
+                | DefKind::Const
+                | DefKind::AssocConst
+                | DefKind::AnonConst
+                | DefKind::Closure
+                | DefKind::InlineConst => TypingMode::analysis_in_body(self, item),
+                DefKind::OpaqueTy
+                | DefKind::TyAlias
+                | DefKind::AssocTy
+                | DefKind::Mod
+                | DefKind::Struct
+                | DefKind::Union
+                | DefKind::Enum
+                | DefKind::Variant
+                | DefKind::Trait
+                | DefKind::ForeignTy
+                | DefKind::TraitAlias
+                | DefKind::TyParam
+                | DefKind::ConstParam
+                | DefKind::Ctor(_, _)
+                | DefKind::Macro(_)
+                | DefKind::ExternCrate
+                | DefKind::Use
+                | DefKind::ForeignMod
+                | DefKind::Field
+                | DefKind::LifetimeParam
+                | DefKind::GlobalAsm
+                | DefKind::Impl { .. }
+                | DefKind::SyntheticCoroutineBody => TypingMode::non_body_analysis(),
+            }
         }
     }
 }

@@ -1,11 +1,12 @@
 use super::{CompilationPass, Storage, StorageExt};
 
-use rustc_abi::{FieldsShape, LayoutS, Scalar, TagEncoding, Variants};
+use rustc_abi::{FieldsShape, LayoutData, Scalar, TagEncoding, Variants};
 use rustc_middle::mir::{self, visit::Visitor};
-use rustc_middle::ty::EarlyBinder;
+use rustc_middle::ty::layout::HasTypingEnv;
+use rustc_middle::ty::{EarlyBinder, TypingEnv};
 use rustc_middle::ty::{
-    layout::{HasParamEnv, HasTyCtxt, LayoutCx, TyAndLayout},
-    GenericArgsRef, ParamEnv, Ty, TyCtxt, TyKind,
+    GenericArgsRef, Ty, TyCtxt, TyKind,
+    layout::{HasTyCtxt, LayoutCx, TyAndLayout},
 };
 use rustc_target::abi::{FieldIdx, Layout, VariantIdx};
 
@@ -81,7 +82,7 @@ fn capture_all_types<'s>(
     let mut type_map = storage.get_or_default::<HashMap<TypeId, TypeInfo>>(KEY_TYPE_MAP.to_owned());
 
     tcx.collect_and_partition_mono_items(())
-        .1
+        .codegen_units
         .iter()
         .for_each(|unit| {
             unit.items().iter().for_each(|(item, _)| match item {
@@ -92,7 +93,7 @@ fn capture_all_types<'s>(
                         tcx,
                         type_map: &mut type_map,
                         args: instance.args,
-                        param_env: tcx.param_env_reveal_all_normalized(body.source.def_id()),
+                        typing_env: TypingEnv::post_analysis(tcx, body.source.def_id()),
                         local_decls: &body.local_decls,
                     };
                     place_visitor.visit_body(body);
@@ -102,7 +103,7 @@ fn capture_all_types<'s>(
         });
 
     for ty in CoreTypes::from(get_core_types(tcx)).as_ref() {
-        add_type_information_to_map(&mut type_map, tcx, *ty, ParamEnv::empty());
+        add_type_information_to_map(&mut type_map, tcx, *ty, TypingEnv::fully_monomorphized());
     }
 
     type_map
@@ -299,7 +300,7 @@ where
     {
         let index = match self.variants {
             Variants::Single { index } => index,
-            Variants::Empty | Variants::Multiple => {
+            Variants::Empty | Variants::Multiple { .. } => {
                 unreachable!("Empty and recursive variants are not expected")
             }
         };
