@@ -131,6 +131,7 @@ where
 
     fn visit_inline_asm(
         &mut self,
+        _asm_macro: &mut rustc_middle::mir::InlineAsmMacro,
         _template: &'tcx [rustc_ast::InlineAsmTemplatePiece],
         _operands: &mut [rustc_middle::mir::InlineAsmOperand<'tcx>],
         _options: &mut rustc_ast::InlineAsmOptions,

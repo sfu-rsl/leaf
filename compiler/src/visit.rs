@@ -2,14 +2,15 @@ use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece, Mutability};
 use rustc_index::IndexVec;
 use rustc_middle::{
     mir::{
-        coverage::CoverageKind, AggregateKind, AssertMessage, BasicBlock, BinOp, BorrowKind,
-        CallSource, CastKind, FakeReadCause, InlineAsmOperand, Local, NonDivergingIntrinsic,
-        NullOp, Operand, Place, RetagKind, Rvalue, StatementKind, SwitchTargets, TerminatorKind,
-        UnOp, UnwindAction, UnwindTerminateReason, UserTypeProjection,
+        AggregateKind, AssertMessage, BackwardIncompatibleDropReason, BasicBlock, BinOp,
+        BorrowKind, CallSource, CastKind, FakeReadCause, InlineAsmMacro, InlineAsmOperand, Local,
+        NonDivergingIntrinsic, NullOp, Operand, Place, RawPtrKind, RetagKind, Rvalue,
+        StatementKind, SwitchTargets, TerminatorKind, UnOp, UnwindAction, UnwindTerminateReason,
+        UserTypeProjection, coverage::CoverageKind,
     },
     ty::{Const, Region, Ty, Variance},
 };
-use rustc_span::{source_map::Spanned, Span};
+use rustc_span::{Span, source_map::Spanned};
 use rustc_target::abi::FieldIdx;
 use rustc_target::abi::VariantIdx;
 
@@ -82,6 +83,14 @@ macro_rules! make_statement_kind_visitor {
                 Default::default()
             }
 
+            fn visit_backward_incompatible_drop_hint(
+                &mut self,
+                place: & $($mutability)? Place<'tcx>,
+                reason: & $($mutability)? BackwardIncompatibleDropReason
+            ) -> T {
+                Default::default()
+            }
+
             fn super_statement_kind(&mut self, kind: & $($mutability)? StatementKind<'tcx>) -> T {
                 match kind {
                     StatementKind::Assign(box (place, rvalue)) => self.visit_assign(place, rvalue),
@@ -104,6 +113,10 @@ macro_rules! make_statement_kind_visitor {
                     StatementKind::Intrinsic(intrinsic) => self.visit_intrinsic(intrinsic),
                     StatementKind::ConstEvalCounter => self.visit_const_eval_counter(),
                     StatementKind::Nop => self.visit_nop(),
+                    StatementKind::BackwardIncompatibleDropHint {
+                        place,
+                        reason
+                    } => self.visit_backward_incompatible_drop_hint(place, reason),
                 }
             }
         }
@@ -229,6 +242,7 @@ macro_rules! make_terminator_kind_visitor {
 
             fn visit_inline_asm(
                 &mut self,
+                asm_macro: & $($mutability)? InlineAsmMacro,
                 template: &'tcx [InlineAsmTemplatePiece],
                 operands: & $($mutability)? [InlineAsmOperand<'tcx>],
                 options: & $($mutability)? InlineAsmOptions,
@@ -301,6 +315,7 @@ macro_rules! make_terminator_kind_visitor {
                         ref $($mutability)? unwind,
                     } => self.visit_false_unwind(real_target, unwind),
                     TerminatorKind::InlineAsm {
+                        ref $($mutability)? asm_macro,
                         ref template,
                         ref $($mutability)? operands,
                         ref $($mutability)? options,
@@ -308,6 +323,7 @@ macro_rules! make_terminator_kind_visitor {
                         ref $($mutability)? targets,
                         ref $($mutability)? unwind,
                     } => self.visit_inline_asm(
+                        asm_macro,
                         template,
                         operands,
                         options,
@@ -358,7 +374,7 @@ macro_rules! make_rvalue_visitor {
 
             fn visit_raw_ptr(
                 &mut self,
-                mutability: & $($mutability)? Mutability,
+                kind: & $($mutability)? RawPtrKind,
                 place: & $($mutability)? Place<'tcx>,
             ) -> T {
                 Default::default()
@@ -425,9 +441,7 @@ macro_rules! make_rvalue_visitor {
                         self.visit_ref(region, borrow_kind, place)
                     }
                     Rvalue::ThreadLocalRef(def_id) => self.visit_thread_local_ref(def_id),
-                    Rvalue::RawPtr(mutability, place) => {
-                        self.visit_raw_ptr(mutability, place)
-                    }
+                    Rvalue::RawPtr(kind, place) => self.visit_raw_ptr(kind, place),
                     Rvalue::Len(place) => self.visit_len(place),
                     Rvalue::Cast(kind, operand, ty) => self.visit_cast(kind, operand, ty),
                     Rvalue::BinaryOp(op, operands) => self.visit_binary_op(op, operands),
