@@ -328,7 +328,6 @@ def build_env_vars(toolchain_path: Path):
     return {
         **common_env_vars(),
         ENV_RUSTC: os.environ.get(ENV_LEAFC, default="leafc"),
-        ENV_LEAFC_BUILDING_CORE: "true",
         "RUSTUP_TOOLCHAIN": str(toolchain_path),
     }
 
