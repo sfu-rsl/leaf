@@ -7,5 +7,13 @@ override_sysroot = true
 crate_name = "leaf"
 search_path = "sysroot"
 
+# The problematic recursive implementation in aho_corasick. More info: BurntSushi/aho-corasick#149
+[[instr_rules.exclude]]
+entity = "dyn_def"
+all = [
+    { crate = { name = "aho_corasick" } },
+    { def_path = '<&.* as .*Automaton>::\w+' },
+]
+
 [internalization_rules]
 exclude = ["LLVMFuzzerInitialize"]
