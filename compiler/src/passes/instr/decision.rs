@@ -71,7 +71,6 @@ fn decide_instance_kind(kind: &InstanceKind) -> bool {
         | VTableShim(..)
         | Virtual(..)
         | ConstructCoroutineInClosureShim { .. }
-        | CoroutineKindShim { .. }
         | ThreadLocalShim(..)
         | DropGlue(..)
         | FnPtrAddrShim(..)
@@ -151,6 +150,7 @@ fn find_inheritable_first_filtered<'tcx>(
 /// If the attribute is not found, or the argument passed to the attribute is invalid
 /// returns `None`.
 fn opt_instrument_attr<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<bool> {
+    use rustc_hir::{AttrArgs, AttrKind};
     // Avoid possibly problematic const items.
     // See https://github.com/rust-lang/rust/issues/128145
     if matches!(
@@ -160,17 +160,19 @@ fn opt_instrument_attr<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<bool> {
         return None;
     }
 
-    tcx.get_attrs_by_path(
-        def_id,
-        &[Symbol::intern(TOOL_NAME), Symbol::intern(ATTR_NAME)],
-    )
+    tcx.get_attrs_by_path(def_id, &[
+        Symbol::intern(TOOL_NAME),
+        Symbol::intern(ATTR_NAME),
+    ])
     .next()
     .and_then(|attr| match &attr.kind {
-        rustc_ast::AttrKind::Normal(attr) => Some(attr),
+        AttrKind::Normal(attr) => Some(attr),
         _ => None,
     })
-    .map(|attr| attr.item.args.inner_tokens())
-    .map(|t| t.into_trees().next_ref().cloned())
+    .and_then(|attr| match &attr.args {
+        AttrArgs::Delimited(delim_args) => Some(delim_args.tokens.iter().next().cloned()),
+        AttrArgs::Empty | AttrArgs::Eq { .. } => None,
+    })
     .and_then(|token| {
         match token {
             // No argument means it's enabled.
@@ -343,6 +345,7 @@ mod intrinsics {
                 breakpoint,
                 black_box,
                 assert_inhabited,
+                cold_path,
             )
         };
     }
@@ -679,7 +682,7 @@ mod intrinsics {
                 volatile_copy_memory,
                 unaligned_volatile_store,
                 unaligned_volatile_load,
-                typed_swap,
+                typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
                 ptr_mask,
@@ -758,7 +761,7 @@ mod intrinsics {
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
          * Do not change the count unless some intrinsics are added or removed to Rust.
          */
-        const _ALL_INTRINSICS: [u8; 354] = [0; TOTAL_COUNT];
+        const _ALL_INTRINSICS: [u8; 355] = [0; TOTAL_COUNT];
     }
 
     use crate::pri_utils::sym::intrinsics as psym;
