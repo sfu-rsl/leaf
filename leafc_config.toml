@@ -11,7 +11,7 @@ search_path = "sysroot"
 [[instr_rules.exclude]]
 entity = "dyn_def"
 all = [
-    { crate = { name = "aho_corasick" } },
+    { crate = { name = "aho_corasick" } }   ,
     { def_path = '<&.* as .*Automaton>::\w+' },
 ]
 

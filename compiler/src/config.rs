@@ -49,6 +49,7 @@ impl RuntimeShimConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum RuntimeShimLocation {
     #[serde(alias = "core")]
     CoreLib,
