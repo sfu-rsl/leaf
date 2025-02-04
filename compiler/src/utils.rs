@@ -65,7 +65,13 @@ pub(crate) mod mir {
                 | DefKind::AssocConst
                 | DefKind::AnonConst
                 | DefKind::Closure
-                | DefKind::InlineConst => TypingMode::analysis_in_body(self, item),
+                | DefKind::InlineConst => {
+                    if self.hir().maybe_body_owned_by(item).is_some() {
+                        TypingMode::analysis_in_body(self, item)
+                    } else {
+                        TypingMode::non_body_analysis()
+                    }
+                }
                 DefKind::OpaqueTy
                 | DefKind::TyAlias
                 | DefKind::AssocTy
