@@ -318,7 +318,9 @@ mod intrinsics {
                 pref_align_of,
                 needs_drop,
                 min_align_of_val,
+                // FIXME: These two are probably not intrinsics anymore.
                 likely,
+                unlikely,
                 forget,
                 const_allocate,
                 const_eval_select,
@@ -335,7 +337,6 @@ mod intrinsics {
         ($macro:ident) => {
             $macro!(
                 unreachable,
-                unlikely,
                 rustc_peek,
                 prefetch_write_instruction,
                 prefetch_read_instruction,

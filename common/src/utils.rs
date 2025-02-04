@@ -13,8 +13,7 @@ pub(crate) use identity;
 
 #[inline(always)]
 pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
-    // NOTE: Constant evaluation of `Option` is not complete and inlining does not work.
-    unsafe { TypeId::new_unchecked(core::intrinsics::type_id::<T>()) }
+    TypeId::new(core::intrinsics::type_id::<T>()).unwrap()
 }
 
 #[cfg(feature = "std")]
