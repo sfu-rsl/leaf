@@ -1,4 +1,4 @@
-use derive_more::{derive::From, Deref};
+use derive_more::{Deref, derive::From};
 use serde::Deserialize;
 
 use crate::CONFIG_ENV_PREFIX;
@@ -49,6 +49,7 @@ impl RuntimeShimConfig {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum RuntimeShimLocation {
     #[serde(alias = "core")]
     CoreLib,

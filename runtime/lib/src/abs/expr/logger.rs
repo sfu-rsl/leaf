@@ -7,8 +7,8 @@ use common::log_debug;
 use crate::abs::CastKind;
 
 use super::{
-    macros::macro_rules_method_with_optional_args, BinaryExprBuilder, CastExprBuilder,
-    TernaryExprBuilder, UnaryExprBuilder,
+    BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder,
+    macros::macro_rules_method_with_optional_args,
 };
 
 pub(crate) const TAG: &str = "expr_builder";

@@ -11,10 +11,16 @@ members = [
     "macros",
     "orchestrator",
 ]
-exclude = ["runtime/shim", "integration/libafl/fuzzers/*", "samples/crates/", "scripts"]
+exclude = [
+    "runtime/shim",
+    "integration/libafl/fuzzers/*",
+    "samples/crates/",
+    "scripts",
+]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
+edition = "2021"
 
 [workspace.dependencies]
 # Unless we specify the package, it won't be renamed.
@@ -25,14 +31,16 @@ runtime_noop = { path = "runtime/flavors/noop" }
 libafl_leaf = { path = "integration/libafl/lib" }
 
 clap = { version = "4.5", features = ["derive"] }
-config = "0.14.1"
-const_format = "0.2.33"
-delegate = "0.13.1"
+config = "0.15.7"
+const_format = "0.2.34"
+delegate = "0.13.2"
 derive_more = { version = "1.0.0", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-serde = { version = "1.0.215", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 
-libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1", features = ["std"]}
+libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1", features = [
+    "std",
+] }
 libafl_bolts = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }
 libafl_targets = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }

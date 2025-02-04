@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use rustc_ast as ast;
 use rustc_driver::{self as driver, Compilation};
-use rustc_interface::{interface, Queries};
+use rustc_interface::interface;
 use rustc_middle::{mir, ty as mir_ty};
 use rustc_session::Session;
 
@@ -28,7 +28,6 @@ pub(crate) use logger::CompilationPassLogExt;
 #[allow(unused)]
 pub(crate) use noop::NoOpPass;
 pub(crate) use noop::OverrideFlagsForcePass;
-pub(crate) use runtime_adder::LeafToolAdder;
 pub(crate) use runtime_adder::RuntimeExternCrateAdder;
 pub(crate) use tyexp::TypeExporter;
 
@@ -195,12 +194,12 @@ pub(crate) trait StorageExt {
 mod implementation {
     use super::*;
 
-    use mir::mono::CodegenUnit;
+    use mir::mono::{CodegenUnit, MonoItemPartitions};
     use mir_ty::TyCtxt;
     use rustc_driver::Compilation;
     use rustc_hir::def_id::DefId;
     use rustc_middle::query::TyCtxtAt;
-    use rustc_span::def_id::LocalDefId;
+    use rustc_span::{Symbol, def_id::LocalDefId};
 
     use std::cell::Cell;
     type RRef<T> = std::rc::Rc<std::cell::RefCell<T>>;
@@ -270,10 +269,10 @@ mod implementation {
              Option<fn(&Session, &mut rustc_middle::util::Providers)>,
          > = Cell::new(None);
          static ORIGINAL_OPTIMIZED_MIR: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, LocalDefId) -> &mir::Body<'tcx>
+             for<'tcx> fn(TyCtxt<'tcx>, LocalDefId) -> &'tcx mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_EXTERN_OPTIMIZED_MIR: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, DefId) -> &mir::Body<'tcx>
+             for<'tcx> fn(TyCtxt<'tcx>, DefId) -> &'tcx mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_MIR_SHIMS: Cell<
              for<'tcx> fn(TyCtxt<'tcx>, mir_ty::InstanceKind<'tcx>) -> mir::Body<'tcx>
@@ -282,8 +281,11 @@ mod implementation {
              for<'tcx> fn(TyCtxtAt<'tcx>, mir_ty::Instance<'tcx>) -> bool
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_COLLECT_PARTITION: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, ()) -> (&rustc_data_structures::unord::UnordSet<DefId>, &[CodegenUnit])
+             for<'tcx> fn(TyCtxt<'tcx>, ()) -> MonoItemPartitions<'tcx>
          > = Cell::new(|_, _| unreachable!());
+         static ORIGINAL_REGISTERED_TOOLS: Cell<
+            for <'tcx> fn(TyCtxt<'tcx>, ()) -> mir_ty::RegisteredTools
+         > = Cell::new(|_,_| unreachable!());
     }
 
     struct PassHolder<T: CompilationPass + ?Sized>(Arc<Mutex<T>>);
@@ -390,6 +392,11 @@ mod implementation {
                         providers.collect_and_partition_mono_items =
                             Self::collect_and_partition_mono_items;
                     }
+
+                    {
+                        ORIGINAL_REGISTERED_TOOLS.set(providers.registered_tools);
+                        providers.registered_tools = Self::registered_tools;
+                    }
                 },
             );
 
@@ -410,18 +417,12 @@ mod implementation {
         fn after_crate_root_parsing<'tcx>(
             &mut self,
             compiler: &interface::Compiler,
-            queries: &'tcx Queries<'tcx>,
+            krate: &mut ast::Crate,
         ) -> Compilation {
-            let mut ast_steal = queries.parse().unwrap();
-
             let mut pass = self.pass.acquire();
-            stop_if_stop!(pass.visit_ast_before(&ast_steal.borrow(), &mut global::get_storage()));
-            pass.transform_ast(
-                &compiler.sess,
-                ast_steal.get_mut(),
-                &mut global::get_storage(),
-            );
-            stop_if_stop!(pass.visit_ast_after(&ast_steal.borrow(), &mut global::get_storage()));
+            stop_if_stop!(pass.visit_ast_before(krate, &mut global::get_storage()));
+            pass.transform_ast(&compiler.sess, krate, &mut global::get_storage());
+            stop_if_stop!(pass.visit_ast_after(krate, &mut global::get_storage()));
 
             Compilation::Continue
         }
@@ -429,7 +430,7 @@ mod implementation {
         fn after_expansion<'tcx>(
             &mut self,
             _compiler: &interface::Compiler,
-            _queries: &'tcx Queries<'tcx>,
+            _tcx: TyCtxt<'tcx>,
         ) -> Compilation {
             Compilation::Continue
         }
@@ -437,13 +438,11 @@ mod implementation {
         fn after_analysis<'tcx>(
             &mut self,
             _compiler: &interface::Compiler,
-            queries: &'tcx Queries<'tcx>,
+            tcx: TyCtxt<'tcx>,
         ) -> Compilation {
-            queries.global_ctxt().unwrap().enter(global::set_ctxt_id);
-            queries.global_ctxt().unwrap().enter(|tcx| {
-                let mut pass = self.pass.acquire();
-                pass.visit_tcx_after_analysis(tcx, &mut global::get_storage())
-            })
+            global::set_ctxt_id(tcx);
+            let mut pass = self.pass.acquire();
+            pass.visit_tcx_after_analysis(tcx, &mut global::get_storage())
         }
     }
 
@@ -493,13 +492,7 @@ mod implementation {
             body
         }
 
-        fn collect_and_partition_mono_items(
-            tcx: TyCtxt,
-            _: (),
-        ) -> (
-            &rustc_data_structures::unord::UnordSet<DefId>,
-            &[CodegenUnit],
-        ) {
+        fn collect_and_partition_mono_items(tcx: TyCtxt, _: ()) -> MonoItemPartitions {
             fn clone_cgu<'tcx>(cgu: &CodegenUnit<'tcx>) -> CodegenUnit<'tcx> {
                 let mut new_cgu = CodegenUnit::new(cgu.name().clone());
                 new_cgu.items_mut().extend(cgu.items().clone());
@@ -514,10 +507,31 @@ mod implementation {
             }
 
             global::set_ctxt_id(tcx);
-            let (items, units) = ORIGINAL_COLLECT_PARTITION.get()(tcx, ());
-            let mut units = units.iter().map(clone_cgu).collect::<Vec<_>>();
+            let MonoItemPartitions {
+                codegen_units,
+                all_mono_items,
+            } = ORIGINAL_COLLECT_PARTITION.get()(tcx, ());
+            let mut units = codegen_units.iter().map(clone_cgu).collect::<Vec<_>>();
             T::visit_codegen_units(tcx, &mut units, &mut global::get_storage());
-            (items, tcx.arena.alloc_from_iter(units))
+            MonoItemPartitions {
+                codegen_units: tcx.arena.alloc_from_iter(units),
+                all_mono_items,
+            }
+        }
+
+        fn registered_tools(tcx: TyCtxt, _: ()) -> mir_ty::RegisteredTools {
+            // FIXME: Make it configurable
+            const TOOL_NAME: &str = crate::constants::TOOL_LEAF;
+
+            let mut tools = ORIGINAL_REGISTERED_TOOLS.get()(tcx, ()).clone();
+
+            // #![register_tool(leaf_attr)]
+            tools.insert(rustc_span::Ident {
+                name: Symbol::intern(TOOL_NAME),
+                span: rustc_span::DUMMY_SP,
+            });
+
+            tools
         }
     }
 
@@ -660,16 +674,16 @@ mod implementation {
          */
         use super::*;
 
-        use rustc_codegen_ssa::{traits::CodegenBackend, CodegenResults};
+        use rustc_codegen_ssa::{CodegenResults, traits::CodegenBackend};
         use rustc_data_structures::fx::FxIndexMap;
-        use rustc_metadata::{creader::MetadataLoaderDyn, EncodedMetadata};
+        use rustc_metadata::{EncodedMetadata, creader::MetadataLoaderDyn};
         use rustc_middle::util::Providers;
         use rustc_query_system::dep_graph::{WorkProduct, WorkProductId};
         use rustc_session::{
-            config::{self, OutputFilenames, PrintRequest},
             Session,
+            config::{self, OutputFilenames, PrintRequest},
         };
-        use rustc_span::{ErrorGuaranteed, Symbol};
+        use rustc_span::Symbol;
 
         use delegate::delegate;
 
@@ -685,7 +699,7 @@ mod implementation {
 
                     fn init(&self, sess: &Session);
                     fn print(&self, req: &PrintRequest, out: &mut String, sess: &Session);
-                    fn target_features(&self, sess: &Session, allow_unstable: bool) -> Vec<Symbol>;
+                    fn target_features_cfg(&self, sess: &Session, allow_unstable: bool) -> Vec<Symbol>;
                     fn print_passes(&self);
                     fn print_version(&self);
 
@@ -705,7 +719,7 @@ mod implementation {
                         sess: &Session,
                         codegen_results: CodegenResults,
                         outputs: &OutputFilenames,
-                    ) -> Result<(), ErrorGuaranteed>;
+                    );
 
                     fn supports_parallel(&self) -> bool;
                 }
@@ -739,7 +753,7 @@ mod implementation {
                 let early_dcx = rustc_session::EarlyDiagCtxt::new(opts.error_format);
                 let sysroot =
                     rustc_session::filesearch::materialize_sysroot(opts.maybe_sysroot.clone());
-                let target = config::build_target_config(&early_dcx, opts, &sysroot);
+                let target = config::build_target_config(&early_dcx, &opts.target_triple, &sysroot);
                 let backend = rustc_interface::util::get_codegen_backend(
                     &early_dcx,
                     &sysroot,
@@ -853,7 +867,11 @@ mod implementation {
         }
 
         impl<S: Storage + ?Sized> StorageExt for S {
-            type MutAccessor<'a, T> = DowncastValueBorrow<'a, T> where Self: 'a, T: 'a;
+            type MutAccessor<'a, T>
+                = DowncastValueBorrow<'a, T>
+            where
+                Self: 'a,
+                T: 'a;
             type ManualBorrow<T> = ManualBorrow<T>;
 
             fn get_or_insert_with_acc<'a, V: Any>(

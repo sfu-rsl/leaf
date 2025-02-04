@@ -5,7 +5,7 @@ use common::{log_debug, log_info, log_warn};
 
 use crate::abs::backend::{SolveResult, Solver};
 
-use super::{inspect::TraceInspector, Constraint};
+use super::{Constraint, inspect::TraceInspector};
 
 mod coverage;
 pub(crate) mod filter;

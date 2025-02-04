@@ -19,6 +19,7 @@ pub mod sym {
     pub struct LeafSymbol(&'static str);
 
     use const_format::concatcp;
+
     use LeafSymbol as LS;
 
     pub const CORE_LIB_CRATE: LS = LS("core");

@@ -350,8 +350,10 @@ pub(crate) mod implementation {
         for<'a> P: 'a,
     {
         type Place = Place<L, P>;
-        type ProjectionHandler<'a> = DefaultPlaceProjectionHandler<'a, Self::Place>
-        where Self::Place :'a;
+        type ProjectionHandler<'a>
+            = DefaultPlaceProjectionHandler<'a, Self::Place>
+        where
+            Self::Place: 'a;
         type MetadataHandler<'a> = ();
 
         fn of_local(self, local: Local) -> Self::Place {

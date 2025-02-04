@@ -6,13 +6,13 @@ use const_format::concatcp;
 use rustc_index::IndexVec;
 use rustc_middle::{
     mir::{
-        self, visit::Visitor, BasicBlock, BasicBlockData, Body, BorrowKind, CastKind,
-        HasLocalDecls, Location, MirSource, Operand, Place, Rvalue, SourceInfo, Statement,
-        TerminatorKind, UnwindAction,
+        self, BasicBlock, BasicBlockData, Body, BorrowKind, CastKind, HasLocalDecls, Location,
+        MirSource, Operand, Place, Rvalue, SourceInfo, Statement, TerminatorKind, UnwindAction,
+        visit::Visitor,
     },
     ty::{IntrinsicDef, TyCtxt},
 };
-use rustc_span::{def_id::DefId, source_map::Spanned, Span};
+use rustc_span::{Span, def_id::DefId, source_map::Spanned};
 use rustc_target::abi::{FieldIdx, VariantIdx};
 
 use common::{log_debug, log_info, log_warn};
@@ -21,7 +21,7 @@ use std::{collections::HashSet, num::NonZeroUsize, sync::atomic};
 use crate::{
     config::InstrumentationRules,
     mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
-    passes::{instr::call::context::PriItems, StorageExt},
+    passes::{StorageExt, instr::call::context::PriItems},
     utils::mir::TyCtxtExt,
     visit::*,
 };
@@ -29,14 +29,15 @@ use crate::{
 use super::{CompilationPass, OverrideFlags, Storage};
 
 use call::{
+    AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
+    CastAssigner, EntryFunctionHandler, FunctionHandler,
+    InsertionLocation::*,
+    IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
     context::{
         AtLocationContext, BlockIndexProvider, PriItemsProvider, SourceInfoProvider,
         TyContextProvider,
     },
-    ctxtreqs, AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler,
-    BranchingReferencer, CastAssigner, EntryFunctionHandler, FunctionHandler,
-    InsertionLocation::*,
-    IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
+    ctxtreqs,
 };
 
 const TAG_INSTRUMENTATION: &str = "instrumentation";
@@ -546,6 +547,7 @@ where
 
     fn visit_inline_asm(
         &mut self,
+        _asm_macro: &mir::InlineAsmMacro,
         _template: &[rustc_ast::InlineAsmTemplatePiece],
         _operands: &[mir::InlineAsmOperand<'tcx>],
         _options: &rustc_ast::InlineAsmOptions,
@@ -758,9 +760,10 @@ where
         self.call_adder.by_thread_local_ref(def_id);
     }
 
-    fn visit_raw_ptr(&mut self, mutability: &rustc_ast::Mutability, place: &Place<'tcx>) {
+    fn visit_raw_ptr(&mut self, kind: &mir::RawPtrKind, place: &Place<'tcx>) {
         let place_ref = self.call_adder.reference_place(place);
-        self.call_adder.by_raw_ptr(place_ref, mutability.is_mut());
+        self.call_adder
+            .by_raw_ptr(place_ref, kind.to_mutbl_lossy().is_mut());
     }
 
     fn visit_len(&mut self, place: &Place<'tcx>) {
@@ -780,7 +783,7 @@ where
         match kind {
             IntToInt | FloatToInt => call_adder.to_int(*ty),
             IntToFloat | FloatToFloat => call_adder.to_float(*ty),
-            PointerCoercion(coercion) => {
+            PointerCoercion(coercion, _source) => {
                 use rustc_middle::ty::adjustment::PointerCoercion::*;
                 match coercion {
                     Unsize => call_adder.through_unsizing(),
@@ -797,12 +800,12 @@ where
                         ));
                         call_adder.to_another_ptr(*ty, *kind)
                     }
+                    DynStar => call_adder.through_sized_dynamization(*ty),
                 }
             }
             PointerExposeProvenance => call_adder.expose_prov(),
             PointerWithExposedProvenance => call_adder.with_exposed_prov(*ty),
             PtrToPtr | FnPtrToPtr => call_adder.to_another_ptr(*ty, *kind),
-            DynStar => call_adder.through_sized_dynamization(*ty),
             Transmute => call_adder.transmuted(*ty),
         }
     }

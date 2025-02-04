@@ -144,8 +144,18 @@ where
 }
 
 fn get_mir_pretty<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) -> String {
+    use mir::pretty::{PrettyPrintMirOptions, write_mir_fn};
     let mut buffer = Vec::new();
-    mir::pretty::write_mir_fn(tcx, body, &mut |_, _| Ok(()), &mut buffer).unwrap();
+    write_mir_fn(
+        tcx,
+        body,
+        &mut |_, _| Ok(()),
+        &mut buffer,
+        PrettyPrintMirOptions {
+            include_extra_comments: false,
+        },
+    )
+    .unwrap();
     String::from_utf8(buffer).unwrap()
 }
 

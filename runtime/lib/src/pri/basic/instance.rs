@@ -1,11 +1,11 @@
 use super::utils::{DefaultRefManager, RefManager};
 use super::{OperandRef, PlaceHandler, PlaceRef, SwitchInfo};
 use crate::abs::{
+    BasicBlockLocation, PlaceUsage,
     backend::{
         AssignmentHandler, ConstraintHandler, OperandHandler, PlaceBuilder, RuntimeBackend,
         Shutdown,
     },
-    BasicBlockLocation, PlaceUsage,
 };
 use crate::backends::basic::BasicPlaceBuilder;
 use crate::utils::UnsafeSync;

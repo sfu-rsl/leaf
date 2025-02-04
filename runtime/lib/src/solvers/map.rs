@@ -1,8 +1,8 @@
 use core::hash::Hash;
 
 use crate::abs::{
-    backend::{Model, SolveResult},
     Constraint,
+    backend::{Model, SolveResult},
 };
 
 use super::Solver;

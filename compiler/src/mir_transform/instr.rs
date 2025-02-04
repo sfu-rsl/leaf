@@ -405,7 +405,7 @@ impl<'tcx> BodyInstrumentationUnit<'tcx> {
         top_index: &mut BasicBlock,
     ) {
         blocks.extend_reserve(chunk.len());
-        for non_sticky in chunk.extract_if(|b| !b.is_sticky) {
+        for non_sticky in chunk.extract_if(.., |b| !b.is_sticky) {
             Self::push_with_index_mapping(
                 index_mapping,
                 blocks,
@@ -415,7 +415,7 @@ impl<'tcx> BodyInstrumentationUnit<'tcx> {
             );
         }
         *top_index = blocks.next_index();
-        for sticky in chunk.extract_if(|b| b.is_sticky) {
+        for sticky in chunk.extract_if(.., |b| b.is_sticky) {
             Self::push_with_index_mapping(
                 index_mapping,
                 blocks,

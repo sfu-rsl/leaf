@@ -4,11 +4,11 @@ use super::super::alias::{
 };
 use super::{BinaryOp as BasicBinaryOp, UnaryOp as BasicUnaryOp, *};
 use crate::abs::{
-    expr::{
-        macros::*, BinaryExprBuilder, CastExprBuilder, ChainedExprBuilder, CompositeExprBuilder,
-        LoggerExprBuilder, TernaryExprBuilder, UnaryExprBuilder,
-    },
     BinaryOp as AbsBinaryOp, CastKind, TernaryOp as AbsTernaryOp, UnaryOp as AbsUnaryOp,
+    expr::{
+        BinaryExprBuilder, CastExprBuilder, ChainedExprBuilder, CompositeExprBuilder,
+        LoggerExprBuilder, TernaryExprBuilder, UnaryExprBuilder, macros::*,
+    },
 };
 use crate::utils::alias::RRef;
 
@@ -839,21 +839,15 @@ mod core {
                 match from_type {
                     ValueType::Bool => Expr::Ite {
                         condition: operand,
-                        if_target: ConstValue::new_int(
-                            1 as u128,
-                            IntType {
-                                bit_size,
-                                is_signed,
-                            },
-                        )
+                        if_target: ConstValue::new_int(1 as u128, IntType {
+                            bit_size,
+                            is_signed,
+                        })
                         .to_value_ref(),
-                        else_target: ConstValue::new_int(
-                            0 as u128,
-                            IntType {
-                                bit_size,
-                                is_signed,
-                            },
-                        )
+                        else_target: ConstValue::new_int(0 as u128, IntType {
+                            bit_size,
+                            is_signed,
+                        })
                         .to_value_ref(),
                     }
                     .to_value_ref(),
@@ -1117,36 +1111,30 @@ mod simp {
 
         #[inline]
         fn is_first_unsigned_zero(&self) -> bool {
-            matches!(
-                self,
-                BinaryOperands::Rev {
-                    first: ConstValue::Int {
-                        bit_rep: Wrapping(0),
-                        ty: IntType {
-                            is_signed: false,
-                            ..
-                        }
-                    },
-                    ..
-                }
-            )
+            matches!(self, BinaryOperands::Rev {
+                first: ConstValue::Int {
+                    bit_rep: Wrapping(0),
+                    ty: IntType {
+                        is_signed: false,
+                        ..
+                    }
+                },
+                ..
+            })
         }
 
         #[inline]
         fn is_second_unsigned_zero(&self) -> bool {
-            matches!(
-                self,
-                BinaryOperands::Orig {
-                    second: ConstValue::Int {
-                        bit_rep: Wrapping(0),
-                        ty: IntType {
-                            is_signed: false,
-                            ..
-                        }
-                    },
-                    ..
-                }
-            )
+            matches!(self, BinaryOperands::Orig {
+                second: ConstValue::Int {
+                    bit_rep: Wrapping(0),
+                    ty: IntType {
+                        is_signed: false,
+                        ..
+                    }
+                },
+                ..
+            })
         }
 
         #[inline]

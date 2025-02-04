@@ -16,7 +16,7 @@ pub(super) const TAG_INSTR_DECISION: &str = concatcp!(super::TAG_INSTRUMENTATION
 const TOOL_NAME: &str = crate::constants::TOOL_LEAF;
 const ATTR_NAME: &str = "instrument";
 
-pub(super) use rules::{get_baked_dyn_def_rules, KEY_RULES};
+pub(super) use rules::{KEY_RULES, get_baked_dyn_def_rules};
 
 pub(super) fn should_instrument<'tcx>(
     tcx: TyCtxt<'tcx>,
@@ -71,7 +71,6 @@ fn decide_instance_kind(kind: &InstanceKind) -> bool {
         | VTableShim(..)
         | Virtual(..)
         | ConstructCoroutineInClosureShim { .. }
-        | CoroutineKindShim { .. }
         | ThreadLocalShim(..)
         | DropGlue(..)
         | FnPtrAddrShim(..)
@@ -83,8 +82,8 @@ fn decide_instance_kind(kind: &InstanceKind) -> bool {
 /// that are currently problematic to instrument.
 fn get_exceptional_exclusions() -> Vec<WholeBodyFilter> {
     use crate::config::{
-        rules::{AllFormula, AnyFormula, LogicFormula::*, PatternMatch},
         EntityLocationFilter,
+        rules::{AllFormula, AnyFormula, LogicFormula::*, PatternMatch},
     };
 
     fn def_path_pattern(pattern: &str) -> EntityLocationFilter {
@@ -151,6 +150,7 @@ fn find_inheritable_first_filtered<'tcx>(
 /// If the attribute is not found, or the argument passed to the attribute is invalid
 /// returns `None`.
 fn opt_instrument_attr<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<bool> {
+    use rustc_hir::{AttrArgs, AttrKind};
     // Avoid possibly problematic const items.
     // See https://github.com/rust-lang/rust/issues/128145
     if matches!(
@@ -160,17 +160,19 @@ fn opt_instrument_attr<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<bool> {
         return None;
     }
 
-    tcx.get_attrs_by_path(
-        def_id,
-        &[Symbol::intern(TOOL_NAME), Symbol::intern(ATTR_NAME)],
-    )
+    tcx.get_attrs_by_path(def_id, &[
+        Symbol::intern(TOOL_NAME),
+        Symbol::intern(ATTR_NAME),
+    ])
     .next()
     .and_then(|attr| match &attr.kind {
-        rustc_ast::AttrKind::Normal(attr) => Some(attr),
+        AttrKind::Normal(attr) => Some(attr),
         _ => None,
     })
-    .map(|attr| attr.item.args.inner_tokens())
-    .map(|t| t.into_trees().next_ref().cloned())
+    .and_then(|attr| match &attr.args {
+        AttrArgs::Delimited(delim_args) => Some(delim_args.tokens.iter().next().cloned()),
+        AttrArgs::Empty | AttrArgs::Eq { .. } => None,
+    })
     .and_then(|token| {
         match token {
             // No argument means it's enabled.
@@ -316,7 +318,9 @@ mod intrinsics {
                 pref_align_of,
                 needs_drop,
                 min_align_of_val,
+                // FIXME: These two are probably not intrinsics anymore.
                 likely,
+                unlikely,
                 forget,
                 const_allocate,
                 const_eval_select,
@@ -333,7 +337,6 @@ mod intrinsics {
         ($macro:ident) => {
             $macro!(
                 unreachable,
-                unlikely,
                 rustc_peek,
                 prefetch_write_instruction,
                 prefetch_read_instruction,
@@ -343,6 +346,7 @@ mod intrinsics {
                 breakpoint,
                 black_box,
                 assert_inhabited,
+                cold_path,
             )
         };
     }
@@ -679,7 +683,7 @@ mod intrinsics {
                 volatile_copy_memory,
                 unaligned_volatile_store,
                 unaligned_volatile_load,
-                typed_swap,
+                typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
                 ptr_mask,
@@ -758,7 +762,7 @@ mod intrinsics {
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
          * Do not change the count unless some intrinsics are added or removed to Rust.
          */
-        const _ALL_INTRINSICS: [u8; 354] = [0; TOTAL_COUNT];
+        const _ALL_INTRINSICS: [u8; 355] = [0; TOTAL_COUNT];
     }
 
     use crate::pri_utils::sym::intrinsics as psym;
@@ -862,15 +866,15 @@ mod intrinsics {
         }
     }
 }
-pub(super) use intrinsics::{decide_intrinsic_call, AtomicIntrinsicKind, IntrinsicDecision};
+pub(super) use intrinsics::{AtomicIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
 
 mod rules {
     use std::ops::DerefMut;
 
     use crate::{
         config::{
-            rules::LogicFormula, CrateFilter, EntityFilter, EntityLocationFilter,
-            InstrumentationRules, MethodDynDefinitionFilter, WholeBodyFilter,
+            CrateFilter, EntityFilter, EntityLocationFilter, InstrumentationRules,
+            MethodDynDefinitionFilter, WholeBodyFilter, rules::LogicFormula,
         },
         passes::StorageExt,
         utils::rules::{Predicate, ToPredicate},

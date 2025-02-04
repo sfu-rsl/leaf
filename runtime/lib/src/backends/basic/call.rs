@@ -7,10 +7,10 @@ use crate::{
 };
 
 use super::{
-    config::{CallConfig, ExternalCallStrategy},
-    expr::place::DeterPlaceValueRef,
     CalleeDef, ConcreteValue, FuncDef, GenericCallStackManager, UntupleHelper, ValueRef,
     VariablesState,
+    config::{CallConfig, ExternalCallStrategy},
+    expr::place::DeterPlaceValueRef,
 };
 
 use common::{log_debug, log_warn, types::RawAddress};
@@ -518,7 +518,7 @@ mod logging {
     use super::*;
 
     use const_format::concatcp;
-    use tracing::{debug_span, Span};
+    use tracing::{Span, debug_span};
 
     pub(super) const TAG: &str = "call_manager";
     const TAG_STACK: &str = concatcp!(TAG, "::stack");

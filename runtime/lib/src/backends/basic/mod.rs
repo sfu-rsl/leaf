@@ -25,9 +25,9 @@ use sym_vars::SymVariablesManager;
 
 use crate::{
     abs::{
-        self, backend::*, place::HasMetadata, AssertKind, BasicBlockLocation, CalleeDef, CastKind,
-        ConstraintKind, FieldIndex, FuncDef, IntType, Local, LocalIndex, PlaceUsage, SymVariable,
-        Tag, TypeId, UnaryOp, VariantIndex,
+        self, AssertKind, BasicBlockLocation, CalleeDef, CastKind, ConstraintKind, FieldIndex,
+        FuncDef, IntType, Local, LocalIndex, PlaceUsage, SymVariable, Tag, TypeId, UnaryOp,
+        VariantIndex, backend::*, place::HasMetadata,
     },
     tyexp::{FieldsShapeInfoExt, TypeInfoExt},
     utils::alias::RRef,
@@ -41,9 +41,9 @@ use self::{
     },
     concrete::BasicConcretizer,
     config::BasicBackendConfig,
-    expr::{prelude::*, SymVarId},
+    expr::{SymVarId, prelude::*},
     place::PlaceMetadata,
-    state::{make_sym_place_handler, RawPointerVariableState},
+    state::{RawPointerVariableState, make_sym_place_handler},
     types::BasicTypeManager,
 };
 
@@ -127,27 +127,33 @@ impl BasicBackend {
 }
 
 impl RuntimeBackend for BasicBackend {
-    type PlaceHandler<'a> = BasicPlaceHandler<'a>
+    type PlaceHandler<'a>
+        = BasicPlaceHandler<'a>
     where
         Self: 'a;
 
-    type OperandHandler<'a> = BasicOperandHandler<'a>
+    type OperandHandler<'a>
+        = BasicOperandHandler<'a>
     where
         Self: 'a;
 
-    type AssignmentHandler<'a> = BasicAssignmentHandler<'a, BasicExprBuilder>
+    type AssignmentHandler<'a>
+        = BasicAssignmentHandler<'a, BasicExprBuilder>
     where
         Self: 'a;
 
-    type ConstraintHandler<'a> = BasicConstraintHandler<'a, BasicExprBuilder>
+    type ConstraintHandler<'a>
+        = BasicConstraintHandler<'a, BasicExprBuilder>
     where
         Self: 'a;
 
-    type FunctionHandler<'a> = BasicFunctionHandler<'a>
+    type FunctionHandler<'a>
+        = BasicFunctionHandler<'a>
     where
         Self: 'a;
 
-    type AnnotationHandler<'a> = BasicAnnotationHandler<'a>
+    type AnnotationHandler<'a>
+        = BasicAnnotationHandler<'a>
     where
         Self: 'a;
 

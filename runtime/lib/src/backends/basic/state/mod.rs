@@ -1,7 +1,7 @@
 mod pointer_based;
 
-pub(super) use pointer_based::sym_place::strategies::make_sym_place_handler;
 pub(super) use pointer_based::RawPointerVariableState;
+pub(super) use pointer_based::sym_place::strategies::make_sym_place_handler;
 
 use super::{ConcreteValueRef, SymValueRef};
 

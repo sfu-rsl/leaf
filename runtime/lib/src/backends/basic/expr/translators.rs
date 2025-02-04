@@ -9,13 +9,13 @@ pub(crate) mod z3 {
     };
 
     use z3::{
-        ast::{self, Ast},
         Context,
+        ast::{self, Ast},
     };
 
     use crate::{
-        abs::{expr::sym_place::SelectTarget, IntType, ValueType},
-        backends::basic::expr::{prelude::*, OverflowingBinaryOp, SymBinaryOperands, SymVarId},
+        abs::{IntType, ValueType, expr::sym_place::SelectTarget},
+        backends::basic::expr::{OverflowingBinaryOp, SymBinaryOperands, SymVarId, prelude::*},
         solvers::z3::{ArrayNode, ArraySort, AstNodeSort, BVExt, BVNode, BVSort},
     };
 
@@ -574,12 +574,9 @@ pub(crate) mod z3 {
                 );
             }
 
-            ArrayNode(
-                array,
-                ArraySort {
-                    range: Box::new(element_sort),
-                },
-            )
+            ArrayNode(array, ArraySort {
+                range: Box::new(element_sort),
+            })
         }
 
         fn translate_multi_value_leaf(&mut self, leaf: &MultiValueLeaf) -> AstNode<'ctx> {
@@ -726,13 +723,10 @@ pub(crate) mod z3 {
             match ast {
                 AstNode::Bool(ast) => super::super::ConstValue::Bool(ast.as_bool().unwrap()),
                 AstNode::BitVector(BVNode(ast, BVSort { is_signed })) => {
-                    super::super::ConstValue::new_int(
-                        ast.as_u128().unwrap(),
-                        IntType {
-                            bit_size: ast.get_size() as u64,
-                            is_signed,
-                        },
-                    )
+                    super::super::ConstValue::new_int(ast.as_u128().unwrap(), IntType {
+                        bit_size: ast.get_size() as u64,
+                        is_signed,
+                    })
                 }
                 AstNode::Array(_) => {
                     unimplemented!("Symbolic arrays are not supported by this converter.")

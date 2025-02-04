@@ -100,11 +100,17 @@ fn test_execution_rs(fic: &str) {
         .current_dir(&work_dir)
         .env(ENV_RUST_BACKTRACE, "1")
         .status()
-        .expect("Failed to spawn and wait for the compiled binary");
+        .unwrap_or_else(|e| {
+            panic!(
+                "Failed to spawn and wait for the compiled binary: {}, output available in: {}",
+                e.to_string(),
+                work_dir.display()
+            )
+        });
 
     assert!(
         execution_status.success(),
-        "Failed to execute {} with exit code: {}, output available in {}",
+        "Failed to execute {} with exit code: {}, output available in: {}",
         fic,
         execution_status.code().unwrap_or(-1),
         work_dir.display()

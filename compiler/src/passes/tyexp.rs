@@ -1,11 +1,12 @@
 use super::{CompilationPass, Storage, StorageExt};
 
-use rustc_abi::{FieldsShape, LayoutS, Scalar, TagEncoding, Variants};
+use rustc_abi::{FieldsShape, LayoutData, Scalar, TagEncoding, Variants};
 use rustc_middle::mir::{self, visit::Visitor};
-use rustc_middle::ty::EarlyBinder;
+use rustc_middle::ty::layout::HasTypingEnv;
+use rustc_middle::ty::{EarlyBinder, TypingEnv};
 use rustc_middle::ty::{
-    layout::{HasParamEnv, HasTyCtxt, LayoutCx, TyAndLayout},
-    GenericArgsRef, ParamEnv, Ty, TyCtxt, TyKind,
+    GenericArgsRef, Ty, TyCtxt, TyKind,
+    layout::{HasTyCtxt, LayoutCx, TyAndLayout},
 };
 use rustc_target::abi::{FieldIdx, Layout, VariantIdx};
 
@@ -81,7 +82,7 @@ fn capture_all_types<'s>(
     let mut type_map = storage.get_or_default::<HashMap<TypeId, TypeInfo>>(KEY_TYPE_MAP.to_owned());
 
     tcx.collect_and_partition_mono_items(())
-        .1
+        .codegen_units
         .iter()
         .for_each(|unit| {
             unit.items().iter().for_each(|(item, _)| match item {
@@ -92,7 +93,7 @@ fn capture_all_types<'s>(
                         tcx,
                         type_map: &mut type_map,
                         args: instance.args,
-                        param_env: tcx.param_env_reveal_all_normalized(body.source.def_id()),
+                        typing_env: TypingEnv::post_analysis(tcx, body.source.def_id()),
                         local_decls: &body.local_decls,
                     };
                     place_visitor.visit_body(body);
@@ -102,7 +103,7 @@ fn capture_all_types<'s>(
         });
 
     for ty in CoreTypes::from(get_core_types(tcx)).as_ref() {
-        add_type_information_to_map(&mut type_map, tcx, *ty, ParamEnv::empty());
+        add_type_information_to_map(&mut type_map, tcx, *ty, TypingEnv::fully_monomorphized());
     }
 
     type_map
@@ -138,9 +139,9 @@ fn add_type_information_to_map<'tcx>(
     type_map: &mut HashMap<TypeId, TypeInfo>,
     tcx: TyCtxt<'tcx>,
     ty: Ty<'tcx>,
-    param_env: ParamEnv<'tcx>,
+    typing_env: TypingEnv<'tcx>,
 ) {
-    let layout = match tcx.layout_of(param_env.and(ty)) {
+    let layout = match tcx.layout_of(typing_env.as_query_input(ty)) {
         Ok(TyAndLayout { layout, .. }) => layout,
         Err(err) => {
             log_warn!("Failed to get layout of type {:?}: {:?}", ty, err);
@@ -148,7 +149,7 @@ fn add_type_information_to_map<'tcx>(
         }
     };
     log_debug!(target: TAG_TYPE_EXPORT, "Generating type information for {:?}", ty);
-    let cx = LayoutCx { tcx, param_env };
+    let cx = LayoutCx::new(tcx, typing_env);
     let type_info: TypeInfo = layout.to_runtime(&cx, ty);
     type_map.insert(type_info.id, type_info);
 }
@@ -180,7 +181,7 @@ struct PlaceVisitor<'tcx, 's, 'b> {
     tcx: TyCtxt<'tcx>,
     type_map: &'s mut HashMap<TypeId, TypeInfo>,
     args: GenericArgsRef<'tcx>,
-    param_env: ParamEnv<'tcx>,
+    typing_env: TypingEnv<'tcx>,
     local_decls: &'b mir::LocalDecls<'tcx>,
 }
 
@@ -188,7 +189,7 @@ impl<'tcx, 's, 'b> Visitor<'tcx> for PlaceVisitor<'tcx, 's, 'b> {
     fn visit_ty(&mut self, ty: Ty<'tcx>, context: mir::visit::TyContext) {
         let normalized_ty = self.tcx.instantiate_and_normalize_erasing_regions(
             self.args,
-            self.param_env,
+            self.typing_env,
             EarlyBinder::bind(ty),
         );
         if normalized_ty != ty {
@@ -202,7 +203,7 @@ impl<'tcx, 's, 'b> Visitor<'tcx> for PlaceVisitor<'tcx, 's, 'b> {
             return;
         }
 
-        add_type_information_to_map(self.type_map, self.tcx, normalized_ty, self.param_env);
+        add_type_information_to_map(self.type_map, self.tcx, normalized_ty, self.typing_env);
 
         // For pointee
         ty.builtin_deref(true)
@@ -238,7 +239,7 @@ trait ToRuntimeInfo<'tcx, Cx, T> {
 
 impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, TypeInfo> for Layout<'tcx>
 where
-    Cx: HasTyCtxt<'tcx> + HasParamEnv<'tcx>,
+    Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
     type Def = Ty<'tcx>;
 
@@ -258,6 +259,7 @@ where
         };
 
         let (variants, tag) = match &self.variants {
+            Variants::Empty => (vec![], None),
             Variants::Single { .. } => (vec![self.0.to_runtime(cx, ty_layout)], None),
             Variants::Multiple {
                 variants,
@@ -286,9 +288,9 @@ where
     }
 }
 
-impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, VariantInfo> for &LayoutS<FieldIdx, VariantIdx>
+impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, VariantInfo> for &LayoutData<FieldIdx, VariantIdx>
 where
-    Cx: HasTyCtxt<'tcx> + HasParamEnv<'tcx>,
+    Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
     type Def = TyAndLayout<'tcx>;
 
@@ -298,7 +300,9 @@ where
     {
         let index = match self.variants {
             Variants::Single { index } => index,
-            Variants::Multiple { .. } => panic!("Recursive variants are not expected"),
+            Variants::Empty | Variants::Multiple { .. } => {
+                unreachable!("Empty and recursive variants are not expected")
+            }
         };
 
         VariantInfo {
@@ -310,7 +314,7 @@ where
 
 impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, TagInfo> for (&Scalar, &TagEncoding<VariantIdx>, &usize)
 where
-    Cx: HasTyCtxt<'tcx> + HasParamEnv<'tcx>,
+    Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
     type Def = TyAndLayout<'tcx>;
 
@@ -353,7 +357,7 @@ impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, TagEncodingInfo> for &TagEncoding<Variant
 
 impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, FieldsShapeInfo> for &FieldsShape<FieldIdx>
 where
-    Cx: HasTyCtxt<'tcx> + HasParamEnv<'tcx>,
+    Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
     type Def = TyAndLayout<'tcx>;
 
@@ -389,7 +393,7 @@ where
 
 fn to_field_info<'tcx, Cx>(ty_layout: TyAndLayout<'tcx>, cx: &Cx, index: FieldIdx) -> FieldInfo
 where
-    Cx: HasTyCtxt<'tcx> + HasParamEnv<'tcx>,
+    Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
     let ty = field_ty(ty_layout, cx, index);
     FieldInfo {
@@ -400,7 +404,7 @@ where
 
 fn field_ty<'tcx, Cx>(ty_layout: TyAndLayout<'tcx>, cx: &Cx, index: FieldIdx) -> Ty<'tcx>
 where
-    Cx: HasTyCtxt<'tcx> + HasParamEnv<'tcx>,
+    Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
     /* NOTE: Guarantee on functionality correctness.
      * This method is obtained by checking the compiler's source code.

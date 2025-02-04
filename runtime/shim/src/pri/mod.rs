@@ -66,13 +66,11 @@ mod ffi {
 static mut REC_GUARD: bool = false;
 
 pub(crate) fn run_rec_guarded<const UNLIKELY: bool, T>(default: T, f: impl FnOnce() -> T) -> T {
-    let value = unsafe { REC_GUARD };
-    let guarded = if UNLIKELY {
-        core::intrinsics::unlikely(value)
-    } else {
-        value
-    };
+    let guarded = unsafe { REC_GUARD };
     if guarded {
+        if UNLIKELY {
+            core::intrinsics::cold_path();
+        }
         return default;
     }
     unsafe {
@@ -99,7 +97,13 @@ macro_rules! export_to_rust_abi {
              * instrumented function statically, but that does not seem to be
              * easy to achieve. So unless we have evidence that this is significantly
              * affecting the performance, we will keep this solution. */
-            if core::intrinsics::unlikely(unsafe { REC_GUARD }) {
+            /* NOTE: Be very careful about the functions you call here.
+             * The guard checking statement (the if condition) must not call
+             * any function that may possibly be instrumented. Watch out for
+             * intrinsics or inlineable functions that may not be optimized in
+             * some build configs. */
+            if unsafe { REC_GUARD } {
+                core::intrinsics::cold_path();
                 return Default::default();
             }
             unsafe {

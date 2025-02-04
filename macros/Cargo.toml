@@ -12,5 +12,5 @@ proc-macro = true
 ignore = "0.4"
 proc-macro2 = "1.0"
 quote = "1.0"
-syn = {version = "2.0", features = ["full"]}
+syn = { version = "2.0", features = ["full"] }
 regex = "1.10.5"

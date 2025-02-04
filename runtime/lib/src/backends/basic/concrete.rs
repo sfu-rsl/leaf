@@ -1,8 +1,8 @@
 use crate::abs::ConstraintKind;
 
 use super::{
-    alias::{RRef, ValueRefBinaryExprBuilder},
     BasicTraceManager, ConcreteValueRef, Constraint, SymValueRef,
+    alias::{RRef, ValueRefBinaryExprBuilder},
 };
 use common::log_debug;
 
