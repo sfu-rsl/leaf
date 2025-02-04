@@ -14,8 +14,15 @@ impl Bar for Foo {
     }
 }
 
+impl<T: Bar> Bar for Box<T> {
+    fn bar(&self) -> usize {
+        Bar::bar(self.as_ref())
+    }
+}
+
 fn main() {
     let x = Foo(10.mark_symbolic());
+    let x = Box::new(x);
     let bar = x as dyn* Bar;
     test(bar);
 }
