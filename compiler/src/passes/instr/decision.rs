@@ -251,6 +251,7 @@ mod intrinsics {
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
         NoOp,
         ConstEvaluated,
+        Contract,
         ToDo,
         NotPlanned,
         Unsupported,
@@ -282,7 +283,6 @@ mod intrinsics {
                 ptr_metadata,
                 discriminant_value,
                 offset,
-                float_to_int_unchecked,
                 min_align_of,
                 add_with_overflow,
                 sub_with_overflow,
@@ -329,7 +329,14 @@ mod intrinsics {
                 assert_zero_valid,
                 assert_mem_uninitialized_valid,
                 assume,
+                // contract_checks,
             )
+        };
+    }
+
+    macro_rules! of_contract_funcs {
+        ($macro:ident) => {
+            $macro!(contract_check_requires, contract_check_ensures,)
         };
     }
 
@@ -354,10 +361,10 @@ mod intrinsics {
     macro_rules! of_float_arith_funcs {
         ($macro:ident) => {
             $macro!(
+                truncf16,
+                truncf32,
                 truncf64,
                 truncf128,
-                truncf32,
-                truncf16,
                 sqrtf128,
                 sqrtf64,
                 sqrtf16,
@@ -416,6 +423,10 @@ mod intrinsics {
                 fsub_algebraic,
                 fmul_algebraic,
                 fmul_fast,
+                fmuladdf16,
+                fmuladdf32,
+                fmuladdf64,
+                fmuladdf128,
                 fmaf128,
                 fmaf64,
                 floorf64,
@@ -452,6 +463,7 @@ mod intrinsics {
                 ceilf64,
                 ceilf16,
                 ceilf32,
+                float_to_int_unchecked,
             )
         };
     }
@@ -701,6 +713,7 @@ mod intrinsics {
                 size_of_val,
                 is_val_statically_known,
                 arith_offset,
+                carrying_mul_add,
             )
         };
     }
@@ -719,6 +732,7 @@ mod intrinsics {
                 ctpop,
                 ctlz_nonzero,
                 ctlz,
+                // disjoint_bitor,
             )
         };
     }
@@ -762,7 +776,7 @@ mod intrinsics {
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
          * Do not change the count unless some intrinsics are added or removed to Rust.
          */
-        const _ALL_INTRINSICS: [u8; 355] = [0; TOTAL_COUNT];
+        const _ALL_INTRINSICS: [u8; 360] = [0; TOTAL_COUNT];
     }
 
     use crate::pri_utils::sym::intrinsics as psym;
@@ -778,6 +792,7 @@ mod intrinsics {
         match intrinsic.name {
             of_one_to_one_funcs!(any_of) => decide_one_to_one_intrinsic_call(intrinsic),
             of_noop_funcs!(any_of) => IntrinsicDecision::NoOp,
+            // of_contract_funcs!(any_of) => IntrinsicDecision::Contract,
             of_const_evaluated_funcs!(any_of) => IntrinsicDecision::ConstEvaluated,
             of_to_be_supported_funcs!(any_of) => IntrinsicDecision::ToDo,
             of_float_arith_funcs!(any_of) => IntrinsicDecision::NotPlanned,

@@ -593,7 +593,7 @@ where
             Atomic(ordering, kind) => {
                 self.instrument_atomic_intrinsic_call(&params, ordering, kind);
             }
-            NoOp | ConstEvaluated => {
+            NoOp | ConstEvaluated | Contract => {
                 // Currently, no instrumentation
                 Default::default()
             }
