@@ -281,6 +281,13 @@ pub mod macros {
           { fn intrinsic_assign_ctlz_nonzero(dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz(dest: PlaceRef, x: OperandRef) }
 
+          // ----- Memory -----
+          { fn intrinsic_volatile_load(
+                ptr: OperandRef,
+                ptr_type_id: ($type_id_ty),
+                dest: PlaceRef,
+          ) }   
+
           // All atomic operations have an ordering, majority get applied on a pointer.
           #[allow(unused_parens)]
           { fn intrinsic_atomic_load(
@@ -650,6 +657,8 @@ pub mod macros {
                 #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering:($atomic_ord_ty),ptr:OperandRef,ptr_type_id:($type_id_ty),operator:($atomic_bin_op_ty),src:OperandRef,prev_dest:PlaceRef,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_volatile_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,);
             }
         };
         (modifier: $modifier:path) => {

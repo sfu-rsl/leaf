@@ -249,6 +249,7 @@ mod intrinsics {
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
+        Memory(LeafIntrinsicSymbol),
         NoOp,
         ConstEvaluated,
         Contract,
@@ -683,6 +684,14 @@ mod intrinsics {
         };
     }
 
+    macro_rules! of_volatile_funcs {
+        ($macro:ident) => {
+            $macro!(
+                volatile_load,
+            )
+        };
+    }
+
     macro_rules! of_to_be_supported_funcs {
         ($macro:ident) => {
             $macro!(
@@ -690,7 +699,6 @@ mod intrinsics {
                 vtable_align,
                 volatile_set_memory,
                 volatile_copy_nonoverlapping_memory,
-                volatile_load,
                 volatile_store,
                 volatile_copy_memory,
                 unaligned_volatile_store,
@@ -771,6 +779,7 @@ mod intrinsics {
             of_simd_op_funcs,
             of_to_be_supported_funcs,
             of_one_to_one_funcs,
+            of_volatile_funcs,
         );
 
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
@@ -821,6 +830,14 @@ mod intrinsics {
             _ => unreachable!(),
         };
         IntrinsicDecision::OneToOneAssign(pri_sym)
+    }
+
+    fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
+        let pri_sym = match intrinsic.name {
+            rsym::volatile_load => psym::intrinsic_volatile_load,
+            _ => unreachable!(),
+        };
+        IntrinsicDecision::Memory(pri_sym)
     }
 
     fn decide_atomic_intrinsic_call<'tcx>(intrinsic: IntrinsicDef) -> IntrinsicDecision {

@@ -709,6 +709,16 @@ impl ProgramRuntimeInterface for BasicPri {
     fn intrinsic_atomic_fence(_ordering: Self::AtomicOrdering, _single_thread: bool) {
         // No-op.
     }
+
+    fn intrinsic_volatile_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef) {
+        // let src_ptr = take_back_operand(ptr);
+        // let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
+        //     h.from_ptr(src_ptr.clone(), ptr_type_id)
+        // });
+        // let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
+        // assign_to(dest, |h| h.use_of(src_pointee_value))
+        todo!("volatile load");
+    }
 }
 
 impl BasicPri {
