@@ -240,7 +240,7 @@ fn is_drop_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
 }
 
 mod intrinsics {
-    use common::pri::{AtomicBinaryOp, AtomicOrdering};
+    use common::pri::{AtomicBinaryOp, AtomicOrdering, MemoryOp};
 
     use crate::pri_utils::sym::intrinsics::LeafIntrinsicSymbol;
 
@@ -249,7 +249,7 @@ mod intrinsics {
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
-        Memory(LeafIntrinsicSymbol),
+        Memory(MemoryOp, LeafIntrinsicSymbol),
         NoOp,
         ConstEvaluated,
         Contract,
@@ -684,10 +684,11 @@ mod intrinsics {
         };
     }
 
-    macro_rules! of_volatile_funcs {
+    macro_rules! of_memory_funcs {
         ($macro:ident) => {
             $macro!(
                 volatile_load,
+                unaligned_volatile_load,
             )
         };
     }
@@ -702,7 +703,6 @@ mod intrinsics {
                 volatile_store,
                 volatile_copy_memory,
                 unaligned_volatile_store,
-                unaligned_volatile_load,
                 typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
@@ -779,7 +779,7 @@ mod intrinsics {
             of_simd_op_funcs,
             of_to_be_supported_funcs,
             of_one_to_one_funcs,
-            of_volatile_funcs,
+            of_memory_funcs,
         );
 
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
@@ -810,6 +810,7 @@ mod intrinsics {
             other if other.as_str().starts_with("atomic") => {
                 decide_atomic_intrinsic_call(intrinsic)
             }
+            of_memory_funcs!(any_of) => decide_memory_intrinsic_call(intrinsic),
             _ => panic!("Uncovered intrinsic: {:?}", intrinsic),
         }
     }
@@ -833,11 +834,12 @@ mod intrinsics {
     }
 
     fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
-        let pri_sym = match intrinsic.name {
-            rsym::volatile_load => psym::intrinsic_volatile_load,
+        let (mem_op, pri_sym) = match intrinsic.name {
+            rsym::volatile_load => (MemoryOp::ALIGNED, psym::intrinsic_volatile_load),
+            rsym::unaligned_volatile_load => (MemoryOp::UNALIGNED, psym::intrinsic_volatile_load),
             _ => unreachable!(),
         };
-        IntrinsicDecision::Memory(pri_sym)
+        IntrinsicDecision::Memory(mem_op, pri_sym)
     }
 
     fn decide_atomic_intrinsic_call<'tcx>(intrinsic: IntrinsicDef) -> IntrinsicDecision {

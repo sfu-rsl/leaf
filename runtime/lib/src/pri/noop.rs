@@ -28,6 +28,7 @@ impl ProgramRuntimeInterface for NoOpPri {
     type AtomicBinaryOp = abs::AtomicBinaryOp;
     type DebugInfo = DebugInfo;
     type Tag = Tag;
+    type MemoryOp = MemoryOp;
 
     common::pri::list_func_decls! { modifier: noop, (from Self) }
 }

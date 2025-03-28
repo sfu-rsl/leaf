@@ -593,8 +593,8 @@ where
             Atomic(ordering, kind) => {
                 self.instrument_atomic_intrinsic_call(&params, ordering, kind);
             }
-            Memory(func_name) => {
-                todo!("Memory intrinsic call to {:?} observed.", func_name);
+            Memory(mem_op, func_name) => {
+                todo!("Memory intrinsic call to {:?} with {:?} observed.", func_name, mem_op);
             }
             NoOp | ConstEvaluated | Contract => {
                 // Currently, no instrumentation

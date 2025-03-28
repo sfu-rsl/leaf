@@ -182,5 +182,12 @@ enum_like_type! {
     }
 }
 
+enum_like_type! {
+    MemoryOp {
+        ALIGNED = 1;
+        UNALIGNED = 2;
+    }
+}
+
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 pub type DebugInfo = &'static [u8];

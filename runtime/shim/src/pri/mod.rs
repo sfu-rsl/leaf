@@ -56,6 +56,7 @@ mod ffi {
         type AtomicBinaryOp = common::pri::AtomicBinaryOp;
         type DebugInfo = common::ffi::DebugInfo;
         type Tag = common::ffi::ConstStrPack;
+        type MemoryOp = common::pri::MemoryOp;
 
         common::pri::macros::list_func_decls!(modifier: delegate_to_leafrt, (from Self));
     }
@@ -139,5 +140,6 @@ common::pri::macros::list_func_decls! {
         atomic_bin_op: AtomicBinaryOp,
         dbg_info: DebugInfo,
         tag: Tag,
+        memory_op: MemoryOp,
     )
 }
