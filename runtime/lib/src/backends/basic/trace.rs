@@ -115,15 +115,34 @@ pub(super) fn new_trace_manager(
 
     let mut value_translator = translator.clone();
     let mut case_translator = translator.clone();
-    let core_manager = AggregatorTraceManager::new(inner_inspectors).adapt(
+
+    let agg_manager = AggregatorTraceManager::new(inner_inspectors);
+    dumpers.extend_opt(trace_config.constraints_dump.as_ref().map(|cfg| {
+        dumper::create_solver_constraints_dumper(
+            cfg,
+            agg_manager.steps(),
+            agg_manager.constraints(),
+        )
+    }));
+
+    let core_manager = agg_manager.adapt(
         |s| s,
         move |v: ValueRef| Translation::of(v, &mut value_translator),
         move |c: ConstValue| Translation::of(c, &mut case_translator),
     );
-
     let manager = core_manager;
 
+    let outer_agg_inspector = AggregatorStepInspector::default();
+    dumpers.extend_opt(trace_config.decisions_dump.as_ref().map(|cfg| {
+        dumper::create_decisions_dumper(
+            cfg,
+            outer_agg_inspector.steps(),
+            outer_agg_inspector.constraints(),
+        )
+    }));
     let dumpers_ref = Rc::new(RefCell::new(dumpers));
+
+    let mut counter = 0;
 
     manager
         .logged()
@@ -132,6 +151,8 @@ pub(super) fn new_trace_manager(
             tags: RefCell::borrow(&tags).clone(),
         })
         .inspected_by(inspectors)
+        .filtered_by(|_, c| c.discr.is_symbolic())
+        .inspected_by(outer_agg_inspector)
         .adapt_step(move |s: Step| {
             counter += 1;
             Indexed {
@@ -526,6 +547,92 @@ mod shutdown {
     }
 }
 use shutdown::TraceManagerExt as ShutdownTraceManagerExt;
+
+mod dumper {
+    use crate::abs::ConstraintKind;
+
+    use super::*;
+
+    pub(super) fn create_decisions_dumper<S, V, C, SList, CList>(
+        output_config: &OutputConfig,
+        steps_view: RefView<SList>,
+        constraints_view: RefView<CList>,
+    ) -> impl Dumper
+    where
+        S: Borrow<Step> + HasIndex,
+        C: Borrow<ConstValue>,
+        SList: AsRef<[S]>,
+        CList: AsRef<[Constraint<V, C>]>,
+    {
+        #[derive(dm::From, Serialize)]
+        struct TraceItem<'a, 'b> {
+            step: Indexed<&'a Step>,
+            decision: ConstraintKind<&'b ConstValue>,
+        }
+        match output_config {
+            OutputConfig::File(cfg) => {
+                const FILENAME_DEFAULT: &str = "decisions";
+                create_ser_dumper!(cfg, "Full Trace".to_owned(), FILENAME_DEFAULT, || {
+                    core::iter::zip(
+                        steps_view
+                            .borrow()
+                            .as_ref()
+                            .iter()
+                            .map(|s| (s.borrow(), s.index()).into()),
+                        constraints_view
+                            .borrow()
+                            .as_ref()
+                            .iter()
+                            .map(|c| c.kind.as_ref().map(|c| c.borrow())),
+                    )
+                    .map(TraceItem::from)
+                    .collect::<Vec<_>>()
+                })
+            }
+        }
+    }
+
+    pub(super) fn create_solver_constraints_dumper<'ctx, S, V, C, SList, CList>(
+        output_config: &OutputConfig,
+        steps_view: RefView<SList>,
+        constraints_view: RefView<CList>,
+    ) -> impl Dumper
+    where
+        S: Borrow<Step> + HasIndex,
+        V: Borrow<CurrentSolverValue<'ctx>>,
+        C: Borrow<CurrentSolverCase<'ctx>>,
+        SList: AsRef<[S]>,
+        CList: AsRef<[Constraint<V, C>]>,
+    {
+        #[derive(dm::From, Serialize)]
+        struct TraceItem<'a> {
+            step: Indexed<&'a Step>,
+            constraint: Constraint<String, String>,
+        }
+        match output_config {
+            OutputConfig::File(cfg) => {
+                const FILENAME_DEFAULT: &str = "sym_decisions";
+                create_ser_dumper!(cfg, "Sym Trace".to_owned(), FILENAME_DEFAULT, || {
+                    core::iter::zip(
+                        steps_view
+                            .borrow()
+                            .as_ref()
+                            .iter()
+                            .map(|s| (s.borrow(), s.index()).into()),
+                        constraints_view.borrow().as_ref().iter().map(|c| {
+                            c.as_ref().map(
+                                |v| v.borrow().value.to_smtlib2(),
+                                |c| c.borrow().to_smtlib2(),
+                            )
+                        }),
+                    )
+                    .map(TraceItem::from)
+                    .collect::<Vec<_>>()
+                })
+            }
+        }
+    }
+}
 
 mod dumping {
     use std::fs;

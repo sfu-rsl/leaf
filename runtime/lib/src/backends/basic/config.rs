@@ -100,11 +100,19 @@ pub(crate) enum OutputConfig {
 pub(crate) struct ExecutionTraceConfig {
     #[serde(default = "default_trace_inspectors")]
     pub inspectors: Vec<TraceInspectorType>,
+
+    #[serde(default)]
+    pub decisions_dump: Option<OutputConfig>,
+
+    #[serde(default)]
+    pub constraints_dump: Option<OutputConfig>,
+
     /// The time interval between dumping inspectors' data (e.g., snapshots) during the execution
     /// and not merely in the end.
     /// # Remarks
-    /// This is useful for executions that possibly take long to finish and may get stopped
+    /// - This is useful for executions that possibly take long to finish and may get stopped
     /// prematurely.
+    /// - This works as a global config for any dumping happening in the trace management.
     #[serde(default)]
     pub dump_interval: Option<NonZero<u64>>,
 }

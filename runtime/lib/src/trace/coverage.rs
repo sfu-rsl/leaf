@@ -43,8 +43,8 @@ impl<S: Eq + Hash, C> BranchCoverageStepInspector<S, C> {
     }
 }
 
-impl<S: Eq + Hash + Clone + Display, V, C: Eq + Clone + Display, SR, CR>
-    StepInspector<SR, V, CR> for BranchCoverageStepInspector<S, C>
+impl<S: Eq + Hash + Clone + Display, V, C: Eq + Clone + Display, SR, CR> StepInspector<SR, V, CR>
+    for BranchCoverageStepInspector<S, C>
 where
     SR: Borrow<S>,
     CR: Borrow<C>,

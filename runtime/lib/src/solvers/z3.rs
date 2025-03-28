@@ -152,6 +152,14 @@ impl<'ctx> AstNode<'ctx> {
             Self::Array(ArrayNode(ast, _)) => ast.get_sort(),
         }
     }
+
+    pub fn to_smtlib2(&self) -> String {
+        match self {
+            Self::Bool(ast) => ast.to_string(),
+            Self::BitVector(BVNode(ast, _)) => ast.to_string(),
+            Self::Array(ArrayNode(ast, _)) => ast.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

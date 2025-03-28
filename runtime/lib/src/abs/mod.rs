@@ -178,7 +178,7 @@ pub enum AssertKind<Operand> {
     MisalignedPointerDereference { required: Operand, found: Operand },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct Constraint<V, C> {
     pub discr: V,
     pub kind: ConstraintKind<C>,
