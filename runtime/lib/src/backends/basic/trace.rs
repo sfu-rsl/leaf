@@ -14,13 +14,13 @@ use crate::{
     abs::{Constraint, HasTags, Tag, backend::Model},
     solvers::{MapSolverExt, z3::Z3Solver},
     trace::{
-        AdapterTraceManagerExt, AggregatorTraceManager, BranchCoverageStepInspector,
-        FilterStepInspectorExt, InspectionTraceManagerExt, LoggerTraceManagerExt, StepInspector,
-        TraceInspector,
+        AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
+        BranchCoverageStepInspector, FilterStepInspectorExt, FilterTraceManagerExt,
+        InspectionTraceManagerExt, LoggerTraceManagerExt, StepInspector, TraceInspector,
         divergence::{DivergenceFilter, ImmediateDivergingAnswerFinder},
         sanity_check::ConstraintSanityChecker,
     },
-    utils::alias::RRef,
+    utils::{RefView, alias::RRef},
 };
 
 use super::{
@@ -38,6 +38,12 @@ type CurrentSolver<'ctx> = Z3Solver<'ctx, SymVarId>;
 type CurrentSolverValue<'ctx> = <CurrentSolver<'ctx> as Solver>::Value;
 type CurrentSolverCase<'ctx> = <CurrentSolver<'ctx> as Solver>::Case;
 type CurrentSolverTranslator<'ctx> = Z3ValueTranslator<'ctx>;
+
+// These are the types of steps, values, and cases for the inner managers.
+// You can use them to give explicit types as opposed to generics.
+type IStep = Tagged<Indexed<Step>>;
+type IValue<'ctx> = Translation<ValueRef, CurrentSolverValue<'ctx>>;
+type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
 
 pub(super) fn new_trace_manager(
     tags: RRef<Vec<Tag>>,
@@ -111,7 +117,7 @@ pub(super) fn new_trace_manager(
     let mut case_translator = translator.clone();
     let core_manager = AggregatorTraceManager::new(inner_inspectors).adapt(
         |s| s,
-        move |v| Translation::of(v, &mut value_translator),
+        move |v: ValueRef| Translation::of(v, &mut value_translator),
         move |c: ConstValue| Translation::of(c, &mut case_translator),
     );
 
@@ -126,6 +132,13 @@ pub(super) fn new_trace_manager(
             tags: RefCell::borrow(&tags).clone(),
         })
         .inspected_by(inspectors)
+        .adapt_step(move |s: Step| {
+            counter += 1;
+            Indexed {
+                index: counter,
+                value: s,
+            }
+        })
         .inspected_by(dumping::create_timer_dumper_inspector(
             dumpers_ref.clone(),
             trace_config
@@ -240,10 +253,7 @@ mod divergence {
         filters_config: &Vec<DivergenceFilterType>,
         branch_depth_provider: Option<RRef<impl DepthProvider<Step, ConstValue> + 'ctx>>,
         output_config: &Vec<OutputConfig>,
-    ) -> (
-        impl TraceInspector<Tagged<Step>, V, C> + 'ctx,
-        impl Dumper + 'ctx,
-    )
+    ) -> (impl TraceInspector<IStep, V, C> + 'ctx, impl Dumper + 'ctx)
     where
         V: Borrow<CurrentSolverValue<'ctx>>,
         C: Borrow<CurrentSolverCase<'ctx>>,
@@ -264,7 +274,7 @@ mod divergence {
             output_generator.generate(&model)
         };
 
-        let mut filters: Vec<Box<dyn DivergenceFilter<Tagged<Step>, V, C> + '_>> = vec![];
+        let mut filters: Vec<Box<dyn DivergenceFilter<IStep, V, C> + '_>> = vec![];
         let mut dumpers: Vec<Box<dyn Dumper>> = vec![];
 
         // This filter is builtin and not overridable.
@@ -418,7 +428,7 @@ mod coverage {
         output_config: &Option<OutputConfig>,
     ) -> (RRef<Inspector>, Option<impl Dumper>)
     where
-        Inspector: StepInspector<Step, V, ConstValue>,
+        Inspector: StepInspector<IStep, V, ConstValue>,
     {
         let inspector_ref = Rc::new(RefCell::new(BranchCoverageStepInspector::new()));
         let dumper = output_config
@@ -724,6 +734,8 @@ mod dumping {
 }
 
 mod helpers {
+    use delegate::delegate;
+
     use super::*;
 
     #[derive(
@@ -738,7 +750,13 @@ mod helpers {
         pub tags: Vec<Tag>,
     }
 
-    impl HasTags for Tagged<Step> {
+    impl<T> Borrow<T> for Tagged<T> {
+        fn borrow(&self) -> &T {
+            &self.value
+        }
+    }
+
+    impl<T> HasTags for Tagged<T> {
         fn tags(&self) -> &[Tag] {
             &self.tags
         }
@@ -750,6 +768,55 @@ mod helpers {
                 return self.value.fmt(f);
             } else {
                 write!(f, "{} #[{}]", self.value, self.tags.join(", "))
+            }
+        }
+    }
+
+    impl<T: HasIndex> HasIndex for Tagged<T> {
+        fn index(&self) -> usize {
+            self.value.index()
+        }
+    }
+
+    pub(super) trait HasIndex {
+        fn index(&self) -> usize;
+    }
+
+    #[derive(Clone, Copy, Debug, dm::Deref, dm::From, Serialize)]
+    pub(super) struct Indexed<T> {
+        #[deref]
+        pub value: T,
+        pub index: usize,
+    }
+
+    impl<T> HasIndex for Indexed<T> {
+        fn index(&self) -> usize {
+            self.index
+        }
+    }
+
+    impl<T> Borrow<T> for Indexed<T> {
+        fn borrow(&self) -> &T {
+            &self.value
+        }
+    }
+
+    impl<T: Display> Display for Indexed<T> {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}: {}", self.index, self.value)
+        }
+    }
+
+    impl Borrow<Step> for IStep {
+        fn borrow(&self) -> &Step {
+            &self.value.borrow()
+        }
+    }
+
+    impl<T: HasTags> HasTags for Indexed<T> {
+        delegate! {
+            to self.value {
+                fn tags(&self) -> &[Tag];
             }
         }
     }
