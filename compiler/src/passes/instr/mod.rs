@@ -19,18 +19,14 @@ use common::{log_debug, log_info, log_warn};
 use std::{collections::HashSet, num::NonZeroUsize, sync::atomic};
 
 use crate::{
-    config::InstrumentationRules,
-    mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
-    passes::{StorageExt, instr::call::context::PriItems},
-    utils::mir::TyCtxtExt,
-    visit::*,
+    config::InstrumentationRules, mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier}, passes::{instr::call::context::PriItems, StorageExt}, pri_utils::sym::intrinsics::{self, LeafIntrinsicSymbol}, utils::mir::TyCtxtExt, visit::*
 };
 
 use super::{CompilationPass, OverrideFlags, Storage};
 
 use call::{
     AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
-    CastAssigner, EntryFunctionHandler, FunctionHandler,
+    CastAssigner, EntryFunctionHandler, FunctionHandler, MemoryIntrinsicHandler,
     InsertionLocation::*,
     IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
     context::{
@@ -593,8 +589,10 @@ where
             Atomic(ordering, kind) => {
                 self.instrument_atomic_intrinsic_call(&params, ordering, kind);
             }
-            Memory(mem_op, func_name) => {
-                todo!("Memory intrinsic call to {:?} with {:?} observed.", func_name, mem_op);
+            Memory(memory_op, func_name) => {
+                // todo!("Memory intrinsic call to {:?} with {:?} observed.", func_name, mem_op);
+                // Currently, no instrumentation
+                self.instrucment_memory_intrinsic_call(&params, memory_op, func_name);
             }
             NoOp | ConstEvaluated | Contract => {
                 // Currently, no instrumentation
@@ -634,6 +632,24 @@ where
                 );
             }
         }
+    }
+
+    fn instrucment_memory_intrinsic_call(
+        &mut self,
+        params: &CallParams<'_, 'tcx>,
+        memory_op: common::pri::MemoryOp,
+        pri_func: LeafIntrinsicSymbol,
+    ) {
+        let mut call_adder = self.call_adder.before();
+        let ptr_arg = params.args.get(0);
+        let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
+        let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, call_adder.tcx()));
+        let mut call_adder = call_adder.perform_memory_op(memory_op, ptr_ref.zip(ptr_ty));
+        let dest_ref = call_adder.reference_place(params.destination);
+        let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
+        let mut call_adder = call_adder.assign(dest_ref, dest_ty);
+        // TODO: add switch cases for other operations
+        call_adder.load();
     }
 
     fn instrument_atomic_intrinsic_call(

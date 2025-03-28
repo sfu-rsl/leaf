@@ -190,6 +190,12 @@ pub(crate) trait IntrinsicHandler<'tcx> {
     );
 }
 
+pub(crate) trait MemoryIntrinsicHandler<'tcx> {
+    fn load(&mut self)
+    where
+        Self: Assigner<'tcx>;
+}
+
 pub(crate) trait AtomicIntrinsicHandler<'tcx> {
     fn load(&mut self)
     where
@@ -259,6 +265,7 @@ mod implementation {
     use core::intrinsics::unlikely;
     use std::assert_matches::debug_assert_matches;
 
+    use common::pri::MemoryOp;
     use rustc_middle::mir::{self, BasicBlock, BasicBlockData, HasLocalDecls, UnevaluatedConst};
     use rustc_middle::ty::{self as mir_ty, TyKind};
 
@@ -448,6 +455,18 @@ mod implementation {
             self.with_context(|base| AtomicIntrinsicContext {
                 base,
                 ordering,
+                ptr_and_ty,
+            })
+        }
+
+        pub fn perform_memory_op<'b, 'tcx>(
+            &'b mut self,
+            memory_op: MemoryOp,
+            ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
+        ) -> RuntimeCallAdder<MemoryIntrinsicContext<'b, 'tcx, C>> {
+            self.with_context(|base| MemoryIntrinsicContext {
+                base,
+                memory_op,
                 ptr_and_ty,
             })
         }
@@ -2099,6 +2118,19 @@ mod implementation {
         }
     }
 
+    impl<'tcx, C> MemoryIntrinsicHandler<'tcx> for RuntimeCallAdder<C>
+    where
+        Self: MirCallAdder<'tcx> + BlockInserter<'tcx>,
+        C: ForMemoryIntrinsic<'tcx>,
+    {
+        fn load(&mut self)
+        where
+            Self: Assigner<'tcx>,
+        {
+            todo!("Memory intrinsic load is not implemented yet.");
+        }
+    }
+
     impl<'tcx, C> AtomicIntrinsicHandler<'tcx> for RuntimeCallAdder<C>
     where
         Self: MirCallAdder<'tcx> + BlockInserter<'tcx>,
@@ -3706,6 +3738,15 @@ mod implementation {
         }
         impl<'tcx, C> ForAtomicIntrinsic<'tcx> for C where
             C: ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx>
+        {
+        }
+
+        pub(crate) trait ForMemoryIntrinsic<'tcx>:
+        ForInsertion<'tcx> + MemoryIntrinsicParamsProvider<'tcx>
+        {
+        }
+        impl<'tcx, C> ForMemoryIntrinsic<'tcx> for C where
+            C: ForInsertion<'tcx> + MemoryIntrinsicParamsProvider<'tcx>
         {
         }
     }
