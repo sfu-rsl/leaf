@@ -1,9 +1,13 @@
+use core::ops::Deref;
+
 use derive_more as dm;
 
 pub(crate) mod alias;
 pub(crate) mod file;
 pub(crate) mod logging;
 pub(crate) mod meta;
+
+use alias::RRef;
 
 #[derive(dm::Deref, dm::DerefMut)]
 pub(crate) struct UnsafeSync<T>(T);
@@ -50,4 +54,17 @@ pub(crate) trait InPlaceSelfHierarchical {
     fn drop_layer(&mut self) -> Option<Self>
     where
         Self: Sized;
+}
+
+/// Guards a RefCell from mutable borrows.
+pub(crate) struct RefView<T>(RRef<T>);
+
+impl<T> RefView<T> {
+    pub(crate) fn new(data: RRef<T>) -> Self {
+        Self(data)
+    }
+
+    pub(crate) fn borrow(&self) -> impl Deref<Target = T> + '_ {
+        self.0.borrow()
+    }
 }

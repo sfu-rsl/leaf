@@ -43,19 +43,20 @@ impl<S: Eq + Hash, C> BranchCoverageStepInspector<S, C> {
     }
 }
 
-impl<S: Eq + Hash + Clone + Display, V: Display, C: Eq + Clone + Display, CR>
-    StepInspector<S, V, CR> for BranchCoverageStepInspector<S, C>
+impl<S: Eq + Hash + Clone + Display, V, C: Eq + Clone + Display, SR, CR>
+    StepInspector<SR, V, CR> for BranchCoverageStepInspector<S, C>
 where
+    SR: Borrow<S>,
     CR: Borrow<C>,
 {
-    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &CR>) {
+    fn inspect(&mut self, step: &SR, constraint: Constraint<&V, &CR>) {
         self.current_depth += 1;
 
         let kind = constraint.kind.map(|c| c.borrow());
 
         let decisions = self
             .map
-            .entry(step.clone())
+            .entry(step.borrow().clone())
             .or_insert_with(Default::default);
         let index = decisions
             .iter()
@@ -71,7 +72,7 @@ where
         log_debug!(
             "Branch coverage: {} at step {} has been covered {} times (depth: {})",
             kind,
-            step,
+            step.borrow(),
             decision.count,
             self.current_depth,
         );

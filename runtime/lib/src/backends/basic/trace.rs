@@ -337,15 +337,13 @@ mod divergence {
         }
     }
 
-    fn create_branch_depth_filter<'ctx, V: 'ctx, C: 'ctx>(
+    fn create_branch_depth_filter<'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
         branch_depth_provider: RRef<impl DepthProvider<Step, ConstValue> + 'ctx>,
         distance_threshold_factor: f32,
         persistence: Option<&OutputConfig>,
-    ) -> (
-        impl DivergenceFilter<Tagged<Step>, V, C> + 'ctx,
-        Option<impl Dumper>,
-    )
+    ) -> (impl DivergenceFilter<S, V, C> + 'ctx, Option<impl Dumper>)
     where
+        S: Borrow<Step>,
         V: Borrow<CurrentSolverValue<'ctx>>,
         C: Borrow<ConstValue>,
     {
@@ -375,7 +373,7 @@ mod divergence {
             snapshot,
             branch_depth_provider,
             distance_threshold_factor,
-            |s: &Tagged<Step>| s.value.clone(),
+            |s: &S| -> Step { s.borrow().clone() },
             |v: &V| {
                 let mut vars = v
                     .borrow()
@@ -416,7 +414,7 @@ mod coverage {
 
     pub(super) type Inspector = BranchCoverageStepInspector<Step, ConstValue>;
 
-    pub(super) fn create_branch_coverage_collector<V>(
+    pub(super) fn create_branch_coverage_collector<V: Display>(
         output_config: &Option<OutputConfig>,
     ) -> (RRef<Inspector>, Option<impl Dumper>)
     where
