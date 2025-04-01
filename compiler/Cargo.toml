@@ -12,6 +12,8 @@ path = "src/main.rs"
 [dev-dependencies]
 ignore = "0.4.22"
 
+[build-dependencies]
+build_common = { workspace = true }
 
 [dependencies]
 common = { workspace = true, features = ["tyexp", "config", "logging"] }

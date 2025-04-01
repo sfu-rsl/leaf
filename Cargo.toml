@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "build_common",
     "common",
     "compiler",
     "runtime/lib",
@@ -24,6 +25,7 @@ edition = "2021"
 
 [workspace.dependencies]
 # Unless we specify the package, it won't be renamed.
+build_common = { path = "build_common", package = "build_common" }
 common = { path = "common", package = "common" }
 macros = { path = "macros" }
 runtime_basic_li = { path = "runtime/flavors/basic_li" }
