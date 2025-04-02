@@ -793,51 +793,6 @@ mod dumping {
     ) -> impl StepInspector<S, V, C> {
         move |_: &S, _: Constraint<&V, &C>| dump(&dumper)
     }
-
-    #[derive(Serialize, Deserialize)]
-    struct BasicBlockLocationSer {
-        pub body: (u32, u32),
-        pub index: BasicBlockIndex,
-    }
-
-    impl From<BasicBlockLocation> for BasicBlockLocationSer {
-        fn from(value: BasicBlockLocation) -> Self {
-            Self {
-                body: (value.body.0, value.body.1),
-                index: value.index,
-            }
-        }
-    }
-
-    impl Into<BasicBlockLocation> for BasicBlockLocationSer {
-        fn into(self) -> BasicBlockLocation {
-            BasicBlockLocation {
-                body: DefId(self.body.0, self.body.1),
-                index: self.index,
-            }
-        }
-    }
-
-    impl Serialize for Step {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
-        {
-            BasicBlockLocationSer::from(Into::<BasicBlockLocation>::into(*self))
-                .serialize(serializer)
-        }
-    }
-
-    impl<'de> Deserialize<'de> for Step {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: serde::Deserializer<'de>,
-        {
-            Ok(Step::from(Into::<BasicBlockLocation>::into(
-                BasicBlockLocationSer::deserialize(deserializer)?,
-            )))
-        }
-    }
 }
 
 mod helpers {
@@ -846,7 +801,19 @@ mod helpers {
     use super::*;
 
     #[derive(
-        PartialEq, Eq, Hash, Clone, Copy, Debug, Default, dm::Deref, dm::From, dm::Into, dm::Display,
+        PartialEq,
+        Eq,
+        Hash,
+        Clone,
+        Copy,
+        Debug,
+        Default,
+        dm::Deref,
+        dm::From,
+        dm::Into,
+        dm::Display,
+        Serialize,
+        Deserialize,
     )]
     pub(crate) struct Step(BasicBlockLocation);
 

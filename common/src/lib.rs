@@ -15,6 +15,8 @@ use std::prelude::rust_2021::*;
 pub mod config;
 #[cfg(feature = "logging")]
 pub mod logging;
+#[cfg(feature = "serde")]
+mod serdex;
 #[cfg(feature = "tyexp")]
 pub mod tyexp;
 

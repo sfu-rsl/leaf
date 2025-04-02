@@ -11,7 +11,7 @@ name = "leafcmn"
 [features]
 std = []
 logging = ["dep:tracing"]
-tyexp = ["std", "dep:serde", "dep:serde_json", "logging"]
+serde = ["dep:serde"]
 config = ["std", "dep:config", "logging"]
 
 [dependencies]
