@@ -30,7 +30,6 @@ impl ProgramRuntimeInterface for BasicPri {
     type AtomicBinaryOp = abs::AtomicBinaryOp;
     type DebugInfo = DebugInfo;
     type Tag = Tag;
-    type MemoryOp = MemoryOp;
 
     fn init_runtime_lib() {
         init_backend();
@@ -711,13 +710,22 @@ impl ProgramRuntimeInterface for BasicPri {
         // No-op.
     }
 
-    fn intrinsic_volatile_load(mem_ptr_type: MemoryOp, ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef) {
+    fn intrinsic_volatile_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, is_aligned: bool) {
         let src_ptr = take_back_operand(ptr);
         let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
             h.from_ptr(src_ptr.clone(), ptr_type_id)
         });
         let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
         assign_to(dest, |h| h.use_of(src_pointee_value))
+    }
+
+    fn intrinsic_volatile_store(ptr: OperandRef, ptr_type_id: Self::TypeId, src: OperandRef, is_aligned: bool) {
+        let dst_ptr = take_back_operand(ptr);
+        let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
+            h.from_ptr(dst_ptr.clone(), ptr_type_id)
+        });
+        let src_value = take_back_operand(src);
+        assign_to_place(dst_place, |h| h.use_of(src_value))
     }
 }
 

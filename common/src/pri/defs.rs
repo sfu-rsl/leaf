@@ -23,7 +23,6 @@ pub trait ProgramRuntimeInterface {
     type AtomicBinaryOp;
     type DebugInfo;
     type Tag;
-    type MemoryOp;
 
     macros::list_func_decls! { modifier: utils::identity, (from Self) }
 }
@@ -47,7 +46,6 @@ pub trait FfiPri:
         AtomicBinaryOp = AtomicBinaryOp,
         DebugInfo = ffi::DebugInfo,
         Tag = ffi::ConstStrPack,
-        MemoryOp = MemoryOp,
     >
 {
 }
@@ -286,10 +284,16 @@ pub mod macros {
           // ----- Memory -----
           #[allow(unused_parens)]
           { fn intrinsic_volatile_load(
-                mem_ptr_type: ($memory_op_ty),
                 ptr: OperandRef,
                 ptr_type_id: ($type_id_ty),
                 dest: PlaceRef,
+                is_aligned: bool,
+          ) }
+          { fn intrinsic_volatile_store(
+                ptr: OperandRef,
+                ptr_type_id: ($type_id_ty),
+                val: OperandRef,
+                is_aligned: bool,
           ) }
 
           // All atomic operations have an ordering, majority get applied on a pointer.
@@ -384,7 +388,6 @@ pub mod macros {
                     atomic_bin_op: $atomic_bin_op_ty:ty,
                     dbg_info: $$dbg_info_ty:ty,
                     tag: $$tag_ty:ty,
-                    memory_op: $$memory_op_ty:ty,
                     $$(,)?
                 )
             ) => {
@@ -408,7 +411,6 @@ pub mod macros {
                         atomic_bin_op: (),
                         dbg_info: (),
                         tag: (),
-                        memory_op: (),
                     )
                 }
             };
@@ -428,7 +430,6 @@ pub mod macros {
                         atomic_bin_op: Self::AtomicBinaryOp,
                         dbg_info: Self::DebugInfo,
                         tag: Self::Tag,
-                        memory_op: Self::MemoryOp,
                     )
                 }
             };
@@ -448,7 +449,6 @@ pub mod macros {
                         atomic_bin_op: common::pri::AtomicBinaryOp,
                         dbg_info: common::ffi::DebugInfo,
                         tag: ConstStrPack,
-                        memory_op: common::pri::MemoryOp,
                     )
                 }
             };
@@ -462,7 +462,7 @@ pub mod macros {
 
     #[cfg_attr(not(core_build), macro_export)]
     macro_rules! list_func_decls {
-        (modifier: $modifier:path,(u128: $u128_ty:ty,char: $char_ty:ty, &str: $str_ty:ty, &[u8]: $byte_str_ty:ty,slice: $slice_ty:path,type_id: $type_id_ty:ty,binary_op: $binary_op_ty:ty,unary_op: $unary_op_ty:ty,atomic_ord: $atomic_ord_ty:ty,atomic_bin_op: $atomic_bin_op_ty:ty,dbg_info: $dbg_info_ty:ty,tag: $tag_ty:ty,memory_op: $memory_op_ty:ty$(,)?)) => {
+        (modifier: $modifier:path,(u128: $u128_ty:ty,char: $char_ty:ty, &str: $str_ty:ty, &[u8]: $byte_str_ty:ty,slice: $slice_ty:path,type_id: $type_id_ty:ty,binary_op: $binary_op_ty:ty,unary_op: $unary_op_ty:ty,atomic_ord: $atomic_ord_ty:ty,atomic_bin_op: $atomic_bin_op_ty:ty,dbg_info: $dbg_info_ty:ty,tag: $tag_ty:ty$(,)?)) => {
             $modifier!{
                 fn init_runtime_lib();
             }$modifier!{
@@ -666,22 +666,24 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_volatile_load(mem_ptr_type:($memory_op_ty),ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,);
+                #[allow(unused_parens)]fn intrinsic_volatile_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_aligned:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_volatile_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_aligned:bool,);
             }
         };
         (modifier: $modifier:path) => {
             $crate::leaf::common::pri::macros::list_func_decls!{
-                modifier: $modifier,(u128:(),char:(), &str:(), &[u8]:(),slice:crate::leaf::common::utils::identity,type_id:(),binary_op:(),unary_op:(),atomic_ord:(),atomic_bin_op:(),dbg_info:(),tag:(),memory_op:(),)
+                modifier: $modifier,(u128:(),char:(), &str:(), &[u8]:(),slice:crate::leaf::common::utils::identity,type_id:(),binary_op:(),unary_op:(),atomic_ord:(),atomic_bin_op:(),dbg_info:(),tag:(),)
             }
         };
         (modifier: $modifier:path,(from Self)) => {
             $crate::leaf::common::pri::macros::list_func_decls!{
-                modifier: $modifier,(u128:Self::U128,char:Self::Char, &str:Self::ConstStr, &[u8]:Self::ConstByteStr,slice: $crate::leaf::common::pri::macros::self_slice_of,type_id:Self::TypeId,binary_op:Self::BinaryOp,unary_op:Self::UnaryOp,atomic_ord:Self::AtomicOrdering,atomic_bin_op:Self::AtomicBinaryOp,dbg_info:Self::DebugInfo,tag:Self::Tag,memory_op:Self::MemoryOp,)
+                modifier: $modifier,(u128:Self::U128,char:Self::Char, &str:Self::ConstStr, &[u8]:Self::ConstByteStr,slice: $crate::leaf::common::pri::macros::self_slice_of,type_id:Self::TypeId,binary_op:Self::BinaryOp,unary_op:Self::UnaryOp,atomic_ord:Self::AtomicOrdering,atomic_bin_op:Self::AtomicBinaryOp,dbg_info:Self::DebugInfo,tag:Self::Tag,)
             }
         };
         (modifier: $modifier:path,(from common::ffi)) => {
             $crate::leaf::common::pri::macros::list_func_decls!{
-                modifier: $modifier,(u128:U128Pack,char:CharPack, &str:ConstStrPack, &[u8]:ConstByteStrPack,slice: $crate::leaf::common::pri::macros::slice_pack_of,type_id:U128Pack<TypeId>,binary_op:common::pri::BinaryOp,unary_op:common::pri::UnaryOp,atomic_ord:common::pri::AtomicOrdering,atomic_bin_op:common::pri::AtomicBinaryOp,dbg_info:common::ffi::DebugInfo,tag:ConstStrPack,memory_op:common::pri::MemoryOp,)
+                modifier: $modifier,(u128:U128Pack,char:CharPack, &str:ConstStrPack, &[u8]:ConstByteStrPack,slice: $crate::leaf::common::pri::macros::slice_pack_of,type_id:U128Pack<TypeId>,binary_op:common::pri::BinaryOp,unary_op:common::pri::UnaryOp,atomic_ord:common::pri::AtomicOrdering,atomic_bin_op:common::pri::AtomicBinaryOp,dbg_info:common::ffi::DebugInfo,tag:ConstStrPack,)
             }
         };
     }

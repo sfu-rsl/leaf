@@ -240,7 +240,7 @@ fn is_drop_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
 }
 
 mod intrinsics {
-    use common::pri::{AtomicBinaryOp, AtomicOrdering, MemoryOp};
+    use common::pri::{AtomicBinaryOp, AtomicOrdering};
 
     use crate::pri_utils::sym::intrinsics::LeafIntrinsicSymbol;
 
@@ -249,7 +249,7 @@ mod intrinsics {
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
-        Memory(MemoryOp, LeafIntrinsicSymbol),
+        Memory(MemoryIntrinsicKind, bool),
         NoOp,
         ConstEvaluated,
         Contract,
@@ -271,6 +271,11 @@ mod intrinsics {
         Fence {
             single_thread: bool,
         },
+    }
+
+    pub(crate) enum MemoryIntrinsicKind {
+        Load,
+        Store,
     }
 
     macro_rules! of_mir_translated_funcs {
@@ -688,7 +693,9 @@ mod intrinsics {
         ($macro:ident) => {
             $macro!(
                 volatile_load,
+                volatile_store,
                 unaligned_volatile_load,
+                unaligned_volatile_store,
             )
         };
     }
@@ -700,9 +707,7 @@ mod intrinsics {
                 vtable_align,
                 volatile_set_memory,
                 volatile_copy_nonoverlapping_memory,
-                volatile_store,
                 volatile_copy_memory,
-                unaligned_volatile_store,
                 typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
@@ -834,12 +839,14 @@ mod intrinsics {
     }
 
     fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
-        let (mem_op, pri_sym) = match intrinsic.name {
-            rsym::volatile_load => (MemoryOp::ALIGNED, psym::intrinsic_volatile_load),
-            rsym::unaligned_volatile_load => (MemoryOp::UNALIGNED, psym::intrinsic_volatile_load),
+        let (kind, is_ptr_aligned) = match intrinsic.name {
+            rsym::volatile_load => (MemoryIntrinsicKind::Load, true),
+            rsym::unaligned_volatile_load => (MemoryIntrinsicKind::Load, false),
+            rsym::volatile_store => (MemoryIntrinsicKind::Store, true),
+            rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store, false),
             _ => unreachable!(),
         };
-        IntrinsicDecision::Memory(mem_op, pri_sym)
+        IntrinsicDecision::Memory(kind, is_ptr_aligned)
     }
 
     fn decide_atomic_intrinsic_call<'tcx>(intrinsic: IntrinsicDef) -> IntrinsicDecision {
@@ -900,7 +907,7 @@ mod intrinsics {
         }
     }
 }
-pub(super) use intrinsics::{AtomicIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
+pub(super) use intrinsics::{AtomicIntrinsicKind, MemoryIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
 
 mod rules {
     use std::ops::DerefMut;

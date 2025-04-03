@@ -59,7 +59,6 @@ impl ProgramRuntimeInterface for LateInitPri<MainPri> {
     type AtomicBinaryOp = abs::AtomicBinaryOp;
     type DebugInfo = DebugInfo;
     type Tag = Tag;
-    type MemoryOp = MemoryOp;
 
     common::pri::list_func_decls! { modifier: late_init, (from Self) }
 }

@@ -194,6 +194,8 @@ pub(crate) trait MemoryIntrinsicHandler<'tcx> {
     fn load(&mut self)
     where
         Self: Assigner<'tcx>;
+
+    fn store(&mut self, val: OperandRef);
 }
 
 pub(crate) trait AtomicIntrinsicHandler<'tcx> {
@@ -265,7 +267,6 @@ mod implementation {
     use core::intrinsics::unlikely;
     use std::assert_matches::debug_assert_matches;
 
-    use common::pri::MemoryOp;
     use rustc_middle::mir::{self, BasicBlock, BasicBlockData, HasLocalDecls, UnevaluatedConst};
     use rustc_middle::ty::{self as mir_ty, TyKind};
 
@@ -461,12 +462,12 @@ mod implementation {
 
         pub fn perform_memory_op<'b, 'tcx>(
             &'b mut self,
-            memory_op: MemoryOp,
+            is_ptr_aligned: bool,
             ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
         ) -> RuntimeCallAdder<MemoryIntrinsicContext<'b, 'tcx, C>> {
             self.with_context(|base| MemoryIntrinsicContext {
                 base,
-                memory_op,
+                is_ptr_aligned,
                 ptr_and_ty,
             })
         }
@@ -2128,6 +2129,10 @@ mod implementation {
             Self: Assigner<'tcx>,
         {
             todo!("Memory intrinsic load is not implemented yet.");
+        }
+
+        fn store(&mut self, val: OperandRef) {
+            todo!("Memory intrinsic store is not implemented yet.");
         }
     }
 
