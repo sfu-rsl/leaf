@@ -11,6 +11,7 @@ use std::{
     rc::Rc,
 };
 
+use delegate::delegate;
 use derive_more as dm;
 
 use common::tyexp::TypeInfo;
@@ -24,10 +25,33 @@ pub(crate) use crate::abs::{
     FloatType, IntType, PointerOffset, RawAddress, TypeId, ValueType, VariantIndex,
 };
 
-pub(crate) type ValueRef = Rc<Value>;
+#[derive(Clone, PartialEq, Eq, dm::Deref, dm::DerefMut, dm::Debug, dm::Display)]
+pub(crate) struct ValueRef(Rc<Value>);
 pub(crate) type ConcreteValueRef = guards::ConcreteValueGuard<ValueRef>;
 pub(crate) type SymValueRef = guards::SymValueGuard<ValueRef>;
 pub(crate) type SymTernaryOperands = guards::SymTernaryOperands;
+
+impl ValueRef {
+    pub(crate) fn new(value: Value) -> Self {
+        Self(Rc::new(value))
+    }
+
+    pub fn unwrap_or_clone(this: Self) -> Value {
+        Rc::unwrap_or_clone(this.0)
+    }
+
+    pub fn make_mut(this: &mut Self) -> &mut Value {
+        Rc::make_mut(&mut this.0)
+    }
+}
+
+impl AsRef<Value> for ValueRef {
+    delegate! {
+        to self.0 {
+            fn as_ref(&self) -> &Value;
+        }
+    }
+}
 
 pub(crate) type SymVarId = u32;
 
