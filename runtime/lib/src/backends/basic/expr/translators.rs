@@ -16,12 +16,10 @@ pub(crate) mod z3 {
     use crate::{
         abs::{IntType, ValueType, expr::sym_place::SelectTarget},
         backends::basic::expr::{OverflowingBinaryOp, SymBinaryOperands, SymVarId, prelude::*},
-        solvers::z3::{ArrayNode, ArraySort, AstNodeSort, BVExt, BVNode, BVSort},
     };
 
     use common::log_debug;
-
-    use crate::solvers::z3::{AstAndVars, AstNode};
+    use common::z3::*;
 
     use super::TAG;
 
@@ -484,7 +482,7 @@ pub(crate) mod z3 {
             match condition {
                 AstNode::Bool(_) => {
                     let condition = condition.as_bool();
-                    let ast = condition.ite(&if_target.ast(), &else_target.ast());
+                    let ast = condition.ite(&if_target.dyn_ast(), &else_target.dyn_ast());
                     // NOTE: the sort of operands must be the same for ITE, so either sort can be picked for the sort of the result
                     debug_assert_eq!(if_target.sort(), else_target.sort());
                     AstNode::from_ast(ast, &if_target.sort())
@@ -528,14 +526,14 @@ pub(crate) mod z3 {
                     );
 
                     let result =
-                        AstNode::from_ast(ast::Array::select(&ast, &index.ast()), &elem_sort);
+                        AstNode::from_ast(ast::Array::select(&ast, &index.dyn_ast()), &elem_sort);
                     result
                 }
                 SelectTarget::Nested(box inner) => {
                     let inner = self.translate_select(inner, const_prefix);
                     if let AstNode::Array(ArrayNode(array, ArraySort { range: range_sort })) = inner
                     {
-                        AstNode::from_ast(ast::Array::select(&array, &index.ast()), &range_sort)
+                        AstNode::from_ast(ast::Array::select(&array, &index.dyn_ast()), &range_sort)
                     } else {
                         unreachable!("Nested select result should be an array.")
                     }
@@ -570,7 +568,7 @@ pub(crate) mod z3 {
             for (i, value) in std::iter::once(first).chain(values).enumerate() {
                 array = array.store(
                     &ast::BV::from_u64(context, i as u64, USIZE_BIT_SIZE),
-                    &value.ast(),
+                    &value.dyn_ast(),
                 );
             }
 
@@ -683,7 +681,13 @@ pub(crate) mod z3 {
         }
     }
 
-    impl<'ctx> AstNode<'ctx> {
+    trait BVSortTransmute {
+        type Result;
+        fn transmute(self, to_sort: BVSort) -> Self::Result;
+    }
+
+    impl<'ctx> BVSortTransmute for AstNode<'ctx> {
+        type Result = Self;
         fn transmute(mut self, to_sort: BVSort) -> Self {
             match &mut self {
                 AstNode::BitVector(BVNode(_, sort)) => *sort = to_sort,
@@ -694,12 +698,14 @@ pub(crate) mod z3 {
         }
     }
 
-    impl AstNodeSort {
-        fn transmute(&self, to_sort: BVSort) -> Self {
+    impl BVSortTransmute for &AstNodeSort {
+        type Result = AstNodeSort;
+        fn transmute(self, to_sort: BVSort) -> Self::Result {
+            use AstNodeSort::*;
             match self {
-                Self::BitVector(_) => to_sort.into(),
-                Self::Array(arr) => Self::Array(Box::new(arr.range.transmute(to_sort)).into()),
-                Self::Bool => panic!("Transmutation of boolean sort is not expected."),
+                BitVector(_) => to_sort.into(),
+                Array(arr) => Array(Box::new(arr.range.transmute(to_sort)).into()),
+                Bool => panic!("Transmutation of boolean sort is not expected."),
             }
         }
     }

@@ -8,8 +8,8 @@ use crate::abs::{
     },
 };
 use crate::backends::basic::BasicPlaceBuilder;
-use crate::utils::UnsafeSync;
 use common::log_info;
+use common::utils::UnsafeSync;
 
 #[allow(unused_imports)] // Mutex is detected as unused unless runtime_access is set to safe_mt
 use std::{

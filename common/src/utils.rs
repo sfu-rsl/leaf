@@ -1,5 +1,7 @@
 use super::types::TypeId;
 
+use derive_more as dm;
+
 #[cfg_attr(not(core_build), macro_export)]
 macro_rules! identity {
     ($($input:tt)+) => {
@@ -127,3 +129,33 @@ macro_rules! array_backed_struct {
     };
 }
 pub(crate) use array_backed_struct;
+#[cfg(feature = "std")]
+pub fn comma_separated<T: core::fmt::Display>(
+    iter: impl Iterator<Item = T>,
+) -> std::string::String {
+    iter.map(|t| std::format!("{t}"))
+        .collect::<std::vec::Vec<_>>()
+        .join(", ")
+}
+
+#[derive(dm::Deref, dm::DerefMut)]
+pub struct UnsafeSync<T>(T);
+
+impl<T> UnsafeSync<T> {
+    pub const fn new(value: T) -> Self {
+        Self(value)
+    }
+}
+
+unsafe impl<T> Sync for UnsafeSync<T> {}
+
+#[derive(dm::Deref, dm::DerefMut)]
+pub struct UnsafeSend<T>(T);
+
+impl<T> UnsafeSend<T> {
+    pub const fn new(value: T) -> Self {
+        Self(value)
+    }
+}
+
+unsafe impl<T> Send for UnsafeSend<T> {}

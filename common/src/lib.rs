@@ -19,6 +19,8 @@ pub mod logging;
 mod serdex;
 #[cfg(feature = "tyexp")]
 pub mod tyexp;
+#[cfg(feature = "z3")]
+pub mod z3;
 
 #[leaf_attr::instrument(false)]
 pub mod ffi;

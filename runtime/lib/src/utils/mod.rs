@@ -9,28 +9,6 @@ pub(crate) mod meta;
 
 use alias::RRef;
 
-#[derive(dm::Deref, dm::DerefMut)]
-pub(crate) struct UnsafeSync<T>(T);
-
-impl<T> UnsafeSync<T> {
-    pub(crate) const fn new(value: T) -> Self {
-        Self(value)
-    }
-}
-
-unsafe impl<T> Sync for UnsafeSync<T> {}
-
-#[derive(dm::Deref, dm::DerefMut)]
-pub(crate) struct UnsafeSend<T>(T);
-
-impl<T> UnsafeSend<T> {
-    pub(crate) const fn new(value: T) -> Self {
-        Self(value)
-    }
-}
-
-unsafe impl<T> Send for UnsafeSend<T> {}
-
 /// A trait for any hierarchical structure that may take a parent.
 pub(crate) trait Hierarchical<T> {
     fn set_parent(&mut self, parent: T);

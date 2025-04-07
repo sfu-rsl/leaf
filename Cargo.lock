@@ -397,10 +397,13 @@ name = "common"
 version = "0.1.0"
 dependencies = [
  "config",
+ "derive_more",
  "log",
  "serde",
  "serde_json",
  "tracing",
+ "z3",
+ "z3-sys",
 ]
 
 [[package]]
@@ -1598,9 +1601,12 @@ dependencies = [
  "derive_more",
  "glob",
  "notify",
+ "serde",
+ "serde_json",
  "sha2",
  "tracing",
  "tracing-subscriber",
+ "z3",
 ]
 
 [[package]]

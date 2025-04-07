@@ -40,6 +40,9 @@ derive_more = { version = "1.0.0", features = ["full"] }
 tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+z3 = { git = "https://github.com/prove-rs/z3.rs", rev = "60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf" }
+z3-sys = { git = "https://github.com/prove-rs/z3.rs", rev = "60001b36fc8a7ab1d4f22595e80a3b6f7adc1bcf" }
 
 libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2", features = [
     "std",

@@ -58,7 +58,7 @@ pub(super) fn new_trace_manager(
                 config.global_params.iter().map(|(k, v)| (k, v.to_string())),
             );
             let solver: CurrentSolver = Z3Solver::<SymVarId>::new_in_global_context();
-            let translator = Z3ValueTranslator::new(solver.context);
+            let translator = Z3ValueTranslator::new(solver.context());
             (solver, translator)
         }
     };

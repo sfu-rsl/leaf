@@ -1,9 +1,5 @@
 use std::fmt::Display;
-use tracing::subscriber;
-
-pub(crate) fn comma_separated<T: Display>(iter: impl Iterator<Item = T>) -> String {
-    iter.map(|t| format!("{t}")).collect::<Vec<_>>().join(", ")
-}
+pub(crate) use common::utils::comma_separated;
 
 pub(crate) fn init_logging() {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
