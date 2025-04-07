@@ -14,8 +14,20 @@ path = "src/modes/pure_loop.rs"
 name = "leafo_onetime"
 path = "src/modes/onetime.rs"
 
+[[bin]]
+name = "leafo_directed"
+path = "src/modes/directed/main.rs"
+edition = "2024"
+
+
 [dependencies]
-common = { workspace = true, features = ["logging", "config"] }
+common = { workspace = true, features = [
+    "logging",
+    "config",
+    "directed",
+    "trace_types",
+    "z3",
+] }
 
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
@@ -24,3 +36,7 @@ clap = { workspace = true }
 derive_more = { workspace = true }
 glob = "0.3.1"
 notify = "8.0.0"
+csv = "1.3"
+serde = { workspace = true }
+serde_json = { workspace = true }
+z3 = { workspace = true }
