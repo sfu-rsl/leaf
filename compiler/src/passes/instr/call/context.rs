@@ -44,6 +44,10 @@ pub(crate) trait BlockIndexProvider {
     fn block_index(&self) -> BasicBlock;
 }
 
+pub(crate) trait BlockOriginalIndexProvider {
+    fn block_original_index(&self, current: BasicBlock) -> Option<BasicBlock>;
+}
+
 pub(crate) trait InsertionLocationProvider: BlockIndexProvider {
     fn insertion_loc(&self) -> InsertionLocation;
 }
@@ -234,11 +238,18 @@ pub(crate) struct TransparentContext<'b, B> {
 pub(crate) struct InBodyContext<'b, 'tcx, 'bd, B> {
     pub(super) base: &'b mut B,
     pub(super) body: &'bd mir::Body<'tcx>,
+    pub(super) block_orig_index_map: HashMap<BasicBlock, BasicBlock>,
 }
 
 impl<'tcx, B> BodyProvider<'tcx> for InBodyContext<'_, 'tcx, '_, B> {
     fn body(&self) -> &mir::Body<'tcx> {
         self.body
+    }
+}
+
+impl<'tcx, B> BlockOriginalIndexProvider for InBodyContext<'_, 'tcx, '_, B> {
+    fn block_original_index(&self, current: BasicBlock) -> Option<BasicBlock> {
+        self.block_orig_index_map.get(&current).copied()
     }
 }
 
@@ -464,6 +475,13 @@ make_impl_macro! {
 }
 
 make_impl_macro! {
+    impl_orig_location_provider,
+    BlockOriginalIndexProvider,
+    self,
+    fn block_original_index(&self, current: BasicBlock) -> Option<BasicBlock>;
+}
+
+make_impl_macro! {
     impl_insertion_location_provider,
     InsertionLocationProvider,
     self,
@@ -569,6 +587,7 @@ make_caller_macro!(impl_traits, [
     impl_has_local_decls,
     impl_storage_provider,
     impl_location_provider,
+    impl_orig_location_provider,
     impl_insertion_location_provider,
     impl_source_info_provider,
     impl_dest_ref_provider,
@@ -578,7 +597,7 @@ make_caller_macro!(impl_traits, [
 ]);
 
 impl_traits!(all for TransparentContext);
-impl_traits!(all - [ impl_body_provider ] for InBodyContext<'tcxb, 'bd>);
+impl_traits!(all - [ impl_body_provider impl_orig_location_provider ] for InBodyContext<'tcxb, 'bd>);
 impl_traits!(all - [ impl_in_entry_function ] for EntryFunctionMarkerContext);
 impl_traits!(all - [ impl_location_provider impl_insertion_location_provider ] for AtLocationContext);
 impl_traits!(all - [ impl_source_info_provider ] for SourceInfoContext);

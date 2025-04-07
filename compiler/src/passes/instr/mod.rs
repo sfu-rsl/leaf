@@ -16,7 +16,11 @@ use rustc_span::{Span, def_id::DefId, source_map::Spanned};
 use rustc_target::abi::{FieldIdx, VariantIdx};
 
 use common::{log_debug, log_info, log_warn};
-use std::{collections::HashSet, num::NonZeroUsize, sync::atomic};
+use std::{
+    collections::{HashMap, HashSet},
+    num::NonZeroUsize,
+    sync::atomic,
+};
 
 use crate::{
     config::InstrumentationRules,
@@ -34,8 +38,8 @@ use call::{
     InsertionLocation::*,
     IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
     context::{
-        AtLocationContext, BlockIndexProvider, PriItemsProvider, SourceInfoProvider,
-        TyContextProvider,
+        AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, PriItemsProvider,
+        SourceInfoProvider, TyContextProvider,
     },
     ctxtreqs,
 };
@@ -47,6 +51,7 @@ const TAG_INSTR_COUNTER: &str = concatcp!(TAG_INSTRUMENTATION, "::counter");
 const KEY_PRI_ITEMS: &str = "pri_items";
 const KEY_ENABLED: &str = "instr_enabled";
 const KEY_TOTAL_COUNT: &str = "total_body_count";
+const KEY_SWITCH_ORIG_INDICES: &str = "instr_switch_indices";
 
 #[derive(Default)]
 pub(crate) struct Instrumentor {
@@ -88,6 +93,14 @@ impl CompilationPass for Instrumentor {
             self.rules.take().unwrap()
         });
         rustc_driver::Compilation::Continue
+    }
+
+    fn visit_mir_body_before<'tcx>(
+        _tcx: TyCtxt<'tcx>,
+        body: &Body<'tcx>,
+        storage: &mut dyn Storage,
+    ) {
+        record_switch_original_indices(body, storage);
     }
 
     fn transform_mir_body<'tcx>(
@@ -137,9 +150,11 @@ fn transform<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, storage: &mut dyn S
     clear_existing_instrumentation(body, &pri_items.all_items);
     mir_transform::split_blocks_with(body, requires_immediate_instr_after);
 
+    let switch_index_map = make_switch_orig_index_map(body, storage);
+
     let mut modification = BodyInstrumentationUnit::new(body.local_decls());
     let mut call_adder = RuntimeCallAdder::new(tcx, &mut modification, &pri_items, storage);
-    let mut call_adder = call_adder.in_body(body);
+    let mut call_adder = call_adder.in_body(body, switch_index_map);
 
     let is_entry = tcx.entry_fn(()).is_some_and(|(id, _)| id == def_id);
 
@@ -199,6 +214,30 @@ fn make_pri_items(tcx: TyCtxt) -> PriItems {
         helper_funcs: collect_helper_funcs(&helper_items),
         all_items: all_items.into_iter().collect(),
     }
+}
+
+fn record_switch_original_indices(body: &Body, storage: &mut dyn Storage) {
+    let mut entry = storage.get_or_default::<Vec<BasicBlock>>(KEY_SWITCH_ORIG_INDICES.to_owned());
+    *entry = SwitchBasicBlockRecorder::default().visit_body(body);
+}
+
+fn make_switch_orig_index_map(
+    body: &Body,
+    storage: &mut dyn Storage,
+) -> HashMap<BasicBlock, BasicBlock> {
+    let split_indices = SwitchBasicBlockRecorder::default().visit_body(body);
+    let mut orig_indices =
+        storage.get_or_default::<Vec<BasicBlock>>(KEY_SWITCH_ORIG_INDICES.to_owned());
+    let orig_indices = core::mem::replace(orig_indices.as_mut(), Default::default());
+    assert_eq!(
+        split_indices.len(),
+        orig_indices.len(),
+        "Change in the number of switches during the split is not expected"
+    );
+    split_indices
+        .into_iter()
+        .zip(orig_indices.into_iter())
+        .collect::<HashMap<_, _>>()
 }
 
 fn clear_existing_instrumentation(body: &mut Body<'_>, pri_funcs: &HashSet<DefId>) {
@@ -270,7 +309,7 @@ impl VisitorFactory {
         call_adder: &'c mut RuntimeCallAdder<C>,
     ) -> impl Visitor<'tcx> + 'c
     where
-        C: ctxtreqs::Basic<'tcx> + JumpTargetModifier,
+        C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
         LeafBodyVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
@@ -282,7 +321,7 @@ impl VisitorFactory {
         block: BasicBlock,
     ) -> impl Visitor<'tcx> + 'c
     where
-        C: ctxtreqs::Basic<'tcx> + JumpTargetModifier,
+        C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
         LeafBasicBlockVisitor {
             call_adder: call_adder.at(Before(block)),
@@ -304,8 +343,8 @@ impl VisitorFactory {
         call_adder: &'b mut RuntimeCallAdder<C>,
     ) -> impl TerminatorKindVisitor<'tcx, ()> + 'b
     where
-        C: ctxtreqs::ForOperandRef<'tcx>
-            + ctxtreqs::ForPlaceRef<'tcx>
+        C: ctxtreqs::ForPlaceRef<'tcx>
+            + ctxtreqs::ForOperandRef<'tcx>
             + ctxtreqs::ForBranching<'tcx>
             + ctxtreqs::ForFunctionCalling<'tcx>
             + ctxtreqs::ForReturning<'tcx>,
@@ -344,7 +383,7 @@ make_general_visitor!(LeafBodyVisitor);
 
 impl<'tcx, C> Visitor<'tcx> for LeafBodyVisitor<C>
 where
-    C: ctxtreqs::Basic<'tcx> + JumpTargetModifier,
+    C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
 {
     fn visit_basic_block_data(&mut self, block: BasicBlock, data: &BasicBlockData<'tcx>) {
         if data.is_cleanup {
@@ -362,7 +401,7 @@ make_general_visitor!(LeafBasicBlockVisitor);
 
 impl<'tcx, C> Visitor<'tcx> for LeafBasicBlockVisitor<C>
 where
-    C: ctxtreqs::Basic<'tcx> + BlockIndexProvider + JumpTargetModifier,
+    C: ctxtreqs::Basic<'tcx> + BlockIndexProvider + BlockOriginalIndexProvider + JumpTargetModifier,
 {
     fn visit_statement(
         &mut self,
@@ -989,5 +1028,46 @@ impl MirSourceExt for MirSource<'_> {
                 .map(|p| format!("::promoted[{:?}]", p))
                 .unwrap_or_default()
         )
+    }
+}
+
+struct SwitchBasicBlockRecorder {
+    switch_bbs: Vec<BasicBlock>,
+    current_bb: BasicBlock,
+}
+
+impl Default for SwitchBasicBlockRecorder {
+    fn default() -> Self {
+        Self {
+            switch_bbs: Default::default(),
+            current_bb: BasicBlock::ZERO,
+        }
+    }
+}
+
+impl SwitchBasicBlockRecorder {
+    fn visit_body<'tcx>(&mut self, body: &Body<'tcx>) -> Vec<BasicBlock> {
+        for (index, block) in body.basic_blocks.iter_enumerated() {
+            self.current_bb = index;
+            self.visit_terminator_kind(&block.terminator().kind);
+        }
+        self.switch_bbs.drain(..).collect()
+    }
+}
+
+impl<'tcx> TerminatorKindVisitor<'tcx, ()> for SwitchBasicBlockRecorder {
+    fn visit_switch_int(&mut self, _discr: &Operand<'tcx>, _targets: &mir::SwitchTargets) {
+        self.switch_bbs.push(self.current_bb);
+    }
+
+    fn visit_assert(
+        &mut self,
+        _cond: &Operand<'tcx>,
+        _expected: &bool,
+        _msg: &mir::AssertMessage<'tcx>,
+        _target: &BasicBlock,
+        _unwind: &UnwindAction,
+    ) {
+        self.switch_bbs.push(self.current_bb);
     }
 }

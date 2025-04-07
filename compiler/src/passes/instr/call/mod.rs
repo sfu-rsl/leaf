@@ -256,8 +256,8 @@ pub(crate) struct RuntimeCallAdder<C> {
 }
 
 mod implementation {
-    use core::intrinsics::unlikely;
-    use std::assert_matches::debug_assert_matches;
+    use core::{assert_matches::debug_assert_matches, intrinsics::unlikely};
+    use std::collections::HashMap;
 
     use rustc_middle::mir::{self, BasicBlock, BasicBlockData, HasLocalDecls, UnevaluatedConst};
     use rustc_middle::ty::{self as mir_ty, TyKind};
@@ -374,8 +374,13 @@ mod implementation {
         pub fn in_body<'b, 'tcx, 'bd>(
             &'b mut self,
             body: &'bd Body<'tcx>,
+            block_orig_index_map: HashMap<BasicBlock, BasicBlock>,
         ) -> RuntimeCallAdder<InBodyContext<'b, 'tcx, 'bd, C>> {
-            self.with_context(|base| InBodyContext { base, body })
+            self.with_context(|base| InBodyContext {
+                base,
+                body,
+                block_orig_index_map,
+            })
         }
 
         pub fn at(
@@ -1679,7 +1684,7 @@ mod implementation {
         C: ForBranching<'tcx>,
     {
         fn store_branching_info(&mut self, discr: &Operand<'tcx>) -> SwitchInfo<'tcx> {
-            let loc_local = self.add_bb_for_basic_block_location();
+            let loc_local = self.add_bb_for_basic_block_orig_location();
             let discr_ref = self.reference_operand(discr);
 
             let (info_block, info_local) = self.make_bb_for_helper_call_with_all(
@@ -1703,12 +1708,15 @@ mod implementation {
     impl<'tcx, C> RuntimeCallAdder<C>
     where
         Self: MirCallAdder<'tcx> + BlockInserter<'tcx> + BodyProvider<'tcx>,
-        C: BaseContext<'tcx> + BlockIndexProvider,
+        C: BaseContext<'tcx> + BlockIndexProvider + BlockOriginalIndexProvider,
     {
-        fn add_bb_for_basic_block_location(&mut self) -> Local {
+        fn add_bb_for_basic_block_orig_location(&mut self) -> Local {
             let tcx = self.tcx();
             let def_id = self.body().source.def_id();
-            let bb_index = self.context.block_index();
+            let bb_index = self
+                .context
+                .block_original_index(self.context.block_index())
+                .expect("Original index is not available.");
             let (block, local) = self.make_bb_for_helper_call_with_all(
                 self.context.pri_helper_funcs().basic_block_location,
                 [],
@@ -2304,7 +2312,7 @@ mod implementation {
             };
 
             let (info_block, info_local) = {
-                let loc_local = self.add_bb_for_basic_block_location();
+                let loc_local = self.add_bb_for_basic_block_orig_location();
                 self.make_bb_for_helper_call_with_all(
                     self.context.pri_helper_funcs().assertion_info,
                     [],
@@ -3677,13 +3685,19 @@ mod implementation {
         impl<'tcx, C> ForCasting<'tcx> for C where C: CastOperandProvider + ForAssignment<'tcx> {}
 
         pub(crate) trait ForBranching<'tcx>:
-            ForInsertion<'tcx> + JumpTargetModifier
+            ForInsertion<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier
         {
         }
-        impl<'tcx, C> ForBranching<'tcx> for C where C: ForInsertion<'tcx> + JumpTargetModifier {}
+        impl<'tcx, C> ForBranching<'tcx> for C where
+            C: ForInsertion<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier
+        {
+        }
 
-        pub(crate) trait ForAssertion<'tcx>: ForOperandRef<'tcx> {}
-        impl<'tcx, C> ForAssertion<'tcx> for C where C: ForOperandRef<'tcx> {}
+        pub(crate) trait ForAssertion<'tcx>:
+            ForOperandRef<'tcx> + BlockOriginalIndexProvider
+        {
+        }
+        impl<'tcx, C> ForAssertion<'tcx> for C where C: ForOperandRef<'tcx> + BlockOriginalIndexProvider {}
 
         pub(crate) trait ForFunctionCalling<'tcx>:
             ForInsertion<'tcx> + JumpTargetModifier
