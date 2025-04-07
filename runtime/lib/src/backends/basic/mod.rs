@@ -668,19 +668,11 @@ pub(crate) struct BasicSwitchHandler<'a, EB> {
 
 impl<'a, EB> SwitchHandler for BasicSwitchHandler<'a, EB> {
     fn take(mut self, value: Self::Constant) {
-        if !self.discr.is_symbolic() {
-            return;
-        }
-
         let constraint = self.create_constraint(vec![value]);
         self.parent.notify_constraint(constraint);
     }
 
     fn take_otherwise(mut self, non_values: Vec<Self::Constant>) {
-        if !self.discr.is_symbolic() {
-            return;
-        }
-
         let constraint = self.create_constraint(non_values).not();
         self.parent.notify_constraint(constraint);
     }

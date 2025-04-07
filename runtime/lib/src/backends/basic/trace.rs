@@ -1,5 +1,5 @@
 use derive_more as dm;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use core::{
     borrow::Borrow,
@@ -409,8 +409,8 @@ mod divergence {
                 let mut vars = v
                     .borrow()
                     .variables
-                    .keys()
-                    .cloned()
+                    .iter()
+                    .map(|(id, _)| *id)
                     .collect::<Vec<SymVarId>>();
                 vars.sort();
                 vars
@@ -605,9 +605,9 @@ mod dumper {
         CList: AsRef<[Constraint<V, C>]>,
     {
         #[derive(dm::From, Serialize)]
-        struct TraceItem<'a> {
+        struct TraceItem<'a, DS: Serialize, CS: Serialize> {
             step: Indexed<&'a Step>,
-            constraint: Constraint<String, String>,
+            constraint: Constraint<DS, CS>,
         }
         match output_config {
             OutputConfig::File(cfg) => {
@@ -620,10 +620,8 @@ mod dumper {
                             .iter()
                             .map(|s| (s.borrow(), s.index()).into()),
                         constraints_view.borrow().as_ref().iter().map(|c| {
-                            c.as_ref().map(
-                                |v| v.borrow().value.to_smtlib2(),
-                                |c| c.borrow().to_smtlib2(),
-                            )
+                            c.as_ref()
+                                .map(|v| v.borrow().serializable(), |c| c.borrow().serializable())
                         }),
                     )
                     .map(TraceItem::from)

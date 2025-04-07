@@ -18,7 +18,7 @@ pub mod directed;
 #[cfg(feature = "logging")]
 pub mod logging;
 #[cfg(feature = "serde")]
-mod serdex;
+mod serdes;
 #[cfg(feature = "tyexp")]
 pub mod tyexp;
 #[cfg(feature = "z3")]
