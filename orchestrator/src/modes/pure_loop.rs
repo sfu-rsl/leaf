@@ -7,7 +7,7 @@ use std::{
     process::{self, Stdio},
 };
 
-use orchestrator::utils::stdio_from_path;
+use orchestrator::utils::{ExecutionParams, stdio_from_path};
 use sha2::{Digest, Sha256};
 
 use common::{log_debug, log_info};
@@ -109,14 +109,16 @@ fn execute_once(
     stats: &mut Statistics,
 ) -> process::Output {
     let result = execute_once_for_div_inputs(
-        program,
-        env,
-        stdio_from_path(Some(input)),
-        Stdio::null(),
-        Stdio::null(),
+        ExecutionParams::new(
+            &program,
+            env.iter().map(|(k, v)| (k.clone(), v.clone())),
+            Some(input),
+            Option::<&str>::None,
+            Option::<&str>::None,
+            core::iter::empty(),
+        ),
         next_inputs_dir,
         "next_",
-        Default::default(),
     )
     .expect("Could not execute the program");
     stats.notify_execution(result.elapsed_time);
