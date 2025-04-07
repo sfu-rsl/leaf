@@ -710,7 +710,7 @@ impl ProgramRuntimeInterface for BasicPri {
         // No-op.
     }
 
-    fn intrinsic_volatile_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, is_aligned: bool) {
+    fn intrinsic_volatile_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, _is_aligned: bool) {
         let src_ptr = take_back_operand(ptr);
         let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
             h.from_ptr(src_ptr.clone(), ptr_type_id)
