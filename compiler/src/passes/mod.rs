@@ -2,6 +2,7 @@ mod codegen;
 mod instr;
 pub(crate) mod logger;
 mod noop;
+mod p_map_exp;
 mod runtime_adder;
 pub(crate) mod tyexp;
 
@@ -28,6 +29,7 @@ pub(crate) use logger::CompilationPassLogExt;
 #[allow(unused)]
 pub(crate) use noop::NoOpPass;
 pub(crate) use noop::OverrideFlagsForcePass;
+pub(crate) use p_map_exp::ProgramMapExporter;
 pub(crate) use runtime_adder::RuntimeExternCrateAdder;
 pub(crate) use tyexp::TypeExporter;
 

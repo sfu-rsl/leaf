@@ -16,7 +16,7 @@ ignore = "0.4.22"
 build_common = { workspace = true }
 
 [dependencies]
-common = { workspace = true, features = ["tyexp", "config", "logging"] }
+common = { workspace = true, features = ["tyexp", "config", "logging", "directed"] }
 macros = { workspace = true }
 # Adding runtime flavors as dependencies, so they will be built along with the compiler.
 runtime_basic_li = { workspace = true }

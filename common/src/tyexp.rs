@@ -1,9 +1,13 @@
-use core::{fmt::Display, ops::RangeInclusive};
-use std::{collections::HashMap, error::Error, fs::OpenOptions};
+use core::ops::RangeInclusive;
+use std::{collections::HashMap, fs::OpenOptions};
 
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
-use crate::{types::*, utils::array_backed_struct, *};
+use crate::{
+    types::*,
+    utils::{StrError, array_backed_struct},
+    *,
+};
 
 pub use crate::types::{Alignment, TypeId, TypeSize};
 
@@ -159,34 +163,12 @@ type SerializedTypesData = GenericTypesData<Vec<TypeInfo>, Vec<(String, TypeId)>
 
 pub struct TypeExport;
 
-#[derive(Debug)]
-pub struct ReadError {
-    pub message: &'static str,
-    pub cause: Option<Box<dyn Error>>,
-}
-
-impl Error for ReadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.cause.as_ref().and_then(|cause| cause.source())
-    }
-}
-
-impl Display for ReadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)?;
-        if let Some(cause) = &self.cause {
-            write!(f, " Cause: {}", cause)?;
-        }
-        Ok(())
-    }
-}
-
 pub const FINAL_TYPE_EXPORT_FILE: &str = "types.json";
 
 // FIXME: Move these functions to a more appropriate place.
 // FIXME: Make this configurable and injectable.
 impl TypeExport {
-    pub fn read() -> Result<TypesData, ReadError> {
+    pub fn read() -> Result<TypesData, StrError> {
         let type_info_file_path =
             crate::utils::search_current_ancestor_dirs_for(FINAL_TYPE_EXPORT_FILE)
                 .expect("Failed to find the type info file.");
@@ -229,20 +211,17 @@ impl TypeExport {
             .expect("Failed to write types to file.");
     }
 
-    pub fn parse_exported_types(file_path: String) -> Result<SerializedTypesData, ReadError> {
-        let file = OpenOptions::new()
-            .read(true)
-            .open(file_path)
-            .map_err(|err| ReadError {
-                message: "Failed to open file for type export",
-                cause: Some(Box::new(err)),
-            })?;
+    pub fn parse_exported_types(file_path: String) -> Result<SerializedTypesData, StrError> {
+        let file =
+            OpenOptions::new()
+                .read(true)
+                .open(file_path)
+                .map_err(StrError::with_message(
+                    "Failed to open file for type export",
+                ))?;
 
-        let type_infos: SerializedTypesData =
-            serde_json::from_reader(file).map_err(|err| ReadError {
-                message: "Failed to parse types from file.",
-                cause: Some(Box::new(err)),
-            })?;
+        let type_infos: SerializedTypesData = serde_json::from_reader(file)
+            .map_err(StrError::with_message("Failed to parse types from file."))?;
         Ok(type_infos)
     }
 }

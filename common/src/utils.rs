@@ -129,6 +129,50 @@ macro_rules! array_backed_struct {
     };
 }
 pub(crate) use array_backed_struct;
+
+#[cfg(any(feature = "tyexp", feature = "directed"))]
+mod str_err {
+    use core::{error::Error, fmt::Display};
+    use std::boxed::Box;
+
+    #[derive(Debug)]
+    pub struct StrError {
+        pub message: &'static str,
+        pub cause: Option<Box<dyn Error>>,
+    }
+
+    impl StrError {
+        pub fn new(message: &'static str, cause: impl Error + 'static) -> Self {
+            Self {
+                message,
+                cause: Some(Box::new(cause)),
+            }
+        }
+
+        pub fn with_message<E: Error + 'static>(message: &'static str) -> impl FnOnce(E) -> Self {
+            move |e| Self::new(message, e)
+        }
+    }
+
+    impl Error for StrError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            self.cause.as_ref().and_then(|cause| cause.source())
+        }
+    }
+
+    impl Display for StrError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.message)?;
+            if let Some(cause) = &self.cause {
+                write!(f, " Cause: {}", cause)?;
+            }
+            Ok(())
+        }
+    }
+}
+#[cfg(any(feature = "tyexp", feature = "directed"))]
+pub(crate) use str_err::StrError;
+
 #[cfg(feature = "std")]
 pub fn comma_separated<T: core::fmt::Display>(
     iter: impl Iterator<Item = T>,

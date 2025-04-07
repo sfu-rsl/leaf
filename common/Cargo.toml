@@ -12,7 +12,9 @@ name = "leafcmn"
 std = []
 logging = ["dep:tracing"]
 serde = ["dep:serde"]
+tyexp = ["std", "serde", "dep:serde_json", "logging"]
 config = ["std", "dep:config", "logging"]
+directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std"]
 z3 = ["std", "trace_types", "dep:z3", "dep:z3-sys"]
 
@@ -23,9 +25,12 @@ derive_more = { workspace = true, default-features = false, features = [
     "full",
 ] }
 serde = { workspace = true, optional = true }
-serde_json = { version = "1.0.107", optional = true }
+serde_json = { workspace = true, optional = true }
 log = { version = "0.4.20", optional = true }
 config = { workspace = true, optional = true }
+tracing = { version = "0.1", optional = true, features = [
+    "release_max_level_info",
+] }
 z3 = { workspace = true, optional = true }
 z3-sys = { workspace = true, optional = true }
 

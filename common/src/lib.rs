@@ -13,6 +13,8 @@ use std::prelude::rust_2021::*;
 
 #[cfg(feature = "config")]
 pub mod config;
+#[cfg(feature = "directed")]
+pub mod directed;
 #[cfg(feature = "logging")]
 pub mod logging;
 #[cfg(feature = "serde")]
