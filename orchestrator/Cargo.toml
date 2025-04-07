@@ -19,6 +19,8 @@ name = "leafo_directed"
 path = "src/modes/directed/main.rs"
 edition = "2024"
 
+[build-dependencies]
+build_common = { workspace = true }
 
 [dependencies]
 common = { workspace = true, features = [

@@ -27,10 +27,14 @@ pub fn recreate_dir(dir: &Path) {
     fs::create_dir_all(dir).unwrap_or_else(|_| panic!("Failed to create {:?}", dir));
 }
 
+pub fn output_dir() -> PathBuf {
+    PathBuf::from(env::var("OUT_DIR").unwrap())
+}
+
 pub fn artifacts_path() -> PathBuf {
     /* At the moment, no cleaner way is found to get the artifacts path.
      * This is based on the default structure: target/profile/build/<crate>/out */
-    PathBuf::from(env::var("OUT_DIR").unwrap())
+    output_dir()
         .ancestors()
         .skip(3) // profile/build/<crate>/out -> profile
         .next()

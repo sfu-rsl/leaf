@@ -1,0 +1,10 @@
+.type Node = unsigned
+
+.decl Edge(u: Node, v: Node)
+.input Edge(IO=file, delimiter=",")
+
+.decl Reachable(u: Node, v: Node)
+Reachable(u, v) :- Edge(u, v).
+Reachable(u, v) :- Reachable(u, w), Reachable(w, v).
+
+.output Reachable(IO=file, delimiter=",")
