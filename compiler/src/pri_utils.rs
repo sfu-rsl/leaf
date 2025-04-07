@@ -120,6 +120,30 @@ pub mod sym {
                 intrinsic_volatile_store,
             }
 
+            pub(crate) mod mem {
+                use super::*;
+
+                #[derive(
+                    Clone, Copy, dm::Deref, Debug, dm::Display, Hash, PartialEq, Eq, PartialOrd, Ord,
+                )]
+                #[repr(transparent)]
+                pub struct LeafMemoryIntrinsicSymbol(LeafIntrinsicSymbol);
+
+                macro_rules! symbols_for_mem_intrinsics {
+                    ($($name: ident),* $(,)?) => {
+                        $(
+                            #[allow(non_upper_case_globals)]
+                            pub(crate) const $name: LeafMemoryIntrinsicSymbol = LeafMemoryIntrinsicSymbol(super::$name);
+                        )*
+                    };
+                }
+
+                symbols_for_mem_intrinsics! {
+                    intrinsic_volatile_load,
+                    intrinsic_volatile_store,
+                }
+            }
+
             pub(crate) mod atomic {
                 use super::*;
 

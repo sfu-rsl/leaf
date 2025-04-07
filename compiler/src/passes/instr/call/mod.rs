@@ -274,7 +274,9 @@ mod implementation {
 
     use crate::mir_transform::*;
     use crate::passes::Storage;
-    use crate::pri_utils::sym::intrinsics::atomic::LeafAtomicIntrinsicSymbol;
+    use crate::pri_utils::sym::intrinsics::{
+        atomic::LeafAtomicIntrinsicSymbol, mem::LeafMemoryIntrinsicSymbol,
+    };
     use crate::pri_utils::{
         FunctionInfo,
         sym::{self, LeafSymbol},
@@ -2128,11 +2130,55 @@ mod implementation {
         where
             Self: Assigner<'tcx>,
         {
-            todo!("Memory intrinsic load is not implemented yet.");
+            self.add_bb_for_memory_op_intrinsic_call(
+                // TODO: Decide the function based on volatile or not
+                sym::intrinsics::mem::intrinsic_volatile_load,
+                vec![
+                    operand::move_for_local(self.dest_ref().into()),
+                    operand::const_from_bool(self.tcx(), self.context.is_ptr_aligned()),
+                ],
+                Default::default(),
+            );
         }
 
         fn store(&mut self, val: OperandRef) {
             todo!("Memory intrinsic store is not implemented yet.");
+        }
+    }
+
+    impl<'tcx, C> RuntimeCallAdder<C>
+    where
+        Self: MirCallAdder<'tcx> + BlockInserter<'tcx>,
+        C: ForMemoryIntrinsic<'tcx>,
+    {
+        fn add_bb_for_memory_op_intrinsic_call(
+            &mut self,
+            func: LeafMemoryIntrinsicSymbol,
+            additional_args: Vec<Operand<'tcx>>,
+            additional_blocks: Vec<BasicBlockData<'tcx>>,
+        ) {
+            let mut blocks = additional_blocks;
+
+            let ptr_type_id_local = {
+                let (block, id_local) = self.make_type_id_of_bb(self.context.ptr_ty());
+                blocks.push(block);
+                id_local
+            };
+
+            let block = self.make_bb_for_call(
+                **func,
+                [
+                    vec![
+                        operand::move_for_local(self.context.ptr().into()),
+                        operand::move_for_local(ptr_type_id_local),
+                    ],
+                    additional_args,
+                ]
+                .concat(),
+            );
+            blocks.push(block);
+
+            self.insert_blocks(blocks);
         }
     }
 
@@ -3747,7 +3793,7 @@ mod implementation {
         }
 
         pub(crate) trait ForMemoryIntrinsic<'tcx>:
-        ForInsertion<'tcx> + MemoryIntrinsicParamsProvider<'tcx>
+            ForInsertion<'tcx> + MemoryIntrinsicParamsProvider<'tcx>
         {
         }
         impl<'tcx, C> ForMemoryIntrinsic<'tcx> for C where

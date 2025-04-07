@@ -249,7 +249,11 @@ mod intrinsics {
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
-        Memory(MemoryIntrinsicKind, bool),
+        Memory {
+            kind: MemoryIntrinsicKind,
+            is_ptr_aligned: bool,
+            // TODO: Add volatile
+        },
         NoOp,
         ConstEvaluated,
         Contract,
@@ -846,7 +850,10 @@ mod intrinsics {
             rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store, false),
             _ => unreachable!(),
         };
-        IntrinsicDecision::Memory(kind, is_ptr_aligned)
+        IntrinsicDecision::Memory {
+            kind,
+            is_ptr_aligned,
+        }
     }
 
     fn decide_atomic_intrinsic_call<'tcx>(intrinsic: IntrinsicDef) -> IntrinsicDecision {
@@ -907,7 +914,9 @@ mod intrinsics {
         }
     }
 }
-pub(super) use intrinsics::{AtomicIntrinsicKind, MemoryIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
+pub(super) use intrinsics::{
+    AtomicIntrinsicKind, IntrinsicDecision, MemoryIntrinsicKind, decide_intrinsic_call,
+};
 
 mod rules {
     use std::ops::DerefMut;

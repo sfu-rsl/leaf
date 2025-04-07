@@ -19,16 +19,22 @@ use common::{log_debug, log_info, log_warn};
 use std::{collections::HashSet, num::NonZeroUsize, sync::atomic};
 
 use crate::{
-    config::InstrumentationRules, mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier}, passes::{instr::call::context::PriItems, StorageExt}, pri_utils::sym::intrinsics::{self, LeafIntrinsicSymbol}, utils::mir::TyCtxtExt, visit::*
+    config::InstrumentationRules,
+    mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
+    passes::{StorageExt, instr::call::context::PriItems},
+    pri_utils::sym::intrinsics::{self, LeafIntrinsicSymbol},
+    utils::mir::TyCtxtExt,
+    visit::*,
 };
 
 use super::{CompilationPass, OverrideFlags, Storage};
 
 use call::{
     AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
-    CastAssigner, EntryFunctionHandler, FunctionHandler, MemoryIntrinsicHandler,
+    CastAssigner, EntryFunctionHandler, FunctionHandler,
     InsertionLocation::*,
-    IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
+    IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer,
+    RuntimeCallAdder,
     context::{
         AtLocationContext, BlockIndexProvider, PriItemsProvider, SourceInfoProvider,
         TyContextProvider,
@@ -589,7 +595,10 @@ where
             Atomic(ordering, kind) => {
                 self.instrument_atomic_intrinsic_call(&params, ordering, kind);
             }
-            Memory(kind, is_ptr_aligned) => {
+            Memory {
+                kind,
+                is_ptr_aligned,
+            } => {
                 // Currently, no instrumentation
                 self.instrucment_memory_intrinsic_call(&params, kind, is_ptr_aligned);
             }
@@ -649,9 +658,7 @@ where
         let mut call_adder = call_adder.assign(dest_ref, dest_ty);
         use decision::MemoryIntrinsicKind::*;
         match kind {
-            Load => {
-                call_adder.load()
-            }
+            Load => call_adder.load(),
             Store => {
                 let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
                 call_adder.store(val_ref)
