@@ -13,10 +13,14 @@ std = []
 logging = ["dep:tracing"]
 serde = ["dep:serde"]
 config = ["std", "dep:config", "logging"]
+trace_types = ["std"]
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.
 
+derive_more = { workspace = true, default-features = false, features = [
+    "full",
+] }
 serde = { workspace = true, optional = true }
 serde_json = { version = "1.0.107", optional = true }
 log = { version = "0.4.20", optional = true }

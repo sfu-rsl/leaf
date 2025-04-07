@@ -130,47 +130,6 @@ impl Display for UnaryOp {
     }
 }
 
-impl<V, C> Display for Constraint<V, C>
-where
-    V: Display,
-    C: Display,
-{
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        use ConstraintKind::*;
-        match &self.kind {
-            True => write!(f, "{{{}}}", self.discr),
-            False => write!(f, "!{{{}}}", self.discr),
-            _ => write!(f, "{{{} {}}}", self.discr, self.kind),
-        }
-    }
-}
-
-impl<C> Display for ConstraintKind<C>
-where
-    C: Display,
-{
-    fn fmt(&self, f: &mut Formatter) -> Result {
-        use ConstraintKind::*;
-        match self {
-            True => write!(f, "{}", true),
-            False => write!(f, "{}", false),
-            OneOf(options) => {
-                if options.len() == 1 {
-                    write!(f, "== {}", options[0])
-                } else {
-                    write!(f, "in {}", comma_separated(options.iter()))
-                }
-            }
-            NoneOf(options) => {
-                if options.len() == 1 {
-                    write!(f, "!= {}", options[0])
-                } else {
-                    write!(f, "!in {}", comma_separated(options.iter()))
-                }
-            }
-        }
-    }
-}
 
 impl Display for ValueType {
     fn fmt(&self, f: &mut Formatter) -> Result {

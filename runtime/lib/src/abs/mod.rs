@@ -7,6 +7,7 @@ pub(crate) mod fmt;
 pub(crate) mod place;
 
 pub(crate) use common::pri::Tag;
+pub(crate) use common::types::trace::*;
 pub(crate) use common::types::*;
 
 use core::num::NonZeroU64;
@@ -176,99 +177,6 @@ pub enum AssertKind<Operand> {
     ResumedAfterReturn(Operand), // NOTE: TODO: check if these exist in HIR only
     ResumedAfterPanic(Operand),  // NOTE: TODO: check if these exist in HIR only
     MisalignedPointerDereference { required: Operand, found: Operand },
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub(crate) struct Constraint<V, C> {
-    pub discr: V,
-    pub kind: ConstraintKind<C>,
-}
-
-impl<V, C> Constraint<V, C> {
-    pub fn equality(discr: V, value: C) -> Self {
-        Self {
-            discr,
-            kind: ConstraintKind::OneOf(vec![value]),
-        }
-    }
-
-    #[inline]
-    pub fn not(self) -> Self {
-        Self {
-            kind: self.kind.not(),
-            ..self
-        }
-    }
-
-    pub(crate) fn map<VTo, CTo>(
-        self,
-        mut f: impl FnMut(V) -> VTo,
-        g: impl FnMut(C) -> CTo,
-    ) -> Constraint<VTo, CTo> {
-        Constraint {
-            discr: f(self.discr),
-            kind: self.kind.map(g),
-        }
-    }
-
-    pub(crate) fn as_ref(&self) -> Constraint<&V, &C> {
-        Constraint {
-            discr: &self.discr,
-            kind: self.kind.as_ref(),
-        }
-    }
-}
-
-impl<V, C> Constraint<&V, &C> {
-    pub(crate) fn cloned(self) -> Constraint<V, C>
-    where
-        V: Clone,
-        C: Clone,
-    {
-        self.map(Clone::clone, Clone::clone)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub(crate) enum ConstraintKind<C> {
-    True,
-    False,
-    // FIXME: Good candidates for stack-based vectors
-    OneOf(Vec<C>),
-    NoneOf(Vec<C>),
-}
-
-impl<C> ConstraintKind<C> {
-    #[inline]
-    pub fn not(self) -> Self {
-        use ConstraintKind::*;
-        match self {
-            True => False,
-            False => True,
-            OneOf(matches) => NoneOf(matches),
-            NoneOf(options) => OneOf(options),
-        }
-    }
-
-    pub(crate) fn map<CTo>(self, f: impl FnMut(C) -> CTo) -> ConstraintKind<CTo> {
-        use ConstraintKind::*;
-        match self {
-            True => True,
-            False => False,
-            OneOf(options) => OneOf(options.into_iter().map(f).collect()),
-            NoneOf(options) => NoneOf(options.into_iter().map(f).collect()),
-        }
-    }
-
-    pub(crate) fn as_ref(&self) -> ConstraintKind<&C> {
-        use ConstraintKind::*;
-        match self {
-            True => True,
-            False => False,
-            OneOf(options) => OneOf(options.iter().collect()),
-            NoneOf(options) => NoneOf(options.iter().collect()),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, derive_more::From)]
