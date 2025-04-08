@@ -24,6 +24,7 @@ pub struct DebugInfo<I: Eq + Hash> {
 pub struct ProgramMap<I: Eq + Hash = DefId> {
     pub cfgs: HashMap<I, ControlFlowGraph>,
     pub call_graph: CallGraph<I>,
+    pub entry_points: Vec<I>,
     pub debug_info: DebugInfo<I>,
 }
 

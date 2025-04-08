@@ -14,6 +14,8 @@ pub(crate) struct ProgramMapExporter;
 
 const KEY_MAP: &str = "program_map";
 
+const FILE_OUTPUT: &str = "program_map.json";
+
 impl CompilationPass for ProgramMapExporter {
     fn override_flags() -> super::OverrideFlags {
         super::OverrideFlags::MAKE_CODEGEN_BACKEND
@@ -44,7 +46,15 @@ impl CompilationPass for ProgramMapExporter {
                 visit_and_add(&mut p_map, tcx, def_id, body);
             });
 
-        p_map.write("program_map.json").unwrap();
+        p_map.entry_points.extend(
+            tcx.entry_fn(())
+                .iter()
+                .map(|(def_id, _)| map_def_id(*def_id)),
+        );
+
+        p_map
+            .write(crate::utils::file::final_exe_dir(tcx).join(FILE_OUTPUT))
+            .expect("Failed to write program map");
     }
 }
 
