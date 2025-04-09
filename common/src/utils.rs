@@ -182,23 +182,31 @@ pub fn comma_separated<T: core::fmt::Display>(
         .join(", ")
 }
 
-#[derive(dm::Deref, dm::DerefMut)]
+#[derive(Default, dm::Deref, dm::DerefMut)]
 pub struct UnsafeSync<T>(T);
 
 impl<T> UnsafeSync<T> {
     pub const fn new(value: T) -> Self {
         Self(value)
     }
+
+    pub fn into_inner(self) -> T {
+        self.0
+    }
 }
 
 unsafe impl<T> Sync for UnsafeSync<T> {}
 
-#[derive(dm::Deref, dm::DerefMut)]
+#[derive(Default, dm::Deref, dm::DerefMut)]
 pub struct UnsafeSend<T>(T);
 
 impl<T> UnsafeSend<T> {
     pub const fn new(value: T) -> Self {
         Self(value)
+    }
+
+    pub fn into_inner(self) -> T {
+        self.0
     }
 }
 

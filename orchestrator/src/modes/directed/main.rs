@@ -1,5 +1,6 @@
 #![feature(coroutines, coroutine_trait, gen_blocks, iter_from_coroutine)]
 #![feature(iterator_try_collect)]
+#![feature(iter_collect_into)]
 
 mod reachability;
 mod solve;
@@ -11,23 +12,18 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::ExitCode,
-    u32,
 };
 
 use clap::Parser;
 use derive_more::derive::Deref;
 
 use common::{
-    directed::{DefId, ProgramMap},
-    log_debug, log_info,
-    pri::BasicBlockLocation,
-    utils::comma_separated,
+    directed::ProgramMap, log_debug, log_info, pri::BasicBlockLocation, utils::comma_separated,
 };
 
 use orchestrator::args::CommonArgs;
 use orchestrator::{utils::*, *};
 use reachability::Reachability;
-use serde::Serialize;
 use trace::{SwitchStep, SwitchTrace, TraceReader};
 use two_level::{DirectedEdge, ProgramReachability};
 
@@ -59,9 +55,18 @@ fn main() -> ExitCode {
     let reachability_cache_path = args
         .reachability
         .clone()
-        .unwrap_or_else(|| program_map_path.parent().unwrap().join("reachability.json"));
+        .unwrap_or_else(|| program_map_path.parent().unwrap().join("reachability.bin"));
 
     let (p_map, reachability) = load_preprocessed_info(&program_map_path, &reachability_cache_path);
+
+    assert!(
+        p_map
+            .cfgs
+            .get(&args.target.body)
+            .is_some_and(|cfg| cfg.contains_key(&args.target.index)),
+        "Target not found in the program map: {}",
+        args.target
+    );
 
     const NAME_FULL_TRACE: &str = "full_trace";
     const NAME_SYM_TRACE: &str = "sym_trace";
@@ -99,7 +104,7 @@ fn main() -> ExitCode {
         };
         let result = solver.satisfy_edge(&edge);
         if let Some(result) = result {
-            log_info!("Result: {:?}", result);
+            log_info!("Result: {:?}", result.0);
         } else {
             log_info!("Concrete edge: {}", edge.src.location);
         }
@@ -108,10 +113,12 @@ fn main() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+#[tracing::instrument(level = "debug")]
 fn load_preprocessed_info(
     p_map_path: &Path,
     reachability_cache_path: &Path,
 ) -> (ProgramMap, ProgramReachability) {
+    log_debug!("Loading program map");
     let p_map = ProgramMap::read(p_map_path).expect("Failed to read program map");
 
     let reachability = get_reachability(
@@ -124,87 +131,33 @@ fn load_preprocessed_info(
     (p_map, reachability)
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 fn get_reachability(
     p_map: &ProgramMap,
     cache_path: &Path,
     cache_min_valid_time: std::time::SystemTime,
 ) -> ProgramReachability {
-    // FIXME: Check only for entry-reachable functions
+    use reachability::*;
 
-    if cache_path.exists()
-        && fs::metadata(cache_path)
-            .and_then(|m| m.modified())
-            .is_ok_and(|t| t >= cache_min_valid_time)
-    {
-        if let Ok(cached) = fs::OpenOptions::new()
-            .read(true)
-            .open(cache_path)
-            .and_then(|f| serde_json::from_reader::<_, ProgramReachability>(f).map_err(Into::into))
-            .inspect_err(|e| log_debug!("Could not load reachability info: {e}"))
-        {
-            return cached;
-        }
+    if let Some(cached) = try_load_from_cache(cache_path, cache_min_valid_time) {
+        return cached;
     }
 
-    log_info!("Calculating reachability");
+    let result = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap()
+        .block_on(calc_program_reachability(p_map));
 
-    use reachability::calc_reachability;
-    let call_edges = p_map
-        .call_graph
-        .iter()
-        .flat_map(|(caller, callees)| callees.iter().map(|(_, callee)| (*caller, *callee)));
-    let call_reachability = calc_reachability(
-        call_edges,
-        |def_id| ((def_id.0 as u64) << u32::BITS) + (def_id.1 as u64),
-        |id| DefId((id >> u32::BITS) as u32, (id & (u32::MAX) as u64) as u32),
-    );
-
-    let cfg_reachability = p_map
-        .cfgs
-        .iter()
-        .map(|(def_id, cfg)| {
-            let edges = cfg
-                .iter()
-                .flat_map(|(from, targets)| targets.iter().map(|(target, _)| (*from, *target)));
-            let reachability = calc_reachability(edges, |bb| *bb as u64, |bb| bb as u32);
-            (*def_id, reachability)
-        })
-        .collect();
-
-    let result = ProgramReachability {
-        call: call_reachability,
-        cfgs: cfg_reachability,
-    };
-
-    {
-        let _ = cache_path
-            .parent()
-            .ok_or(std::io::Error::other("Invalid path"))
-            .and_then(fs::create_dir_all)
-            .and_then(|_| {
-                fs::OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .open(cache_path)
-            })
-            .and_then(|f| {
-                let mut serializer = serde_json::Serializer::new(f);
-                result.serialize(&mut serializer).map_err(Into::into)
-            })
-            .inspect_err(|e| log_debug!("Could not save reachability info: {e}"));
-    }
+    let _ = cache(cache_path, &result)
+        .inspect_err(|e| log_debug!("Could not cache reachability info: {e}"));
 
     result
 }
 
+#[tracing::instrument(level = "debug")]
 fn load_trace(full_trace_path: &Path, sym_trace_path: &Path) -> SwitchTrace {
-    log_debug!(
-        "Loading traces: {}, {}",
-        full_trace_path.display(),
-        sym_trace_path.display()
-    );
     let result = trace::new_default_trace_reader(full_trace_path, sym_trace_path).read_trace();
-    log_debug!("Trace: {}", comma_separated(result.iter()));
+    log_info!("Trace loaded with {} steps", result.len());
+    log_debug!("Trace: {}...", comma_separated(result.iter().take(10)));
     result
 }

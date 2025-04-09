@@ -1,4 +1,6 @@
-use std::{ops::Coroutine, pin::Pin};
+use std::{error::Error, ops::Coroutine, pin::Pin};
+
+use serde::{Serialize, de::DeserializeOwned};
 
 #[inline]
 pub(crate) fn from_pinned_coroutine<G: Coroutine<Return = ()>>(
@@ -19,4 +21,17 @@ pub(crate) fn from_pinned_coroutine<G: Coroutine<Return = ()>>(
     }
 
     FromCoroutine(Box::pin(coroutine))
+}
+
+pub(crate) fn cache_serialize<T: Serialize>(
+    obj: &T,
+    w: &mut impl std::io::Write,
+) -> Result<(), impl Error + 'static> {
+    bincode::serde::encode_into_std_write(obj, w, bincode::config::standard()).map(|_| {})
+}
+
+pub(crate) fn cache_deserialize<T: DeserializeOwned>(
+    r: &mut impl std::io::Read,
+) -> Result<T, impl Error + 'static> {
+    bincode::serde::decode_from_std_read(r, bincode::config::standard())
 }
