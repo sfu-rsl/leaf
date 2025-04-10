@@ -275,7 +275,7 @@ mod implementation {
     use crate::mir_transform::*;
     use crate::passes::Storage;
     use crate::pri_utils::sym::intrinsics::{
-        atomic::LeafAtomicIntrinsicSymbol, mem::LeafMemoryIntrinsicSymbol,
+        atomic::LeafAtomicIntrinsicSymbol, memory::LeafMemoryIntrinsicSymbol,
     };
     use crate::pri_utils::{
         FunctionInfo,
@@ -2132,7 +2132,7 @@ mod implementation {
         {
             self.add_bb_for_memory_op_intrinsic_call(
                 // TODO: Decide the function based on volatile or not
-                sym::intrinsics::mem::intrinsic_volatile_load,
+                sym::intrinsics::memory::intrinsic_volatile_load,
                 vec![
                     operand::move_for_local(self.dest_ref().into()),
                     operand::const_from_bool(self.tcx(), self.context.is_ptr_aligned()),
@@ -2142,7 +2142,12 @@ mod implementation {
         }
 
         fn store(&mut self, val: OperandRef) {
-            todo!("Memory intrinsic store is not implemented yet.");
+            self.add_bb_for_memory_op_intrinsic_call(
+                // TODO: Decide the function based on volatile or not
+                sym::intrinsics::memory::intrinsic_volatile_store,
+                vec![operand::move_for_local(val.into())],
+                Default::default(),
+            )
         }
     }
 
