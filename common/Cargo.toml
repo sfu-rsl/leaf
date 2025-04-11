@@ -17,6 +17,7 @@ config = ["std", "dep:config", "logging"]
 directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std"]
 z3 = ["std", "trace_types", "dep:z3", "dep:z3-sys"]
+rkyv = ["dep:rkyv"]
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.
@@ -26,6 +27,7 @@ derive_more = { workspace = true, default-features = false, features = [
 ] }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+rkyv = { workspace = true, optional = true }
 log = { version = "0.4.20", optional = true }
 config = { workspace = true, optional = true }
 tracing = { version = "0.1", optional = true, features = [

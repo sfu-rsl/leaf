@@ -17,6 +17,8 @@ pub mod config;
 pub mod directed;
 #[cfg(feature = "logging")]
 pub mod logging;
+#[cfg(feature = "rkyv")]
+mod rkyving;
 #[cfg(feature = "serde")]
 mod serdes;
 #[cfg(feature = "tyexp")]

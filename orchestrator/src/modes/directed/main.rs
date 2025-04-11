@@ -1,6 +1,8 @@
 #![feature(coroutines, coroutine_trait, gen_blocks, iter_from_coroutine)]
 #![feature(iterator_try_collect)]
 #![feature(iter_collect_into)]
+#![feature(unboxed_closures)]
+#![feature(fn_traits)]
 
 mod reachability;
 mod solve;
@@ -23,9 +25,9 @@ use common::{
 
 use orchestrator::args::CommonArgs;
 use orchestrator::{utils::*, *};
-use reachability::Reachability;
+use reachability::ProgramReachability;
 use trace::{SwitchStep, SwitchTrace, TraceReader};
-use two_level::{DirectedEdge, ProgramReachability};
+use two_level::DirectedEdge;
 
 #[derive(Parser, Debug, Deref)]
 struct Args {
@@ -117,7 +119,7 @@ fn main() -> ExitCode {
 fn load_preprocessed_info(
     p_map_path: &Path,
     reachability_cache_path: &Path,
-) -> (ProgramMap, ProgramReachability) {
+) -> (ProgramMap, impl ProgramReachability) {
     log_debug!("Loading program map");
     let p_map = ProgramMap::read(p_map_path).expect("Failed to read program map");
 
@@ -136,14 +138,16 @@ fn get_reachability(
     p_map: &ProgramMap,
     cache_path: &Path,
     cache_min_valid_time: std::time::SystemTime,
-) -> ProgramReachability {
+) -> impl ProgramReachability + use<> {
     use reachability::*;
 
     if let Some(cached) = try_load_from_cache(cache_path, cache_min_valid_time) {
         return cached;
     }
 
+    log_info!("Calculating reachabilities");
     let result = tokio::runtime::Builder::new_current_thread()
+        .enable_io()
         .build()
         .unwrap()
         .block_on(calc_program_reachability(p_map));
@@ -151,7 +155,8 @@ fn get_reachability(
     let _ = cache(cache_path, &result)
         .inspect_err(|e| log_debug!("Could not cache reachability info: {e}"));
 
-    result
+    get_reachability(p_map, cache_path, cache_min_valid_time)
+}
 }
 
 #[tracing::instrument(level = "debug")]

@@ -15,6 +15,12 @@ pub type TypeId = NonZero<u128>;
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(C)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize))]
+#[cfg_attr(feature = "rkyv",rkyv(
+    // Derives can be passed through to the generated type:
+    derive(Debug, Hash, PartialEq, Eq),
+    compare(PartialEq),
+))]
 pub struct DefId(pub u32, pub u32);
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 impl core::fmt::Display for DefId {

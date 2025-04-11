@@ -1,7 +1,6 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::borrow::Borrow;
 
 use derive_more as dm;
-use serde::{Deserialize, Serialize};
 
 use common::{
     directed::{CallGraph, ControlFlowGraph, ProgramMap},
@@ -10,16 +9,10 @@ use common::{
     types::DefId,
 };
 
-use crate::{Reachability, SwitchStep, utils::from_pinned_coroutine};
+use crate::{ProgramReachability, SwitchStep, utils::from_pinned_coroutine};
 
 type Function = DefId;
 type BasicBlock = BasicBlockIndex;
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct ProgramReachability {
-    pub call: Reachability<Function, Function>,
-    pub cfgs: HashMap<Function, Reachability<BasicBlock, BasicBlock>>,
-}
 
 #[derive(Debug, dm::From)]
 pub(crate) struct DirectedEdge<'a, M = ()> {
@@ -46,7 +39,7 @@ impl<'a> Director<'a> {
     pub(crate) fn find_edges_toward(
         &self,
         p_map: &ProgramMap,
-        reachability: &ProgramReachability,
+        reachability: &impl ProgramReachability,
         target: &BasicBlockLocation,
     ) -> impl Iterator<Item = DirectedEdge<'a>> {
         let mut trace: &'a [SwitchStep] = self.trace;
@@ -179,6 +172,11 @@ fn get_call_sites(
 }
 
 mod next {
+
+    use common::{log_warn, utils::comma_separated};
+
+    use crate::reachability::{QSet, ReachabilityBiMap};
+
     use super::*;
 
     pub(super) trait NextStepFinder {
@@ -193,17 +191,17 @@ mod next {
             S: Borrow<Self::Node>;
     }
 
-    struct CallGraphView<'a, 'b> {
+    struct CallGraphView<'a, 'b, R> {
         graph: &'a CallGraph,
-        reachability: &'b Reachability<Function>,
+        reachability: &'b R,
     }
 
-    struct ControlFlowGraphView<'a, 'b> {
+    struct ControlFlowGraphView<'a, 'b, R> {
         graph: &'a ControlFlowGraph,
-        reachability: &'b Reachability<BasicBlock>,
+        reachability: &'b R,
     }
 
-    impl NextStepFinder for CallGraphView<'_, '_> {
+    impl<R: ReachabilityBiMap<Function>> NextStepFinder for CallGraphView<'_, '_, R> {
         type Node = Function;
 
         fn next_step<'a, S>(
@@ -228,7 +226,7 @@ mod next {
                     let reachers = self.reachability.reachers(target);
                     log_trace!("Target: {}", target);
                     log_trace!("Callees: {:?}", callees);
-                    log_trace!("Reachers: {:?}", reachers);
+                    log_trace!("Reachers: {:?}", comma_separated(reachers.iter()));
                     let result = callees
                         .iter()
                         .map(|(_, c)| c)
@@ -242,7 +240,7 @@ mod next {
         }
     }
 
-    impl NextStepFinder for ControlFlowGraphView<'_, '_> {
+    impl<R: ReachabilityBiMap<BasicBlock>> NextStepFinder for Option<ControlFlowGraphView<'_, '_, R>> {
         type Node = BasicBlock;
 
         fn next_step<'a, S>(
@@ -256,19 +254,23 @@ mod next {
             from_pinned_coroutine(
                 #[coroutine]
                 move || {
+                    let Some(this) = self else {
+                        return;
+                    };
+
                     let Some(last_bb) = trace.last() else {
                         return;
                     };
 
-                    let Some(successors) = self.graph.get(last_bb.borrow()) else {
+                    let Some(successors) = this.graph.get(last_bb.borrow()) else {
                         return;
                     };
 
-                    let reachers = self.reachability.reachers(target);
+                    let reachers = this.reachability.reachers(target);
 
                     log_trace!("Target: {}", target);
                     log_trace!("Successors: {:?}", successors);
-                    log_trace!("Reachers: {:?}", reachers);
+                    log_trace!("Reachers: {:?}", comma_separated(reachers.iter()));
                     let result = successors
                         .iter()
                         .map(|(s, _)| s)
@@ -284,29 +286,33 @@ mod next {
 
     pub(super) fn make_next_fn_finder<'a, 'b>(
         p_map: &'a ProgramMap,
-        reachability: &'b ProgramReachability,
+        reachability: &'b impl ProgramReachability,
     ) -> impl NextStepFinder<Node = Function> {
         CallGraphView {
             graph: &p_map.call_graph,
-            reachability: &reachability.call,
+            reachability: reachability.fn_call(),
         }
     }
 
     pub(super) fn make_next_bb_finder<'a, 'b>(
         p_map: &'a ProgramMap,
-        reachability: &'b ProgramReachability,
+        reachability: &'b impl ProgramReachability,
         current_fn: DefId,
     ) -> impl NextStepFinder<Node = BasicBlock> {
-        ControlFlowGraphView {
-            graph: p_map
-                .cfgs
-                .get(&current_fn)
-                .expect("Could not find cfg in program map"),
-            reachability: reachability
-                .cfgs
-                .get(&current_fn)
-                .expect("Could not find cfg reachability"),
-        }
+        let Some(graph) = p_map.cfgs.get(&current_fn) else {
+            log_warn!("Missing CFG in program map: {current_fn}");
+            return None;
+        };
+
+        let Some(reachability) = reachability.cfg(current_fn) else {
+            log_warn!("Missing CFG reachability information: {current_fn}");
+            return None;
+        };
+
+        Some(ControlFlowGraphView {
+            graph,
+            reachability,
+        })
     }
 
     impl Borrow<Function> for SwitchStep {
