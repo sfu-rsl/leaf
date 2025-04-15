@@ -18,6 +18,8 @@ use libafl::{
 use libafl_bolts::{AsSlice, Named, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
 use libafl_leaf::DivergingMutator;
 
+use common::log_debug;
+
 const NAME_ORCHESTRATOR: &str = "leafo_onetime";
 
 const DIR_MUTATOR_WORK: &str = "mutator";
@@ -30,9 +32,20 @@ struct Args {
     /// Original program to test with the generated inputs, defaults to the conc_program
     #[arg(short, long)]
     program: Option<PathBuf>,
+    /// Argument to pass to the orchestrator
+    #[arg(long = "program-arg", alias = "parg", alias = "p-arg", alias = "pa")]
+    program_args: Vec<String>,
     /// Leaf's One-time orchestrator, defaults to `leafo_onetime`
     #[arg(long)]
     orchestrator: Option<PathBuf>,
+    /// Argument to pass to the orchestrator
+    #[arg(
+        long = "orchestrator-arg",
+        alias = "oarg",
+        alias = "o-arg",
+        alias = "oa"
+    )]
+    orchestrator_args: Vec<String>,
     /// The working directory to store the temporary files, e.g., mutants.
     /// Defaults to a temporary directory
     #[arg(long)]
@@ -83,6 +96,7 @@ pub fn main() {
 
     let mut executor = ProgramExecutionConfigurator {
         program: args.program.unwrap(),
+        args: args.program_args.clone(),
         timeout: Duration::from_secs(args.timeout.into()),
     }
     .into_executor(observer);
@@ -121,7 +135,9 @@ pub fn main() {
     let mutant_work_dir = get_mutator_workdir(&args.workdir);
     let mutator = DivergingMutator::new(
         &args.orchestrator.unwrap(),
+        args.orchestrator_args.clone(),
         &args.conc_program,
+        args.program_args.clone(),
         &mutant_work_dir,
     );
 
@@ -233,14 +249,18 @@ impl<EM, I: HasTargetBytes, OT, S> Feedback<EM, I, OT, S> for DistinctInputFeedb
 #[derive(Debug)]
 struct ProgramExecutionConfigurator {
     program: PathBuf,
+    args: Vec<String>,
     timeout: Duration,
 }
 
 impl CommandConfigurator<BytesInput> for ProgramExecutionConfigurator {
     fn spawn_child(&mut self, input: &BytesInput) -> Result<Child, Error> {
+        log_debug!("Executing the program to test input");
+
         let mut command = Command::new(&self.program);
 
         command
+            .args(self.args.iter())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());

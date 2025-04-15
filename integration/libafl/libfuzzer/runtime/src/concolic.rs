@@ -42,7 +42,7 @@ where
     std::fs::create_dir_all(&workdir).expect("Failed to create the work directory for mutator");
     let opt_stage = options
         .conc_program()
-        .map(|p| DivergingMutator::new(&orchestrator_path, p, &workdir))
+        .map(|p| DivergingMutator::new(&orchestrator_path, vec![], p, vec![], &workdir))
         .map(|m| NonBlockingMultiMutationalStage::new(std::borrow::Cow::Borrowed("Concolic"), m))
         .map(|s| tuple_list!(s));
     OptionalStage::new(opt_stage)
