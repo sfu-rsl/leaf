@@ -1,33 +1,31 @@
 use std::{borrow::Cow, marker::PhantomData, sync::mpsc, thread};
 
 use libafl::{
-    Error, Evaluator, HasNamedMetadata,
-    corpus::Corpus,
+    Error, Evaluator, HasMetadata, HasNamedMetadata,
+    corpus::HasCurrentCorpusId,
     mutators::MultiMutator,
     stages::{
-        RetryCountRestartHelper, Stage,
+        Restartable, RetryCountRestartHelper, Stage,
         mutational::{MutatedTransform, MutatedTransformPost},
     },
-    state::{HasCorpus, HasCurrentTestcase, HasRand, UsesState},
+    state::{HasCurrentTestcase, HasRand},
 };
 use libafl_bolts::Named;
 
 /// Performs mutations concurrently in a separate thread and offers the ones
 /// ready to be evaluated to the fuzzer.
 #[derive(Debug)]
-pub struct NonBlockingMultiMutationalStage<E, EM, I, M, Z> {
+pub struct NonBlockingMultiMutationalStage<E, EM, I, M, S, Z> {
     name: Cow<'static, str>,
     inputs: mpsc::SyncSender<I>,
     mutants: mpsc::Receiver<I>,
-    #[allow(clippy::type_complexity)]
-    _phantom: PhantomData<(E, EM, I, M, Z)>,
+    _phantom: PhantomData<(E, EM, I, M, S, Z)>,
 }
 
-impl<E, EM, M, Z> NonBlockingMultiMutationalStage<E, EM, Z::Input, M, Z>
+impl<E, EM, I, M, S, Z> NonBlockingMultiMutationalStage<E, EM, I, M, S, Z>
 where
-    Z: UsesState,
-    M: MultiMutator<Z::Input, ()> + Send + 'static,
-    Z::Input: Send + 'static,
+    M: MultiMutator<I, ()> + Send + 'static,
+    I: Send + 'static,
 {
     pub fn new(name: Cow<'static, str>, mutator: M) -> Self {
         let (inputs_sender, mutants_receiver) = Self::spawn_mutator_thread(mutator);
@@ -39,11 +37,9 @@ where
         }
     }
 
-    fn spawn_mutator_thread(
-        mut mutator: M,
-    ) -> (mpsc::SyncSender<Z::Input>, mpsc::Receiver<Z::Input>)
+    fn spawn_mutator_thread(mut mutator: M) -> (mpsc::SyncSender<I>, mpsc::Receiver<I>)
     where
-        M: MultiMutator<Z::Input, ()> + Send + 'static,
+        M: MultiMutator<I, ()> + Send + 'static,
     {
         let (inputs_sender, inputs_receiver) = mpsc::sync_channel(0);
         let (mutants_sender, mutants_receiver) = mpsc::channel();
@@ -63,48 +59,26 @@ where
     }
 }
 
-impl<E, EM, I, M, Z> UsesState for NonBlockingMultiMutationalStage<E, EM, I, M, Z>
-where
-    Z: UsesState,
-{
-    type State = Z::State;
-}
-
-impl<E, EM, I, M, Z> Named for NonBlockingMultiMutationalStage<E, EM, I, M, Z> {
+impl<E, EM, I, M, S, Z> Named for NonBlockingMultiMutationalStage<E, EM, I, M, S, Z> {
     fn name(&self) -> &Cow<'static, str> {
         &self.name
     }
 }
 
-impl<E, EM, I, M, Z> Stage<E, EM, Z> for NonBlockingMultiMutationalStage<E, EM, I, M, Z>
+// NOTE: Based on `MultiMutationalStage`
+impl<E, EM, I, M, S, Z> Stage<E, EM, S, Z> for NonBlockingMultiMutationalStage<E, EM, I, M, S, Z>
 where
-    E: UsesState<State = Self::State>,
-    EM: UsesState<State = Self::State>,
-    M: MultiMutator<I, Self::State>,
-    Z: Evaluator<E, EM>,
-    Z::State: HasCorpus + HasRand + HasNamedMetadata + HasCurrentTestcase,
-    I: MutatedTransform<Self::Input, Self::State> + Clone,
-    <<Self as UsesState>::State as HasCorpus>::Corpus: Corpus<Input = Self::Input>, //delete me
+    I: Clone + MutatedTransform<I, S>,
+    M: MultiMutator<I, S>,
+    S: HasRand + HasNamedMetadata + HasCurrentTestcase<I> + HasCurrentCorpusId,
+    Z: Evaluator<E, EM, I, S>,
 {
     #[inline]
-    fn should_restart(&mut self, state: &mut Self::State) -> Result<bool, Error> {
-        // Make sure we don't get stuck crashing on a single testcase
-        RetryCountRestartHelper::should_restart(state, self.name(), 3)
-    }
-
-    #[inline]
-    fn clear_progress(&mut self, state: &mut Self::State) -> Result<(), Error> {
-        RetryCountRestartHelper::clear_progress(state, self.name())
-    }
-
-    #[inline]
-    #[allow(clippy::let_and_return)]
-    #[allow(clippy::cast_possible_wrap)]
     fn perform(
         &mut self,
         fuzzer: &mut Z,
         executor: &mut E,
-        state: &mut Self::State,
+        state: &mut S,
         manager: &mut EM,
     ) -> Result<(), Error> {
         // Evaluate the generated mutants.
@@ -113,7 +87,7 @@ where
             for new_input in self.mutants.try_iter() {
                 let (untransformed, post) = new_input.try_transform_into(state)?;
                 let (_, corpus_id) =
-                    fuzzer.evaluate_input(state, executor, manager, untransformed)?;
+                    fuzzer.evaluate_input(state, executor, manager, &untransformed)?;
                 // FIXME: Call MultiMutator::multi_post_exec(state, corpus_id)?;
                 post.post_exec(state, corpus_id)?;
             }
@@ -136,5 +110,21 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl<E, EM, I, M, S, Z> Restartable<S> for NonBlockingMultiMutationalStage<E, EM, I, M, S, Z>
+where
+    S: HasMetadata + HasNamedMetadata + HasCurrentCorpusId,
+{
+    #[inline]
+    fn should_restart(&mut self, state: &mut S) -> Result<bool, Error> {
+        // Make sure we don't get stuck crashing on a single testcase
+        RetryCountRestartHelper::should_restart(state, &self.name, 3)
+    }
+
+    #[inline]
+    fn clear_progress(&mut self, state: &mut S) -> Result<(), Error> {
+        RetryCountRestartHelper::clear_progress(state, &self.name)
     }
 }

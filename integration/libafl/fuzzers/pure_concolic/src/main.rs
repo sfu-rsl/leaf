@@ -181,12 +181,9 @@ fn make_monitor() -> impl Monitor {
     }
 }
 
-fn is_new_or_disable<S: State + HasCurrentCorpusId + HasCurrentTestcase>(
+fn is_new_or_disable<I: Clone, S: HasCurrentCorpusId + HasCurrentTestcase<I> + HasCorpus<I>>(
     state: &mut S,
-) -> Result<bool, Error>
-where
-    <<S as HasCorpus>::Corpus as Corpus>::Input: Clone,
-{
+) -> Result<bool, Error> {
     if state.current_testcase()?.scheduled_count() > 0 {
         let testcase = state.current_testcase().unwrap().clone();
         let current_id = state.current_corpus_id().unwrap().unwrap();
@@ -217,7 +214,7 @@ impl Named for DistinctInputFeedback {
 
 impl<S> StateInitializer<S> for DistinctInputFeedback {}
 
-impl<EM, I: HasTargetBytes, OT, S: HasCorpus> Feedback<EM, I, OT, S> for DistinctInputFeedback {
+impl<EM, I: HasTargetBytes, OT, S> Feedback<EM, I, OT, S> for DistinctInputFeedback {
     fn is_interesting(
         &mut self,
         _state: &mut S,

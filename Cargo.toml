@@ -39,8 +39,8 @@ tracing = { version = "0.1", features = ["log"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 serde = { version = "1.0", features = ["derive"] }
 
-libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1", features = [
+libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2", features = [
     "std",
 ] }
-libafl_bolts = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }
-libafl_targets = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }
+libafl_bolts = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
+libafl_targets = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
