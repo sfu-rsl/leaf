@@ -2018,10 +2018,13 @@ name = "pure_concolic"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "common",
  "libafl",
  "libafl_bolts",
  "libafl_leaf",
  "sha2",
+ "tracing-log",
+ "tracing-subscriber",
 ]
 
 [[package]]

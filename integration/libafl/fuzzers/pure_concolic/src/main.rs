@@ -24,6 +24,8 @@ const NAME_ORCHESTRATOR: &str = "leafo_onetime";
 
 const DIR_MUTATOR_WORK: &str = "mutator";
 
+mod utils;
+
 #[derive(Parser, Debug)]
 struct Args {
     /// Leaf-instrumented program to perform concolic execution
@@ -54,7 +56,7 @@ struct Args {
     #[arg(long, default_value = "./artifacts")]
     artifacts_dir: PathBuf,
     /// Directories to load initial inputs from
-    #[arg(long)]
+    #[arg(long = "initial-input-dir")]
     initial_input_dirs: Vec<PathBuf>,
     #[command(flatten)]
     initial_rand_input: InitialRandInputArgs,
@@ -74,6 +76,8 @@ struct InitialRandInputArgs {
 }
 
 pub fn main() {
+    utils::init_logging();
+
     let args = process_args();
 
     let observer = ();

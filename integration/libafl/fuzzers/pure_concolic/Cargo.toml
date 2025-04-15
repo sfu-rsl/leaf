@@ -11,9 +11,13 @@ path = "src/main.rs"
 tui = ["libafl/tui_monitor"]
 
 [dependencies]
+common = { workspace = true, features = ["logging"]}
+
 libafl = { workspace = true, features = ["std", "prelude"] }
 libafl_bolts = { workspace = true }
 libafl_leaf = { workspace = true }
 
 clap = { workspace = true, features = ["derive"] }
 sha2 = "0.10.8"
+tracing-subscriber = { workspace = true }
+tracing-log = "0.2.0"
