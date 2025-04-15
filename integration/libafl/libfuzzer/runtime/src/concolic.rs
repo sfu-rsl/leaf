@@ -3,12 +3,12 @@ use std::path::PathBuf;
 use crate::options::LibfuzzerOptions;
 
 use libafl::{
-    Evaluator, HasNamedMetadata,
-    corpus::Corpus,
-    events::EventProcessor,
-    inputs::{HasMutatorBytes, Input, UsesInput},
-    stages::{HasNestedStageStatus, OptionalStage, Stage},
-    state::{HasCorpus, HasRand, State, UsesState},
+    Evaluator, HasMetadata, HasNamedMetadata,
+    corpus::HasCurrentCorpusId,
+    events::SendExiting,
+    inputs::{HasMutatorBytes, Input},
+    stages::{OptionalStage, Restartable, Stage},
+    state::{HasCorpus, HasNestedStage, HasRand, Stoppable},
 };
 use libafl_bolts::tuples::tuple_list;
 use libafl_leaf::{DivergingMutator, NonBlockingMultiMutationalStage};
@@ -17,14 +17,18 @@ const NAME_ORCHESTRATOR: &str = "leafo_onetime";
 
 pub(super) fn make_concolic_stage<I, E, EM, S, Z>(
     options: &LibfuzzerOptions,
-) -> impl Stage<E, EM, Z, State = S>
+) -> impl Stage<E, EM, S, Z> + Restartable<S>
 where
     I: Input + HasMutatorBytes + Send + Clone + 'static,
-    S: State<Input = I> + HasCorpus + HasRand + HasNamedMetadata + HasNestedStageStatus,
-    <S as HasCorpus>::Corpus: Corpus<Input = I>,
-    E: UsesState<State = S>,
-    EM: EventProcessor<E, Z> + UsesState<State = S>,
-    Z: Evaluator<E, EM> + UsesState<State = S>,
+    EM: SendExiting,
+    S: HasCorpus<I>
+        + HasCurrentCorpusId
+        + HasRand
+        + HasNamedMetadata
+        + HasMetadata
+        + HasNestedStage
+        + Stoppable,
+    Z: Evaluator<E, EM, I, S>,
 {
     let orchestrator_path = options
         .leaf_orch()
