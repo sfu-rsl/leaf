@@ -139,6 +139,7 @@ pub mod macros {
           { fn ref_operand_const_str(value: ($str_ty)) -> OperandRef }
           #[allow(unused_parens)]
           { fn ref_operand_const_byte_str(value: ($byte_str_ty)) -> OperandRef }
+          { fn ref_operand_const_addr(value: RawAddress) -> OperandRef }
           { fn ref_operand_const_zst() -> OperandRef }
           { fn ref_operand_const_some() -> OperandRef }
 
@@ -525,6 +526,8 @@ pub mod macros {
                 #[allow(unused_parens)]fn ref_operand_const_str(value:($str_ty))->OperandRef;
             }$modifier!{
                 #[allow(unused_parens)]fn ref_operand_const_byte_str(value:($byte_str_ty))->OperandRef;
+            }$modifier!{
+                fn ref_operand_const_addr(value:RawAddress)->OperandRef;
             }$modifier!{
                 fn ref_operand_const_zst()->OperandRef;
             }$modifier!{

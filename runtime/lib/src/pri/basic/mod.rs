@@ -187,6 +187,10 @@ impl ProgramRuntimeInterface for BasicPri {
         Self::push_const_operand(value)
     }
     #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
+    fn ref_operand_const_addr(value: RawAddress) -> OperandRef {
+        Self::push_const_operand(value)
+    }
+    #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
     fn ref_operand_const_zst() -> OperandRef {
         Self::push_const_operand(Constant::Zst)
     }
