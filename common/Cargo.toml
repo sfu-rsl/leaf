@@ -17,6 +17,7 @@ config = ["std", "dep:config", "logging"]
 directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std"]
 z3 = ["std", "trace_types", "dep:z3", "dep:z3-sys"]
+answers = ["std"]
 rkyv = ["dep:rkyv"]
 
 [dependencies]

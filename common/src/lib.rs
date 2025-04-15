@@ -4,6 +4,7 @@
 #![feature(const_type_id)]
 #![cfg_attr(not(core_build), feature(register_tool))]
 #![cfg_attr(not(core_build), register_tool(leaf_attr))]
+#![cfg_attr(not(core_build), feature(path_add_extension))]
 #![no_std]
 
 #[cfg(feature = "std")]
@@ -11,6 +12,8 @@ extern crate std;
 #[cfg(feature = "std")]
 use std::prelude::rust_2021::*;
 
+#[cfg(feature = "answers")]
+pub mod answers;
 #[cfg(feature = "config")]
 pub mod config;
 #[cfg(feature = "directed")]

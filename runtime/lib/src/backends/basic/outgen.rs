@@ -1,34 +1,33 @@
-use std::{
-    assert_matches::debug_assert_matches,
-    collections::HashMap,
-    io::{self, Write},
-    path::PathBuf,
-};
+use std::{assert_matches::debug_assert_matches, collections::HashMap};
 
-use common::{log_debug, log_info, log_warn};
+use common::{
+    answers::{
+        AnswersWriter, BinaryFileAnswerError, BinaryFileMultiAnswersWriter, SwitchableAnswersWriter,
+    },
+    log_warn,
+};
 
 use crate::{
     abs::IntType,
-    outgen,
     utils::file::{FileFormat, FileGenConfig},
 };
 
 use super::{config::OutputConfig, expr::prelude::*};
 
 pub(super) struct BasicOutputGenerator {
-    writers: Vec<Box<dyn AnswersWriter>>,
+    writers: Vec<Box<dyn BasicAnswersWriter>>,
 }
 
 impl BasicOutputGenerator {
     pub(super) fn new(configs: &[OutputConfig]) -> Self {
-        let mut writers = vec![Box::new(LoggingAnswersWriter) as Box<dyn AnswersWriter>];
+        let mut writers = vec![Box::new(LoggingAnswersWriter) as Box<dyn BasicAnswersWriter>];
 
         writers.extend(configs.iter().map(|c| match c {
             OutputConfig::File(file_config) => match file_config.format {
                 FileFormat::Json => todo!("Not implemented yet"),
                 FileFormat::Binary => Box::new(BinaryFileAnswersWriter::new(file_config)),
             },
-        } as Box<dyn AnswersWriter>));
+        } as Box<dyn BasicAnswersWriter>));
 
         Self { writers }
     }
@@ -40,24 +39,21 @@ impl BasicOutputGenerator {
     }
 }
 
-trait AnswersWriter {
+trait BasicAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>);
 }
 
 struct LoggingAnswersWriter;
 
-impl AnswersWriter for LoggingAnswersWriter {
+impl BasicAnswersWriter for LoggingAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>) {
-        outgen::log_json(answers.iter());
+        crate::outgen::log_json(answers.iter());
     }
 }
 
+/// A wrapper to convert [Value]s obtained from the solver to bytes.
 struct BinaryFileAnswersWriter {
-    dir_path: PathBuf,
-    counter: usize,
-    enabled: bool,
-    prefix: String,
-    extension: String,
+    inner: SwitchableAnswersWriter<BinaryFileMultiAnswersWriter>,
 }
 
 impl BinaryFileAnswersWriter {
@@ -66,89 +62,46 @@ impl BinaryFileAnswersWriter {
 
         let dir_path = config.ensure_dir().unwrap();
 
-        log_info!(
-            "Setting up binary output writing to directory: {}",
-            dir_path.display()
-        );
-        let dir_path = std::fs::canonicalize(dir_path).unwrap();
-
-        let file_ext = config.format.default_extension();
-        Self::check_out_dir(&dir_path, config.prefix.as_ref(), &file_ext);
-
         Self {
-            dir_path,
-            counter: 0,
-            enabled: true,
-            prefix: config.prefix.clone().unwrap_or_default(),
-            extension: file_ext.to_owned(),
-        }
-    }
-
-    fn write(&mut self, values: &[u8]) {
-        let path = self
-            .dir_path
-            .join(format!("{}{}", self.prefix, self.counter))
-            .with_added_extension(&self.extension);
-        log_debug!("Writing values to file: {}.", path.display());
-        let mut file = std::fs::File::create(path).unwrap();
-        file.write(&values).unwrap();
-        self.counter += 1;
-    }
-
-    fn check_out_dir(dir_path: &PathBuf, file_prefix: Option<&String>, file_ext: &str) {
-        if std::fs::read_dir(&dir_path)
-            .unwrap()
-            .filter_map(io::Result::ok)
-            .filter(|e| e.metadata().is_ok_and(|t| t.is_file()))
-            .any(|e| {
-                e.file_name().to_string_lossy().ends_with(file_ext)
-                    && file_prefix
-                        .is_none_or(|prefix| e.file_name().to_string_lossy().starts_with(prefix))
-            })
-        {
-            log_warn!(
-                "Output directory has some previous answers, which may may be overwritten: {}",
-                dir_path.display(),
-            );
+            inner: SwitchableAnswersWriter::new(BinaryFileMultiAnswersWriter::new(
+                dir_path,
+                config.prefix.clone(),
+                config.format.default_extension().to_owned(),
+                Default::default(),
+            )),
         }
     }
 }
 
-impl AnswersWriter for BinaryFileAnswersWriter {
+impl BasicAnswersWriter for BinaryFileAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>) {
-        if !self.enabled {
+        let Ok(result) = self.inner.write(answers.iter().map(|(id, v)| {
+            (
+                (id - 1) as usize,
+                TryInto::<u8>::try_into(AsRef::<Value>::as_ref(&v)).ok(),
+            )
+        })) else {
             return;
+        };
+
+        if let Err(err) = result {
+            match err {
+                BinaryFileAnswerError::Incomplete => {
+                    log_warn!("Unexpected answers format. Not all symbolic values are present.");
+                }
+                BinaryFileAnswerError::NonByte(index) => {
+                    let id = index as u32 + 1;
+                    log_warn!("Value is not a byte: {} -> {}", id, answers[&id]);
+                    log_warn!(
+                        "Not all values are bytes. Disabling binary file answers writing for this execution."
+                    );
+                    self.inner.switch(false);
+                }
+                BinaryFileAnswerError::Io(error) => {
+                    panic!("Could not write output: {error}")
+                }
+            }
         }
-
-        let mut keys = answers.keys().collect::<Vec<_>>();
-        keys.sort();
-
-        let is_complete = *keys[0] == 1 && *keys[keys.len() - 1] == keys.len() as u32;
-        if !is_complete {
-            log_warn!("Unexpected answers format. Not all symbolic values are present.");
-            return;
-        }
-
-        let bytes = keys
-            .iter()
-            .map(move |k| (k, answers.get(k).unwrap()))
-            .filter_map(|(id, v)| {
-                v.as_ref()
-                    .try_into()
-                    .inspect_err(|_| log_warn!("Value is not a byte: {} -> {}", id, v))
-                    .ok()
-            })
-            .collect::<Vec<_>>();
-
-        if bytes.len() != keys.len() {
-            log_warn!(
-                "Not all values are bytes. Disabling binary file answers writing for this execution."
-            );
-            self.enabled = false;
-            return;
-        }
-
-        self.write(&bytes)
     }
 }
 

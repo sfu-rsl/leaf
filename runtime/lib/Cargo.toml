@@ -16,6 +16,7 @@ common = { workspace = true, features = [
     "logging",
     "trace_types",
     "z3",
+    "answers",
 ] }
 leaf_macros = { path = "../../macros", package = "macros" }
 

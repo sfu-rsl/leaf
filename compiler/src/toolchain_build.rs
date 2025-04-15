@@ -257,9 +257,5 @@ fn get_unique_id(toolchain_path: &Path, target_triple: &str) -> String {
 }
 
 fn current_instant() -> String {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-        .to_string()
+    common::utils::current_instant_millis().to_string()
 }

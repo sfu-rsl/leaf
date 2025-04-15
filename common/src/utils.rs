@@ -211,3 +211,11 @@ impl<T> UnsafeSend<T> {
 }
 
 unsafe impl<T> Send for UnsafeSend<T> {}
+
+#[cfg(feature = "std")]
+pub fn current_instant_millis() -> u128 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis()
+}
