@@ -141,9 +141,13 @@ pub fn output_silence_as_path(silent: bool) -> Option<impl AsRef<Path>> {
     }
 }
 
+pub fn is_inherit(path: impl AsRef<Path>) -> bool {
+    path.as_ref().to_string_lossy() == PATH_INHERIT
+}
+
 pub fn stdio_from_path(path: Option<impl AsRef<Path>>) -> Stdio {
     if let Some(path) = path {
-        if path.as_ref().to_string_lossy() == PATH_INHERIT {
+        if is_inherit(&path) {
             Stdio::inherit()
         } else {
             Stdio::from(

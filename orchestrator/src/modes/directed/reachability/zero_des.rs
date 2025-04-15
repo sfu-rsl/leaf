@@ -91,8 +91,12 @@ impl<T: Archive> QSet<T> for ArchivedHashSet<Archived<T>>
 where
     Archived<T>: Hash + Eq + for<'a> From<&'a T>,
 {
+    fn is_empty(&self) -> bool {
+        ArchivedHashSet::is_empty(self)
+    }
+
     fn contains(&self, value: &T) -> bool {
-        self.contains(&value.into())
+        ArchivedHashSet::contains(self, &value.into())
     }
 
     fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>

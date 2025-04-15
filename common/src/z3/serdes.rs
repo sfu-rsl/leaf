@@ -156,7 +156,10 @@ fn dummy_assertion(expr: &str) -> String {
 
 fn extract_expr_from_dummy<'ctx>(ast: ast::Dynamic<'ctx>, sort: &AstNodeSort) -> AstNode<'ctx> {
     assert_eq!(ast.num_children(), 2);
-    AstNode::from_ast(ast.nth_child(0).expect("Unexpected structure"), sort)
+    AstNode::from_ast(
+        ast.nth_child(0).expect("Unexpected structure").simplify(),
+        sort,
+    )
 }
 
 unsafe fn parse_single_expr<'ctx: 'a, 'a, S: Into<Vec<u8>>>(

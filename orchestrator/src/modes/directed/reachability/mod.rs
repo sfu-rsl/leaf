@@ -9,6 +9,8 @@ use common::{
 };
 
 pub(crate) trait QSet<T> {
+    fn is_empty(&self) -> bool;
+
     fn contains(&self, value: &T) -> bool;
 
     fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
@@ -44,6 +46,10 @@ mod implementation {
     use super::*;
 
     impl<T: Eq + Hash> QSet<T> for HashSet<T> {
+        fn is_empty(&self) -> bool {
+            HashSet::is_empty(self)
+        }
+
         fn contains(&self, value: &T) -> bool {
             HashSet::contains(self, value)
         }
@@ -57,6 +63,10 @@ mod implementation {
     }
 
     impl<T: Ord> QSet<T> for BTreeSet<T> {
+        fn is_empty(&self) -> bool {
+            BTreeSet::is_empty(self)
+        }
+
         fn contains(&self, value: &T) -> bool {
             BTreeSet::contains(&self, value)
         }
@@ -70,6 +80,10 @@ mod implementation {
     }
 
     impl<T> QSet<T> for () {
+        fn is_empty(&self) -> bool {
+            true
+        }
+
         fn contains(&self, _value: &T) -> bool {
             false
         }
@@ -83,9 +97,14 @@ mod implementation {
     }
 
     impl<'x, S: QSet<T>, T> QSet<T> for &'x S {
+        fn is_empty(&self) -> bool {
+            QSet::is_empty(*self)
+        }
+
         fn contains(&self, value: &T) -> bool {
             QSet::contains(*self, value)
         }
+
         fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
         where
             T: 'a,
@@ -95,6 +114,10 @@ mod implementation {
     }
 
     impl<T> QSet<T> for &'_ dyn QSet<T> {
+        fn is_empty(&self) -> bool {
+            QSet::is_empty(*self)
+        }
+
         fn contains(&self, value: &T) -> bool {
             QSet::contains(*self, value)
         }

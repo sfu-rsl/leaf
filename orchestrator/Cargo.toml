@@ -48,4 +48,4 @@ bincode = { version = "2.0", features = ["serde"] }
 z3 = { workspace = true }
 tokio = { version = "1", features = ["io-std", "io-util", "process", "rt"] }
 futures = "0.3.31"
-rkyv = "0.8.10"
+rkyv = { workspace = true }

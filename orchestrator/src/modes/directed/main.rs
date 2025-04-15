@@ -4,6 +4,7 @@
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
 
+mod outgen;
 mod reachability;
 mod solve;
 mod trace;
@@ -12,6 +13,7 @@ mod utils;
 
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
     process::ExitCode,
 };
@@ -25,7 +27,7 @@ use common::{
 
 use orchestrator::args::CommonArgs;
 use orchestrator::{utils::*, *};
-use reachability::ProgramReachability;
+use reachability::{ProgramReachability, QSet, ReachabilityBiMap};
 use trace::{SwitchStep, SwitchTrace, TraceReader};
 use two_level::DirectedEdge;
 
@@ -62,11 +64,10 @@ fn main() -> ExitCode {
     let (p_map, reachability) = load_preprocessed_info(&program_map_path, &reachability_cache_path);
 
     assert!(
-        p_map
-            .cfgs
-            .get(&args.target.body)
-            .is_some_and(|cfg| cfg.contains_key(&args.target.index)),
-        "Target not found in the program map: {}",
+        reachability.cfg(args.target.body).is_some_and(
+            |cfg| args.target.index == 0 || !cfg.reachers(&args.target.index).is_empty()
+        ),
+        "Target not found/unreachable in the program map: {}",
         args.target
     );
 
@@ -75,11 +76,18 @@ fn main() -> ExitCode {
 
     log_info!("Executing the program");
 
+    let (input, stdin_path) = args
+        .stdin
+        .as_deref()
+        .map(|p| read_input(p).expect("Failed to read/write stdin"))
+        .map(|(input, p)| (input, Some(p)))
+        .unwrap_or_default();
+
     let result = execute_once_for_trace(
         ExecutionParams::new(
             &args.program,
             args.env.iter().cloned(),
-            args.stdin.as_deref(),
+            stdin_path,
             output_silence_as_path(args.silent),
             output_silence_as_path(args.silent),
             args.args.iter().cloned(),
@@ -97,6 +105,7 @@ fn main() -> ExitCode {
 
     let solver = solve::Solver::new(&trace);
     let director = two_level::Director::new(&trace);
+    let mut next_input_dumper = outgen::NextInputGenerator::new(&args.outdir, args.target, &input);
 
     for edge in director.find_edges_toward(&p_map, &reachability, &args.target) {
         let edge = DirectedEdge {
@@ -106,9 +115,10 @@ fn main() -> ExitCode {
         };
         let result = solver.satisfy_edge(&edge);
         if let Some(result) = result {
-            log_info!("Result: {:?}", result.0);
+            log_debug!("Result: {:?}", result.0);
+            next_input_dumper.dump_as_next_input(&result.1)
         } else {
-            log_info!("Concrete edge: {}", edge.src.location);
+            log_debug!("Concrete edge: {}", edge.src.location);
         }
     }
 
@@ -157,6 +167,26 @@ fn get_reachability(
 
     get_reachability(p_map, cache_path, cache_min_valid_time)
 }
+
+fn read_input(stdin_path: impl AsRef<Path>) -> Result<(Vec<u8>, PathBuf), std::io::Error> {
+    if is_inherit(&stdin_path) {
+        let mut contents = Vec::new();
+        std::io::stdin().read_to_end(&mut contents)?;
+        let path = std::env::temp_dir()
+            .join("leaf")
+            .join("directed")
+            .join(&format!(
+                "current_input_{}",
+                common::utils::current_instant_millis()
+            ));
+        std::fs::create_dir_all(path.parent().unwrap())?;
+        std::fs::write(&path, &contents)?;
+        Ok((contents, path))
+    } else {
+        let path = stdin_path.as_ref().to_path_buf();
+        let contents = std::fs::read(&path)?;
+        Ok((contents, path))
+    }
 }
 
 #[tracing::instrument(level = "debug")]
