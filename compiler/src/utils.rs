@@ -151,6 +151,20 @@ pub(super) mod file {
             .or_else(try_cwd)
             .or_else(try_exe_path)
     }
+
+    pub(crate) trait TyCtxtFileExt<'tcx> {
+        fn output_dir(self) -> PathBuf;
+    }
+
+    impl<'tcx> TyCtxtFileExt<'tcx> for rustc_middle::ty::TyCtxt<'tcx> {
+        fn output_dir(self) -> PathBuf {
+            self.output_filenames(())
+                .with_extension("")
+                .parent()
+                .unwrap()
+                .to_path_buf()
+        }
+    }
 }
 
 pub(crate) mod rules {

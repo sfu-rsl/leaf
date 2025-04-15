@@ -54,7 +54,8 @@ fn main() -> ExitCode {
     let program_map_path = args
         .program_map
         .clone()
-        .unwrap_or_else(|| args.program.parent().unwrap().join("program_map.json"));
+        .or_else(|| try_find_program_map(&args.program))
+        .expect("Could not find the program map file");
 
     let reachability_cache_path = args
         .reachability
@@ -123,6 +124,14 @@ fn main() -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+fn try_find_program_map(program_path: &Path) -> Option<PathBuf> {
+    use common::utils::try_join_path;
+    const NAME: &str = "program_map.json";
+
+    let program_dir = program_path.parent().unwrap();
+    try_join_path(program_dir, NAME).or_else(|| try_join_path(program_dir.join("deps"), NAME))
 }
 
 #[tracing::instrument(level = "debug")]

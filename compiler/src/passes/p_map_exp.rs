@@ -3,8 +3,10 @@ use rustc_middle::{
     ty::TyCtxt,
 };
 
-use super::{CompilationPass, Storage, StorageExt};
 use common::directed::{BasicBlockIndex, ControlFlowGraph, DefId, ProgramMap};
+
+use super::{CompilationPass, Storage, StorageExt};
+use crate::utils::file::TyCtxtFileExt;
 
 type Calls = Vec<(BasicBlockIndex, DefId)>;
 type InterestingBlocks = Vec<u32>;
@@ -53,7 +55,7 @@ impl CompilationPass for ProgramMapExporter {
         );
 
         p_map
-            .write(crate::utils::file::final_exe_dir(tcx).join(FILE_OUTPUT))
+            .write(tcx.output_dir().join(FILE_OUTPUT))
             .expect("Failed to write program map");
     }
 }

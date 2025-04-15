@@ -1,5 +1,3 @@
-use super::{CompilationPass, Storage, StorageExt};
-
 use rustc_abi::{FieldsShape, LayoutData, Scalar, TagEncoding, Variants};
 use rustc_middle::mir::{self, visit::Visitor};
 use rustc_middle::ty::layout::HasTypingEnv;
@@ -10,14 +8,16 @@ use rustc_middle::ty::{
 };
 use rustc_target::abi::{FieldIdx, Layout, VariantIdx};
 
-use common::{log_debug, log_warn};
 use std::collections::HashMap;
 use std::env::{self};
 use std::ops::DerefMut;
 
 use glob::glob;
 
-use common::tyexp::*;
+use common::{log_debug, log_warn, tyexp::*};
+
+use super::{CompilationPass, Storage, StorageExt};
+use crate::utils::file::TyCtxtFileExt;
 
 const KEY_TYPE_MAP: &str = "type_ids";
 
@@ -42,8 +42,8 @@ impl CompilationPass for TypeExporter {
         let mut type_map = capture_all_types(storage, tcx);
 
         // TODO: #379
-        let sample_file_path = tcx.output_filenames(()).with_extension(".json");
-        let out_dir = &sample_file_path.parent().unwrap();
+        // FIXME: Clean up
+        let out_dir = tcx.output_dir();
         let is_single_file_program =
             out_dir.as_os_str().is_empty() || !rustc_session::utils::was_invoked_from_cargo();
         let file_path = if is_single_file_program {
