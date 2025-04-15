@@ -29,6 +29,7 @@ common = { workspace = true, features = [
     "directed",
     "trace_types",
     "z3",
+    "answers",
     "rkyv",
 ] }
 

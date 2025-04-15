@@ -55,7 +55,7 @@ pub(crate) async fn calc_program_reachability(p_map: &ProgramMap) -> ProgramReac
     }
 }
 
-#[tracing::instrument(level = "debug", ret, skip_all)]
+#[tracing::instrument(level = "debug", skip_all)]
 fn executable_funcs(
     p_map: &ProgramMap,
     call_reachability: &ReachabilityImpl<DefId, DefId>,
