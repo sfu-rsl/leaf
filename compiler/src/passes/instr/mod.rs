@@ -600,7 +600,7 @@ where
                 is_ptr_aligned,
             } => {
                 // Currently, no instrumentation
-                self.instrucment_memory_intrinsic_call(&params, kind, is_ptr_aligned);
+                self.instrument_memory_intrinsic_call(&params, kind, is_ptr_aligned);
             }
             NoOp | ConstEvaluated | Contract => {
                 // Currently, no instrumentation
@@ -642,7 +642,7 @@ where
         }
     }
 
-    fn instrucment_memory_intrinsic_call(
+    fn instrument_memory_intrinsic_call(
         &mut self,
         params: &CallParams<'_, 'tcx>,
         kind: decision::MemoryIntrinsicKind,

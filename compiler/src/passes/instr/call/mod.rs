@@ -2182,7 +2182,10 @@ mod implementation {
             self.add_bb_for_memory_op_intrinsic_call(
                 // TODO: Decide the function based on volatile or not
                 sym::intrinsics::memory::intrinsic_volatile_store,
-                vec![operand::move_for_local(val.into())],
+                vec![
+                    operand::move_for_local(val.into()),
+                    operand::const_from_bool(self.tcx(), self.context.is_ptr_aligned()),
+                ],
                 Default::default(),
             )
         }
