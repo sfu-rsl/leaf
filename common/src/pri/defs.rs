@@ -139,6 +139,7 @@ pub mod macros {
           { fn ref_operand_const_str(value: ($str_ty)) -> OperandRef }
           #[allow(unused_parens)]
           { fn ref_operand_const_byte_str(value: ($byte_str_ty)) -> OperandRef }
+          { fn ref_operand_const_addr(value: RawAddress) -> OperandRef }
           { fn ref_operand_const_zst() -> OperandRef }
           { fn ref_operand_const_some() -> OperandRef }
 
@@ -281,6 +282,21 @@ pub mod macros {
           { fn intrinsic_assign_ctlz_nonzero(dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz(dest: PlaceRef, x: OperandRef) }
 
+          // ----- Memory -----
+          #[allow(unused_parens)]
+          { fn intrinsic_volatile_load(
+                ptr: OperandRef,
+                ptr_type_id: ($type_id_ty),
+                dest: PlaceRef,
+                is_aligned: bool,
+          ) }
+          { fn intrinsic_volatile_store(
+                ptr: OperandRef,
+                ptr_type_id: ($type_id_ty),
+                val: OperandRef,
+                is_aligned: bool,
+          ) }
+
           // All atomic operations have an ordering, majority get applied on a pointer.
           #[allow(unused_parens)]
           { fn intrinsic_atomic_load(
@@ -372,7 +388,7 @@ pub mod macros {
                     atomic_ord: $$atomic_ord_ty:ty,
                     atomic_bin_op: $atomic_bin_op_ty:ty,
                     dbg_info: $$dbg_info_ty:ty,
-                    tag: $$tag_ty:ty
+                    tag: $$tag_ty:ty,
                     $$(,)?
                 )
             ) => {
@@ -510,6 +526,8 @@ pub mod macros {
                 #[allow(unused_parens)]fn ref_operand_const_str(value:($str_ty))->OperandRef;
             }$modifier!{
                 #[allow(unused_parens)]fn ref_operand_const_byte_str(value:($byte_str_ty))->OperandRef;
+            }$modifier!{
+                fn ref_operand_const_addr(value:RawAddress)->OperandRef;
             }$modifier!{
                 fn ref_operand_const_zst()->OperandRef;
             }$modifier!{
@@ -650,6 +668,10 @@ pub mod macros {
                 #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering:($atomic_ord_ty),ptr:OperandRef,ptr_type_id:($type_id_ty),operator:($atomic_bin_op_ty),src:OperandRef,prev_dest:PlaceRef,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_volatile_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_aligned:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_volatile_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_aligned:bool,);
             }
         };
         (modifier: $modifier:path) => {

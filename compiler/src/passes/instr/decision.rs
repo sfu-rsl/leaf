@@ -249,6 +249,11 @@ mod intrinsics {
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
+        Memory {
+            kind: MemoryIntrinsicKind,
+            is_ptr_aligned: bool,
+            // TODO: Add volatile
+        },
         NoOp,
         ConstEvaluated,
         Contract,
@@ -270,6 +275,11 @@ mod intrinsics {
         Fence {
             single_thread: bool,
         },
+    }
+
+    pub(crate) enum MemoryIntrinsicKind {
+        Load,
+        Store,
     }
 
     macro_rules! of_mir_translated_funcs {
@@ -683,6 +693,17 @@ mod intrinsics {
         };
     }
 
+    macro_rules! of_memory_funcs {
+        ($macro:ident) => {
+            $macro!(
+                volatile_load,
+                volatile_store,
+                unaligned_volatile_load,
+                unaligned_volatile_store,
+            )
+        };
+    }
+
     macro_rules! of_to_be_supported_funcs {
         ($macro:ident) => {
             $macro!(
@@ -690,11 +711,7 @@ mod intrinsics {
                 vtable_align,
                 volatile_set_memory,
                 volatile_copy_nonoverlapping_memory,
-                volatile_load,
-                volatile_store,
                 volatile_copy_memory,
-                unaligned_volatile_store,
-                unaligned_volatile_load,
                 typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
@@ -771,6 +788,7 @@ mod intrinsics {
             of_simd_op_funcs,
             of_to_be_supported_funcs,
             of_one_to_one_funcs,
+            of_memory_funcs,
         );
 
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
@@ -801,6 +819,7 @@ mod intrinsics {
             other if other.as_str().starts_with("atomic") => {
                 decide_atomic_intrinsic_call(intrinsic)
             }
+            of_memory_funcs!(any_of) => decide_memory_intrinsic_call(intrinsic),
             _ => panic!("Uncovered intrinsic: {:?}", intrinsic),
         }
     }
@@ -821,6 +840,20 @@ mod intrinsics {
             _ => unreachable!(),
         };
         IntrinsicDecision::OneToOneAssign(pri_sym)
+    }
+
+    fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
+        let (kind, is_ptr_aligned) = match intrinsic.name {
+            rsym::volatile_load => (MemoryIntrinsicKind::Load, true),
+            rsym::unaligned_volatile_load => (MemoryIntrinsicKind::Load, false),
+            rsym::volatile_store => (MemoryIntrinsicKind::Store, true),
+            rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store, false),
+            _ => unreachable!(),
+        };
+        IntrinsicDecision::Memory {
+            kind,
+            is_ptr_aligned,
+        }
     }
 
     fn decide_atomic_intrinsic_call<'tcx>(intrinsic: IntrinsicDef) -> IntrinsicDecision {
@@ -881,7 +914,9 @@ mod intrinsics {
         }
     }
 }
-pub(super) use intrinsics::{AtomicIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
+pub(super) use intrinsics::{
+    AtomicIntrinsicKind, IntrinsicDecision, MemoryIntrinsicKind, decide_intrinsic_call,
+};
 
 mod rules {
     use std::ops::DerefMut;
