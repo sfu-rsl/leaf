@@ -18,7 +18,7 @@ use libafl::{
 use libafl_bolts::{AsSlice, Named, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
 use libafl_leaf::DivergingMutator;
 
-use common::log_debug;
+use ::common::log_debug;
 
 const NAME_ORCHESTRATOR: &str = "leafo_onetime";
 
@@ -139,9 +139,9 @@ pub fn main() {
     let mutant_work_dir = get_mutator_workdir(&args.workdir);
     let mutator = DivergingMutator::new(
         &args.orchestrator.unwrap(),
-        args.orchestrator_args.clone(),
+        args.orchestrator_args.clone().into_boxed_slice(),
         &args.conc_program,
-        args.program_args.clone(),
+        args.program_args.clone().into_boxed_slice(),
         &mutant_work_dir,
     );
 

@@ -14,9 +14,9 @@ use libafl_bolts::Named;
 
 pub struct DivergingMutator {
     orchestrator_path: PathBuf,
-    orchestrator_args: Vec<String>,
+    orchestrator_args: Box<[String]>,
     program_path: PathBuf,
-    program_args: Vec<String>,
+    program_args: Box<[String]>,
     work_dir: PathBuf,
     input_path: Option<PathBuf>,
     command: Option<Command>,
@@ -25,9 +25,9 @@ pub struct DivergingMutator {
 impl DivergingMutator {
     pub fn new(
         orchestrator_path: &Path,
-        orchestrator_args: Vec<String>,
+        orchestrator_args: Box<[String]>,
         program_path: &Path,
-        program_args: Vec<String>,
+        program_args: Box<[String]>,
         work_dir: &Path,
     ) -> Self {
         Self {
