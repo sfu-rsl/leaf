@@ -127,7 +127,9 @@ pub struct LibfuzzerOptions {
     runs: usize,
     close_fd_mask: u8,
     conc_program: Option<PathBuf>,
+    conc_program_args: Box<[String]>,
     leaf_orch: Option<PathBuf>,
+    leaf_orch_args: Box<[String]>,
     unknown: Vec<String>,
 }
 
@@ -237,8 +239,16 @@ impl LibfuzzerOptions {
         self.conc_program.as_deref()
     }
 
+    pub fn conc_program_args(&self) -> &[String] {
+        &self.conc_program_args
+    }
+
     pub fn leaf_orch(&self) -> Option<&Path> {
         self.leaf_orch.as_deref()
+    }
+
+    pub fn leaf_orch_args(&self) -> &[String] {
+        &self.leaf_orch_args
     }
 
     pub fn unknown(&self) -> &[String] {
@@ -271,7 +281,9 @@ struct LibfuzzerOptionsBuilder<'a> {
     runs: usize,
     close_fd_mask: u8,
     conc_program: Option<PathBuf>,
+    conc_program_args: Vec<String>,
     leaf_orch: Option<PathBuf>,
+    leaf_orch_args: Vec<String>,
     unknown: Vec<&'a str>,
 }
 
@@ -374,7 +386,9 @@ impl<'a> LibfuzzerOptionsBuilder<'a> {
                         "runs" => self.runs = parse_or_bail!(name, value, usize),
                         "close_fd_mask" => self.close_fd_mask = parse_or_bail!(name, value, u8),
                         "conc_program" => self.conc_program = Some(PathBuf::from(value)),
+                        "conc_program_arg" => self.conc_program_args.push(value.to_string()),
                         "leaf_orch" => self.leaf_orch = Some(PathBuf::from(value)),
+                        "leaf_orch_arg" => self.leaf_orch_args.push(value.to_string()),
                         _ => {
                             self.unknown.push(arg);
                         }
@@ -422,7 +436,9 @@ impl<'a> LibfuzzerOptionsBuilder<'a> {
             runs: self.runs,
             close_fd_mask: self.close_fd_mask,
             conc_program: self.conc_program,
+            conc_program_args: self.conc_program_args.into_boxed_slice(),
             leaf_orch: self.leaf_orch,
+            leaf_orch_args: self.leaf_orch_args.into_boxed_slice(),
             unknown: self.unknown.into_iter().map(ToString::to_string).collect(),
         }
     }
