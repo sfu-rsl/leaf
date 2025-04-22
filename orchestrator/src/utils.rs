@@ -7,6 +7,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use common::log_debug;
 use derive_more::{Deref, From};
 
 #[derive(Debug, Deref, From)]
@@ -55,13 +56,17 @@ pub fn execute_once_for_div_inputs(
         params,
         format!(
             r#"
-        [[outputs]]
-        type = "file"
-        directory = "{dir}"
-        format = "binary"
-        prefix = "{diverging_input_prefix}"
-        extension = ".bin"
-        "#,
+            [[exe_trace.inspectors]]
+            type = "diverging_input"
+            check_optimistic = true
+            
+            [[outputs]]
+            type = "file"
+            directory = "{dir}"
+            format = "binary"
+            prefix = "{diverging_input_prefix}"
+            extension = ".bin"
+            "#,
             dir = diverging_inputs_dir.display(),
         ),
     )
@@ -78,18 +83,18 @@ pub fn execute_once_for_trace(
         params,
         format!(
             r#"
-        [exe_trace.decisions_dump]
-        type = "file"
-        directory = "{dir}"
-        prefix = "{full_trace_filename}"
-        format = "json"
+            [exe_trace.decisions_dump]
+            type = "file"
+            directory = "{dir}"
+            prefix = "{full_trace_filename}"
+            format = "json"
 
-        [exe_trace.constraints_dump]
-        type = "file"
-        directory = "{dir}"
-        prefix = "{sym_trace_filename}"
-        format = "json"
-        "#,
+            [exe_trace.constraints_dump]
+            type = "file"
+            directory = "{dir}"
+            prefix = "{sym_trace_filename}"
+            format = "json"
+            "#,
             dir = traces_dir.display(),
         ),
     )
@@ -109,15 +114,16 @@ fn execute_once(
     const ENV_PREFIX: &str = "LEAF_";
     use common::config::{CONFIG_STR, CONFIG_STR_FORMAT};
     let (result, elapsed) = measure_time(|| {
-        Command::new(program)
-            .envs(env)
+        let mut cmd = Command::new(program);
+        cmd.envs(env)
             .env(format!("{ENV_PREFIX}{CONFIG_STR}"), config_toml)
             .env(format!("{ENV_PREFIX}{CONFIG_STR_FORMAT}"), "toml")
             .stdin(stdin)
             .stdout(stdout)
             .stderr(stderr)
-            .args(args)
-            .output()
+            .args(args);
+        log_debug!("Command for execution: {:?}", cmd);
+        cmd.output()
     });
     Ok(ExecutionOutput {
         output: result?,
@@ -145,6 +151,7 @@ pub fn is_inherit(path: impl AsRef<Path>) -> bool {
     path.as_ref().to_string_lossy() == PATH_INHERIT
 }
 
+#[tracing::instrument(level = "debug", skip_all, fields(path = path.as_ref().and_then(|p| p.as_ref().to_str())))]
 pub fn stdio_from_path(path: Option<impl AsRef<Path>>) -> Stdio {
     if let Some(path) = path {
         if is_inherit(&path) {
