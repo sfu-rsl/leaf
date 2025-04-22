@@ -19,7 +19,7 @@ use std::{
 
 use common::{
     log_debug, log_info,
-    tyexp::{FieldsShapeInfo, StructShape, TypeInfo},
+    tyexp::{FieldsShapeInfo, StructShape, TagEncodingInfo, TagInfo, TypeInfo},
 };
 use sym_vars::SymVariablesManager;
 
@@ -205,7 +205,7 @@ pub(crate) struct BasicPlaceHandler<'a> {
 impl PlaceHandler for BasicPlaceHandler<'_> {
     type PlaceInfo<'a> = Place;
     type Place = PlaceValueRef;
-    type DiscriminablePlace = TagPlaceWithInfo;
+    type DiscriminablePlace = DiscriminantPossiblePlace;
     type Operand = ValueRef;
 
     fn from_info<'a>(self, info: Self::PlaceInfo<'a>) -> Self::Place {
@@ -216,18 +216,23 @@ impl PlaceHandler for BasicPlaceHandler<'_> {
         let mut place = info;
         let type_manager: &dyn TypeManager = self.type_manager;
         let ty = type_manager.get_type(place.metadata().unwrap_type_id());
-        let tag_info = ty
-            .tag
-            .as_ref()
-            .unwrap_or_else(|| panic!("No tag info found for the type: {:?}", ty));
+        let (tag_as_field, tag_encoding) = match ty.tag.as_ref() {
+            Some(TagInfo::Constant { discr_bit_rep }) => {
+                return DiscriminantPossiblePlace::SingleVariant {
+                    discr_bit_rep: *discr_bit_rep,
+                };
+            }
+            Some(TagInfo::Regular { as_field, encoding }) => (as_field, encoding),
+            None => return DiscriminantPossiblePlace::None,
+        };
         let metadata = {
             let mut meta = PlaceMetadata::default();
             meta.set_address(
                 place
                     .address()
-                    .wrapping_byte_add(tag_info.as_field.offset as usize),
+                    .wrapping_byte_add(tag_as_field.offset as usize),
             );
-            let tag_ty = type_manager.get_type(tag_info.as_field.ty);
+            let tag_ty = type_manager.get_type(tag_as_field.ty);
             meta.set_type_id(tag_ty.id);
             if let Some(value_ty) = type_manager.try_to_value_type(tag_ty) {
                 meta.set_ty(value_ty);
@@ -237,7 +242,7 @@ impl PlaceHandler for BasicPlaceHandler<'_> {
         };
         place.add_projection(Projection::Field(0));
         place.push_metadata(metadata);
-        TagPlaceWithInfo(self.from_info(place), tag_info)
+        DiscriminantPossiblePlace::TagPlaceWithInfo(self.from_info(place), tag_encoding)
     }
 
     fn from_ptr(self, ptr: Self::Operand, ptr_type_id: TypeId) -> Self::Place {
@@ -292,7 +297,7 @@ impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
 
 impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_, EB> {
     type Place = PlaceValueRef;
-    type DiscriminablePlace = TagPlaceWithInfo;
+    type DiscriminablePlace = DiscriminantPossiblePlace;
     type Operand = ValueRef;
 
     fn use_of(mut self, operand: Self::Operand) {
@@ -365,24 +370,32 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
         self.set(result_value.into())
     }
 
-    /// # Remarks
-    /// The tag place for the basic backend should be
-    fn discriminant_from(
-        mut self,
-        TagPlaceWithInfo(tag_place, tag_info): Self::DiscriminablePlace,
-    ) {
-        let tag_value = self.vars_state.copy_place(&tag_place);
-        let discr_value = if tag_value.is_symbolic() {
-            self.build_discriminant_expr(
-                SymValueRef::new(tag_value),
-                &tag_info.encoding,
-                self.dest.type_info(),
-                tag_place.type_info(),
-            )
-            .into()
-        } else {
-            tag_value
+    fn discriminant_from(mut self, place: Self::DiscriminablePlace) {
+        let discr_value = match place {
+            DiscriminantPossiblePlace::None => {
+                // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Rvalue.html#variant.Discriminant
+                ConstValue::new_int(0_u128, self.get_int_type(self.dest.type_info())).to_value_ref()
+            }
+            DiscriminantPossiblePlace::SingleVariant { discr_bit_rep } => {
+                ConstValue::new_int(discr_bit_rep, self.get_int_type(self.dest.type_info()))
+                    .to_value_ref()
+            }
+            DiscriminantPossiblePlace::TagPlaceWithInfo(tag_place, tag_encoding) => {
+                let tag_value = self.vars_state.copy_place(&tag_place);
+                if tag_value.is_symbolic() {
+                    self.build_discriminant_expr(
+                        SymValueRef::new(tag_value),
+                        tag_encoding,
+                        self.dest.type_info(),
+                        tag_place.type_info(),
+                    )
+                    .into()
+                } else {
+                    tag_value
+                }
+            }
         };
+
         self.set(discr_value)
     }
 
@@ -524,31 +537,8 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
                 niche_value_range,
                 tag_value_start,
             } => {
-                impl ValueType {
-                    #[inline]
-                    fn expect_int(&self) -> IntType {
-                        match self {
-                            ValueType::Int(ty) => *ty,
-                            _ => {
-                                // https://doc.rust-lang.org/reference/type-layout.html#primitive-representations
-                                panic!(
-                                    "Expected the type of the tag to be a int type. Found: {:?}",
-                                    self
-                                )
-                            }
-                        }
-                    }
-                }
-
-                let get_int_type = |ty_info: &LazyTypeInfo| {
-                    self.type_manager
-                        .try_to_value_type(ty_info.clone())
-                        .expect("Expected the type of the discriminant raw value to be a primitive")
-                        .expect_int()
-                };
-
-                let discr_ty = get_int_type(discr_ty_info);
-                let tag_ty = get_int_type(tag_ty_info);
+                let discr_ty = self.get_int_type(discr_ty_info);
+                let tag_ty = self.get_int_type(tag_ty_info);
 
                 let into_tag_value = |v: u128| ConstValue::new_int(v, tag_ty).to_value_ref();
                 let into_discr_value = |v: u128| ConstValue::new_int(v, discr_ty).to_value_ref();
@@ -598,6 +588,29 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
                 SymValueRef::new(discr_value)
             }
         }
+    }
+
+    fn get_int_type(&self, ty_info: &LazyTypeInfo) -> IntType {
+        impl ValueType {
+            #[inline]
+            fn expect_int(&self) -> IntType {
+                match self {
+                    ValueType::Int(ty) => *ty,
+                    _ => {
+                        // https://doc.rust-lang.org/reference/type-layout.html#primitive-representations
+                        panic!(
+                            "Expected the type of the tag to be a int type. Found: {:?}",
+                            self
+                        )
+                    }
+                }
+            }
+        }
+
+        self.type_manager
+            .try_to_value_type(ty_info.clone())
+            .expect("Expected the type of the discriminant raw value to be a primitive")
+            .expect_int()
     }
 }
 
@@ -883,7 +896,11 @@ impl Shutdown for BasicBackend {
 
 type Constraint = crate::abs::Constraint<ValueRef, ConstValue>;
 
-pub(crate) struct TagPlaceWithInfo(PlaceValueRef, &'static common::tyexp::TagInfo);
+pub(crate) enum DiscriminantPossiblePlace {
+    None,
+    SingleVariant { discr_bit_rep: u128 },
+    TagPlaceWithInfo(PlaceValueRef, &'static TagEncodingInfo),
+}
 
 trait GenericVariablesState {
     type PlaceInfo = Place;

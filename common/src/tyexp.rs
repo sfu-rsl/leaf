@@ -75,9 +75,14 @@ pub struct FieldInfo {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TagInfo {
-    pub as_field: FieldInfo,
-    pub encoding: TagEncodingInfo,
+pub enum TagInfo {
+    Constant {
+        discr_bit_rep: u128,
+    },
+    Regular {
+        as_field: FieldInfo,
+        encoding: TagEncodingInfo,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

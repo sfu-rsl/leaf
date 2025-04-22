@@ -260,7 +260,16 @@ where
 
         let (variants, tag) = match &self.variants {
             Variants::Empty => (vec![], None),
-            Variants::Single { .. } => (vec![self.0.to_runtime(cx, ty_layout)], None),
+            Variants::Single { index, .. } => (
+                vec![self.0.to_runtime(cx, ty_layout)],
+                if ty.is_enum() {
+                    Some(TagInfo::Constant {
+                        discr_bit_rep: ty.discriminant_for_variant(tcx, *index).unwrap().val,
+                    })
+                } else {
+                    None
+                },
+            ),
             Variants::Multiple {
                 variants,
                 tag,
@@ -324,7 +333,7 @@ where
     {
         let (tag, encoding, field) = self;
         log_debug!(target: TAG_TYPE_EXPORT, "Tag info: {:?}, {:?}, {:?} ", tag, encoding, field);
-        TagInfo {
+        TagInfo::Regular {
             as_field: to_field_info(ty_layout, cx, FieldIdx::from_usize(*field)),
             encoding: encoding.to_runtime(cx, ()),
         }
