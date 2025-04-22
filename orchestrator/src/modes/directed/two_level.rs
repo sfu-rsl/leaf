@@ -59,19 +59,33 @@ impl<'a> Director<'a> {
                     let next_bb_finder = make_next_bb_finder(p_map, reachability, current_fn);
 
                     if current_fn == target_fn {
-                        for edge in search_intra(&next_bb_finder, intra_trace, &target.index) {
+                        for edge in search_intra(&next_bb_finder, intra_trace, target.index) {
                             yield edge;
                         }
                     }
 
-                    // We'll do it anyway because of recursive functions.
+                    // We'll do it anyway because of recursive (target) functions.
                     for next_fn in next_fn_finder.next_step(&fn_trace, &target_fn) {
                         log_trace!("Next function: {}", next_fn);
 
                         for call_site in get_call_sites(&p_map.call_graph, &current_fn, &next_fn) {
-                            for edge in search_intra(&next_bb_finder, intra_trace, &call_site) {
+                            for edge in search_intra(&next_bb_finder, intra_trace, call_site) {
                                 yield edge;
                             }
+                        }
+                    }
+
+                    /* All return points are conservatively considered local targets.
+                     * There is an implicit edge from the current function to its caller.
+                     * If the caller can possibly reach the target, the return points can reach it.
+                     * This implicit edge is transitive for all the parent callers. Thus the above
+                     * condition will be "If one of the callers ...". The entry point will be among
+                     * the parent callers, thus the condition always hold and we don't check it.
+                     * NOTE: We can do better based on whether the dependency on the return value.
+                     */
+                    for ret_point in get_return_points(p_map, &current_fn) {
+                        for edge in search_intra(&next_bb_finder, intra_trace, ret_point) {
+                            yield edge;
                         }
                     }
 
@@ -83,20 +97,20 @@ impl<'a> Director<'a> {
     }
 }
 
-fn search_intra<'a>(
-    next_bb_finder: &impl NextStepFinder<Node = BasicBlock>,
-    mut trace: &'a [SwitchStep],
-    target: &u32,
-) -> impl Iterator<Item = DirectedEdge<'a>> {
-    core::iter::from_coroutine(
+fn search_intra<'a, 'b, F: NextStepFinder<Node = BasicBlock>>(
+    next_bb_finder: &'a F,
+    mut trace: &'b [SwitchStep],
+    target: BasicBlock,
+) -> impl Iterator<Item = DirectedEdge<'b>> + use<'a, 'b, F> {
+    from_pinned_coroutine(
         #[coroutine]
-        move || {
+        static move || {
             let mut back_taken_step: Option<BasicBlock> = None;
             while let Some(current) = trace.last() {
                 log_trace!("Current bb: {}", current.location.index);
 
-                for next_bb in next_bb_finder.next_step(&trace, target) {
-                    if back_taken_step.is_some_and(|s| s == next_bb || s == *target) {
+                for next_bb in next_bb_finder.next_step(&trace, &target) {
+                    if back_taken_step.is_some_and(|s| s == next_bb || s == target) {
                         log_trace!("Skipping back taken step");
                         continue;
                     }
@@ -171,6 +185,21 @@ fn get_call_sites(
     )
 }
 
+fn get_return_points(p_map: &ProgramMap, func: &Function) -> impl Iterator<Item = BasicBlock> {
+    core::iter::from_coroutine(
+        #[coroutine]
+        move || {
+            let Some(ret_points) = p_map.ret_points.get(func) else {
+                return;
+            };
+
+            for bb in ret_points {
+                yield *bb;
+            }
+        },
+    )
+}
+
 mod next {
 
     use common::{log_warn, utils::comma_separated};
@@ -196,7 +225,7 @@ mod next {
         reachability: &'b R,
     }
 
-    struct ControlFlowGraphView<'a, 'b, R> {
+    struct BodyView<'a, 'b, R> {
         graph: &'a ControlFlowGraph,
         reachability: &'b R,
     }
@@ -240,7 +269,7 @@ mod next {
         }
     }
 
-    impl<R: ReachabilityBiMap<BasicBlock>> NextStepFinder for Option<ControlFlowGraphView<'_, '_, R>> {
+    impl<R: ReachabilityBiMap<BasicBlock>> NextStepFinder for Option<BodyView<'_, '_, R>> {
         type Node = BasicBlock;
 
         fn next_step<'a, S>(
@@ -309,7 +338,7 @@ mod next {
             return None;
         };
 
-        Some(ControlFlowGraphView {
+        Some(BodyView {
             graph,
             reachability,
         })

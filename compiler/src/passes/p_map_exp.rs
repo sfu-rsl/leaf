@@ -1,15 +1,15 @@
 use rustc_middle::{
-    mir::{Body, HasLocalDecls},
+    mir::{BasicBlock, Body, HasLocalDecls},
     ty::TyCtxt,
 };
 
-use common::directed::{BasicBlockIndex, ControlFlowGraph, DefId, ProgramMap};
+use common::directed::{BasicBlockIndex, CfgEdgeDestination, ControlFlowGraph, DefId, ProgramMap};
 
-use super::{CompilationPass, Storage, StorageExt};
+use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
 use crate::utils::file::TyCtxtFileExt;
 
 type Calls = Vec<(BasicBlockIndex, DefId)>;
-type InterestingBlocks = Vec<u32>;
+type ReturnPoints = Vec<BasicBlockIndex>;
 
 #[derive(Default)]
 pub(crate) struct ProgramMapExporter;
@@ -20,7 +20,10 @@ const FILE_OUTPUT: &str = "program_map.json";
 
 impl CompilationPass for ProgramMapExporter {
     fn override_flags() -> super::OverrideFlags {
-        super::OverrideFlags::MAKE_CODEGEN_BACKEND
+        OverrideFlags::OPTIMIZED_MIR
+            | OverrideFlags::EXTERN_OPTIMIZED_MIR
+            | OverrideFlags::MIR_SHIMS
+            | OverrideFlags::MAKE_CODEGEN_BACKEND
     }
 
     fn visit_mir_body_before<'tcx>(
@@ -73,7 +76,8 @@ fn visit_and_add<'tcx>(
 
     let data = visit_body(tcx, &body);
     p_map.cfgs.insert(key, data.0);
-    p_map.call_graph.insert(key, data.1);
+    p_map.ret_points.insert(key, data.1);
+    p_map.call_graph.insert(key, data.2);
     p_map
         .debug_info
         .func_names
@@ -83,13 +87,36 @@ fn visit_and_add<'tcx>(
 fn visit_body<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &Body<'tcx>,
-) -> (ControlFlowGraph, Calls, InterestingBlocks) {
+) -> (ControlFlowGraph, ReturnPoints, Calls) {
     let mut cfg = ControlFlowGraph::new();
+    let mut ret_points = Vec::new();
     let mut calls = Calls::new();
-    let mut interesting_blocks = InterestingBlocks::new();
+
+    let first_cfg_affecting_starting = |bb: BasicBlock| {
+        let mut current = bb;
+        while let Some(next) = body.basic_blocks[current]
+            .terminator
+            .as_ref()
+            .and_then(|t| t.kind.as_goto())
+        {
+            current = next;
+        }
+        current
+    };
 
     for (index, block) in body.basic_blocks.iter_enumerated() {
         use rustc_middle::mir::TerminatorKind::*;
+
+        let mut insert_to_cfg = |targets: Vec<CfgEdgeDestination>| {
+            cfg.insert(
+                index.as_u32(),
+                targets
+                    .into_iter()
+                    .map(|(bb, c)| (first_cfg_affecting_starting(bb.into()).as_u32(), c))
+                    .collect(),
+            );
+        };
+
         match &block.terminator().kind {
             FalseEdge {
                 real_target: target,
@@ -100,7 +127,7 @@ fn visit_body<'tcx>(
                 unwind: _,
             }
             | Goto { target } => {
-                cfg.insert(index.as_u32(), vec![(target.as_u32(), None)]);
+                insert_to_cfg(vec![(target.as_u32(), None)]);
             }
             SwitchInt { discr: _, targets } => {
                 let mut successors: Vec<(u32, Option<(usize, Option<u128>)>)> = Vec::new();
@@ -110,9 +137,10 @@ fn visit_body<'tcx>(
                 if !body.basic_blocks[targets.otherwise()].is_empty_unreachable() {
                     successors.push((targets.otherwise().as_u32(), Some((usize::MAX, None))));
                 }
-                cfg.insert(index.as_u32(), successors);
+                insert_to_cfg(successors);
             }
-            UnwindResume | UnwindTerminate(_) | Return | Unreachable | CoroutineDrop => {}
+            Return => ret_points.push(index.as_u32()),
+            UnwindResume | UnwindTerminate(_) | Unreachable | CoroutineDrop => {}
             Drop {
                 target, unwind: _, ..
             }
@@ -120,15 +148,9 @@ fn visit_body<'tcx>(
                 target, unwind: _, ..
             } => {
                 // TODO: Handle unwind
-                cfg.insert(index.as_u32(), vec![(target.as_u32(), None)]);
+                insert_to_cfg(vec![(target.as_u32(), None)]);
             }
-            Call {
-                func,
-                destination,
-                target,
-                ..
-            } => {
-                let is_never = destination.ty(body, tcx).ty.is_never();
+            Call { func, target, .. } => {
                 use rustc_type_ir::TyKind::*;
                 match func.ty(body.local_decls(), tcx).kind() {
                     FnDef(def_id, ..)
@@ -143,15 +165,10 @@ fn visit_body<'tcx>(
                     _ => {}
                 }
                 if let Some(target) = target {
-                    cfg.insert(index.as_u32(), vec![(target.as_u32(), None)]);
-                }
-                if is_never || target.is_none() {
-                    interesting_blocks.push(index.as_u32())
+                    insert_to_cfg(vec![(target.as_u32(), None)]);
                 }
             }
             TailCall { func, .. } => {
-                // let is_never = destination.ty(body, tcx).ty.is_never();
-                let is_never = false; // TODO
                 use rustc_type_ir::TyKind::*;
                 match func.ty(body.local_decls(), tcx).kind() {
                     FnDef(def_id, ..)
@@ -165,23 +182,20 @@ fn visit_body<'tcx>(
                     }
                     _ => {}
                 }
-                if is_never {
-                    interesting_blocks.push(index.as_u32())
-                }
             }
             Yield { resume, .. } => {
-                cfg.insert(index.as_u32(), vec![(resume.as_u32(), None)]);
+                insert_to_cfg(vec![(resume.as_u32(), None)]);
             }
 
             InlineAsm { targets, .. } => {
                 // TODO: Handle unwind
                 for target in targets.iter() {
-                    cfg.insert(index.as_u32(), vec![(target.as_u32(), None)]);
+                    insert_to_cfg(vec![(target.as_u32(), None)]);
                 }
             }
         }
     }
-    (cfg, calls, interesting_blocks)
+    (cfg, ret_points, calls)
 }
 
 fn map_def_id(def_id: rustc_hir::def_id::DefId) -> DefId {

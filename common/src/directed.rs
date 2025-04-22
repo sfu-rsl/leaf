@@ -23,6 +23,7 @@ pub struct DebugInfo<I: Eq + Hash> {
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct ProgramMap<I: Eq + Hash = DefId> {
     pub cfgs: HashMap<I, ControlFlowGraph>,
+    pub ret_points: HashMap<I, Vec<BasicBlockIndex>>,
     pub call_graph: CallGraph<I>,
     pub entry_points: Vec<I>,
     pub debug_info: DebugInfo<I>,
