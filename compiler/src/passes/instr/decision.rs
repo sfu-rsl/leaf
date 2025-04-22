@@ -251,7 +251,6 @@ mod intrinsics {
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
         Memory {
             kind: MemoryIntrinsicKind,
-            is_ptr_aligned: bool,
             is_volatile: bool,
         },
         NoOp,
@@ -278,8 +277,13 @@ mod intrinsics {
     }
 
     pub(crate) enum MemoryIntrinsicKind {
-        Load,
-        Store,
+        Load {
+            is_ptr_aligned: bool,
+        },
+        Store {
+            is_ptr_aligned: bool,
+        },
+        Copy,
     }
 
     macro_rules! of_mir_translated_funcs {
@@ -700,6 +704,10 @@ mod intrinsics {
                 volatile_store,
                 unaligned_volatile_load,
                 unaligned_volatile_store,
+                copy,
+                copy_nonoverlapping,
+                volatile_copy_nonoverlapping_memory,
+                volatile_copy_memory,
             )
         };
     }
@@ -710,8 +718,6 @@ mod intrinsics {
                 vtable_size,
                 vtable_align,
                 volatile_set_memory,
-                volatile_copy_nonoverlapping_memory,
-                volatile_copy_memory,
                 typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
@@ -725,8 +731,6 @@ mod intrinsics {
                 abort,
                 drop_in_place,
                 write_bytes,
-                copy,
-                copy_nonoverlapping,
                 size_of_val,
                 is_val_statically_known,
                 arith_offset,
@@ -843,16 +847,23 @@ mod intrinsics {
     }
 
     fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
-        let (kind, is_ptr_aligned, is_volatile) = match intrinsic.name {
-            rsym::volatile_load => (MemoryIntrinsicKind::Load, true, true),
-            rsym::unaligned_volatile_load => (MemoryIntrinsicKind::Load, false, true),
-            rsym::volatile_store => (MemoryIntrinsicKind::Store, true, true),
-            rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store, false, true),
+        let (kind, is_volatile) = match intrinsic.name {
+            rsym::volatile_load => (MemoryIntrinsicKind::Load {
+                is_ptr_aligned: true,
+            }, true),
+            rsym::unaligned_volatile_load => (MemoryIntrinsicKind::Load {
+                is_ptr_aligned: false,
+            }, true),
+            rsym::volatile_store => (MemoryIntrinsicKind::Store {
+                is_ptr_aligned: true,
+            }, true),
+            rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store {
+                is_ptr_aligned: false,
+            }, true),
             _ => unreachable!(),
         };
         IntrinsicDecision::Memory {
             kind,
-            is_ptr_aligned,
             is_volatile,
         }
     }

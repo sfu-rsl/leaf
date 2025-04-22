@@ -671,9 +671,9 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_aligned:bool,is_volatile:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_volatile:bool,is_aligned:bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_aligned:bool,is_volatile:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
             }
         };
         (modifier: $modifier:path) => {

@@ -72,7 +72,6 @@ pub(crate) trait AtomicIntrinsicParamsProvider<'tcx> {
 }
 
 pub(crate) trait MemoryIntrinsicParamsProvider<'tcx> {
-    fn is_ptr_aligned(&self) -> bool;
     fn is_volatile(&self) -> bool;
     fn ptr(&self) -> OperandRef;
     fn ptr_ty(&self) -> Ty<'tcx>;
@@ -323,16 +322,11 @@ impl<'tcx, B> SwitchInfoProvider<'tcx> for BranchingContext<'_, 'tcx, B> {
 
 pub(crate) struct MemoryIntrinsicContext<'b, 'tcx, B> {
     pub(super) base: &'b mut B,
-    pub(super) is_ptr_aligned: bool,
     pub(super) is_volatile: bool,
     pub(super) ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
 }
 
 impl<'tcx, B> MemoryIntrinsicParamsProvider<'tcx> for MemoryIntrinsicContext<'_, 'tcx, B> {
-    fn is_ptr_aligned(&self) -> bool {
-        self.is_ptr_aligned
-    }
-
     fn is_volatile(&self) -> bool {
         self.is_volatile
     }
@@ -544,7 +538,6 @@ make_impl_macro! {
     impl_memory_intrinsic_params_provider,
     MemoryIntrinsicParamsProvider<'tcx>,
     self,
-    fn is_ptr_aligned(&self) -> bool;
     fn is_volatile(&self) -> bool;
     fn ptr(&self) -> OperandRef;
     fn ptr_ty(&self) -> Ty<'tcx>;
