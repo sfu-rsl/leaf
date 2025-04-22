@@ -3,7 +3,7 @@ use std::{
     borrow::Cow,
     collections::HashSet,
     io::Write,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
     time::Duration,
 };
@@ -55,6 +55,10 @@ struct Args {
     /// The directory to store the artifacts, e.g., crashes
     #[arg(long, default_value = "./artifacts")]
     artifacts_dir: PathBuf,
+    /// The directory to store the corpus.
+    /// Defaults to `workdir/corpus`.
+    #[arg(long)]
+    corpus_dir: Option<PathBuf>,
     /// Directories to load initial inputs from
     #[arg(long = "initial-input-dir")]
     initial_input_dirs: Vec<PathBuf>,
@@ -87,7 +91,12 @@ pub fn main() {
 
     let mut state = StdState::new(
         StdRand::with_seed(current_nanos()),
-        InMemoryCorpus::new(),
+        InMemoryOnDiskCorpus::new(
+            args.corpus_dir
+                .clone()
+                .unwrap_or_else(|| args.workdir.as_ref().unwrap().join("corpus")),
+        )
+        .unwrap(),
         OnDiskCorpus::new(args.artifacts_dir.join("crashes")).unwrap(),
         &mut feedback,
         &mut objective,
@@ -136,7 +145,7 @@ pub fn main() {
     };
     load_initial_inputs();
 
-    let mutant_work_dir = get_mutator_workdir(&args.workdir);
+    let mutant_work_dir = get_mutator_workdir(args.workdir.as_ref().unwrap());
     let mutator = DivergingMutator::new(
         &args.orchestrator.unwrap(),
         args.orchestrator_args.clone().into_boxed_slice(),
@@ -171,14 +180,13 @@ fn process_args() -> Args {
     args.program.get_or_insert(args.conc_program.clone());
     args.orchestrator
         .get_or_insert_with(|| PathBuf::from(NAME_ORCHESTRATOR));
+    args.workdir
+        .get_or_insert(std::env::temp_dir().join("leaf").join("pure_concolic"));
     args
 }
 
-fn get_mutator_workdir(arg_workdir: &Option<PathBuf>) -> PathBuf {
-    let path = arg_workdir
-        .clone()
-        .unwrap_or_else(|| std::env::temp_dir().join("leaf").join("pure_concolic"))
-        .join(DIR_MUTATOR_WORK);
+fn get_mutator_workdir(arg_workdir: &Path) -> PathBuf {
+    let path = arg_workdir.join(DIR_MUTATOR_WORK);
     std::fs::create_dir_all(&path).expect("Failed to create the work directory for mutator");
     path
 }
