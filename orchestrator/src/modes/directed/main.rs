@@ -3,6 +3,7 @@
 #![feature(iter_collect_into)]
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
+#![feature(exit_status_error)]
 
 mod outgen;
 mod reachability;
@@ -27,6 +28,7 @@ use common::{
 
 use orchestrator::args::CommonArgs;
 use orchestrator::{utils::*, *};
+use outgen::NextInputGenerator;
 use reachability::{ProgramReachability, QSet, ReachabilityBiMap};
 use trace::{SwitchStep, SwitchTrace, TraceReader};
 use two_level::DirectedEdge;
@@ -49,9 +51,33 @@ fn main() -> ExitCode {
 
     let args = Args::parse();
 
+    let (p_map, reachability) = load_preprocessed_info(&args);
+
+    assert_target_is_reachable(&reachability, &args.target);
+
+    log_info!("Executing the program");
+    let (input, stdin_path) = prepare_input(&args.stdin);
+    let trace = match execute_and_load_trace(&args, stdin_path) {
+        Ok(value) => value,
+        Err(value) => return value,
+    };
+
+    let solver = solve::Solver::new(&trace);
+    let director = two_level::Director::new(&trace);
+    let mut next_input_dumper = NextInputGenerator::new(&args.outdir, args.target, &input);
+
+    for edge in director.find_edges_toward(&p_map, &reachability, &args.target) {
+        process_edge(&p_map, &solver, &mut next_input_dumper, edge);
+    }
+
+    ExitCode::SUCCESS
+}
+
+#[tracing::instrument(level = "debug")]
+fn load_preprocessed_info(args: &Args) -> (ProgramMap, impl ProgramReachability) {
     log_info!("Loading pre-processed information about the program");
 
-    let program_map_path = args
+    let p_map_path = args
         .program_map
         .clone()
         .or_else(|| try_find_program_map(&args.program))
@@ -60,70 +86,19 @@ fn main() -> ExitCode {
     let reachability_cache_path = args
         .reachability
         .clone()
-        .unwrap_or_else(|| program_map_path.parent().unwrap().join("reachability.bin"));
+        .unwrap_or_else(|| p_map_path.parent().unwrap().join("reachability.bin"));
 
-    let (p_map, reachability) = load_preprocessed_info(&program_map_path, &reachability_cache_path);
+    log_debug!("Loading program map");
+    let p_map = ProgramMap::read(&p_map_path).expect("Failed to read program map");
 
-    assert!(
-        reachability.cfg(args.target.body).is_some_and(
-            |cfg| args.target.index == 0 || !cfg.reachers(&args.target.index).is_empty()
-        ),
-        "Target not found/unreachable in the program map: {}",
-        args.target
+    let reachability = get_reachability(
+        &p_map,
+        &reachability_cache_path,
+        fs::metadata(p_map_path)
+            .and_then(|m| m.modified())
+            .unwrap_or(std::time::SystemTime::now()),
     );
-
-    const NAME_FULL_TRACE: &str = "full_trace";
-    const NAME_SYM_TRACE: &str = "sym_trace";
-
-    log_info!("Executing the program");
-
-    let (input, stdin_path) = args
-        .stdin
-        .as_deref()
-        .map(|p| read_input(p).expect("Failed to read/write stdin"))
-        .map(|(input, p)| (input, Some(p)))
-        .unwrap_or_default();
-
-    let result = execute_once_for_trace(
-        ExecutionParams::new(
-            &args.program,
-            args.env.iter().cloned(),
-            stdin_path,
-            output_silence_as_path(args.silent),
-            output_silence_as_path(args.silent),
-            args.args.iter().cloned(),
-        ),
-        &args.outdir,
-        NAME_FULL_TRACE,
-        NAME_SYM_TRACE,
-    )
-    .expect("Failed to execute the program");
-
-    let trace = load_trace(
-        &args.outdir.join(NAME_FULL_TRACE).with_extension("json"),
-        &args.outdir.join(NAME_SYM_TRACE).with_extension("json"),
-    );
-
-    let solver = solve::Solver::new(&trace);
-    let director = two_level::Director::new(&trace);
-    let mut next_input_dumper = outgen::NextInputGenerator::new(&args.outdir, args.target, &input);
-
-    for edge in director.find_edges_toward(&p_map, &reachability, &args.target) {
-        let edge = DirectedEdge {
-            metadata: p_map.cfgs[&edge.src.location.body][&edge.src.location.index].as_slice(),
-            src: edge.src,
-            dst: edge.dst,
-        };
-        let result = solver.satisfy_edge(&edge);
-        if let Some(result) = result {
-            log_debug!("Result: {:?}", result.0);
-            next_input_dumper.dump_as_next_input(&result.1)
-        } else {
-            log_debug!("Concrete edge: {}", edge.src.location);
-        }
-    }
-
-    ExitCode::SUCCESS
+    (p_map, reachability)
 }
 
 fn try_find_program_map(program_path: &Path) -> Option<PathBuf> {
@@ -132,24 +107,6 @@ fn try_find_program_map(program_path: &Path) -> Option<PathBuf> {
 
     let program_dir = program_path.parent().unwrap();
     try_join_path(program_dir, NAME).or_else(|| try_join_path(program_dir.join("deps"), NAME))
-}
-
-#[tracing::instrument(level = "debug")]
-fn load_preprocessed_info(
-    p_map_path: &Path,
-    reachability_cache_path: &Path,
-) -> (ProgramMap, impl ProgramReachability) {
-    log_debug!("Loading program map");
-    let p_map = ProgramMap::read(p_map_path).expect("Failed to read program map");
-
-    let reachability = get_reachability(
-        &p_map,
-        reachability_cache_path,
-        fs::metadata(p_map_path)
-            .and_then(|m| m.modified())
-            .unwrap_or(std::time::SystemTime::now()),
-    );
-    (p_map, reachability)
 }
 
 #[tracing::instrument(level = "debug", skip_all)]
@@ -177,6 +134,28 @@ fn get_reachability(
     get_reachability(p_map, cache_path, cache_min_valid_time)
 }
 
+fn assert_target_is_reachable(
+    reachability: &impl ProgramReachability,
+    target: &BasicBlockLocation,
+) {
+    assert!(
+        reachability
+            .cfg(target.body)
+            .is_some_and(|cfg| target.index == 0 || !cfg.reachers(&target.index).is_empty()),
+        "Target not found/unreachable in the program map: {}",
+        target
+    );
+}
+
+fn prepare_input(args_stdin: &Option<impl AsRef<Path>>) -> (Vec<u8>, Option<PathBuf>) {
+    let (input, stdin_path) = args_stdin
+        .as_ref()
+        .map(|p| read_input(p).expect("Failed to read/write stdin"))
+        .map(|(input, p)| (input, Some(p)))
+        .unwrap_or_default();
+    (input, stdin_path)
+}
+
 fn read_input(stdin_path: impl AsRef<Path>) -> Result<(Vec<u8>, PathBuf), std::io::Error> {
     if is_inherit(&stdin_path) {
         let mut contents = Vec::new();
@@ -198,10 +177,70 @@ fn read_input(stdin_path: impl AsRef<Path>) -> Result<(Vec<u8>, PathBuf), std::i
     }
 }
 
+fn execute_and_load_trace(
+    args: &Args,
+    stdin_path: Option<PathBuf>,
+) -> Result<Vec<SwitchStep>, ExitCode> {
+    const NAME_FULL_TRACE: &str = "full_trace";
+    const NAME_SYM_TRACE: &str = "sym_trace";
+
+    let exe_result = execute_once_for_trace(
+        ExecutionParams::new(
+            &args.program,
+            args.env.iter().cloned(),
+            stdin_path,
+            output_silence_as_path(args.silent),
+            output_silence_as_path(args.silent),
+            args.args.iter().cloned(),
+        ),
+        &args.outdir,
+        NAME_FULL_TRACE,
+        NAME_SYM_TRACE,
+    )
+    .expect("Failed to execute the program");
+
+    exe_result.status.exit_ok().map_err(|s| {
+        if !args.silent {
+            eprintln!("Program exited with status: {}", s);
+            ExitCode::FAILURE
+        } else {
+            log_debug!("Program did not exit successfully: {}, Exiting silently", s);
+            ExitCode::SUCCESS
+        }
+    })?;
+
+    Ok(load_trace(
+        &args.outdir.join(NAME_FULL_TRACE).with_extension("json"),
+        &args.outdir.join(NAME_SYM_TRACE).with_extension("json"),
+    ))
+}
+
 #[tracing::instrument(level = "debug")]
 fn load_trace(full_trace_path: &Path, sym_trace_path: &Path) -> SwitchTrace {
     let result = trace::new_default_trace_reader(full_trace_path, sym_trace_path).read_trace();
     log_info!("Trace loaded with {} steps", result.len());
     log_debug!("Trace: {}...", comma_separated(result.iter().take(10)));
     result
+}
+
+fn process_edge(
+    p_map: &ProgramMap,
+    solver: &solve::Solver<'_, '_>,
+    next_input_dumper: &mut NextInputGenerator,
+    edge: DirectedEdge<'_>,
+) {
+    let edge = DirectedEdge {
+        metadata: p_map.cfgs[&edge.src.location.body][&edge.src.location.index].as_slice(),
+        src: edge.src,
+        dst: edge.dst,
+    };
+    let result = solver.satisfy_edge(&edge);
+    if let Some(result) = result {
+        log_debug!("Result: {:?}", result.0);
+        if matches!(result.0, z3::SatResult::Sat) {
+            next_input_dumper.dump_as_next_input(&result.1)
+        }
+    } else {
+        log_debug!("Concrete edge: {}", edge.src.location);
+    }
 }
