@@ -141,13 +141,9 @@ fn transform<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, storage: &mut dyn S
         .get_or_insert_with(KEY_PRI_ITEMS.to_owned(), || make_pri_items(tcx))
         .leak();
 
-    /* NOTE: Ideally this should not happen.
-     * However, it is observed that in some cases (presumably because of inlining),
-     * there are existing calls to our instrumentation functions, and they are
-     * treated as regular blocks.
-     * Clearing existing instrumentation (and redoing them) is not supposed to change
-     * the behavior, at least as long as the control flow is changed by the instrumentation. */
-    clear_existing_instrumentation(body, &pri_items.all_items);
+    if clear_existing_instrumentation_inner(body, &pri_items.all_items) {
+        log_warn!("Instrumentations exist at the transformation {:?}", def_id);
+    }
     mir_transform::split_blocks_with(body, requires_immediate_instr_after);
 
     let switch_index_map = make_switch_orig_index_map(body, storage);
@@ -240,15 +236,37 @@ fn make_switch_orig_index_map(
         .collect::<HashMap<_, _>>()
 }
 
-fn clear_existing_instrumentation(body: &mut Body<'_>, pri_funcs: &HashSet<DefId>) {
+pub(crate) fn clear_existing_instrumentation<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    body: &mut Body<'tcx>,
+    storage: &mut dyn Storage,
+) -> bool {
+    let pri_items = storage
+        .get_or_insert_with(KEY_PRI_ITEMS.to_owned(), || make_pri_items(tcx))
+        .leak();
+    clear_existing_instrumentation_inner(body, &pri_items.all_items)
+}
+
+fn clear_existing_instrumentation_inner(body: &mut Body<'_>, pri_funcs: &HashSet<DefId>) -> bool {
+    // Avoid clearing compiler helpers
+    if pri_funcs
+        .iter()
+        .next()
+        .is_some_and(|id| id.krate == body.source.def_id().krate)
+    {
+        return false;
+    }
+
     #[cfg(debug_assertions)]
     let original_body = body.clone();
 
-    mir_transform::noop_blocks_with(body, |bb| is_instrumentation_block(bb, pri_funcs));
+    let cleared_some =
+        mir_transform::noop_blocks_with(body, |block| is_instrumentation_block(block, pri_funcs))
+            > 0;
 
     // Ensure that the control flow is not modified.
     #[cfg(debug_assertions)]
-    {
+    if cleared_some {
         assert_eq!(
             original_body.basic_blocks.len(),
             body.basic_blocks.len(),
@@ -268,6 +286,8 @@ fn clear_existing_instrumentation(body: &mut Body<'_>, pri_funcs: &HashSet<DefId
             );
         }
     }
+
+    cleared_some
 }
 
 fn handle_entry_function_pre<'tcx, C>(call_adder: &mut RuntimeCallAdder<C>, body: &Body<'tcx>)
@@ -999,7 +1019,9 @@ fn is_instrumentation_block<'tcx>(
 ) -> bool {
     let terminator = bb.terminator.as_ref().unwrap();
     match &terminator.kind {
-        TerminatorKind::Call { .. } => is_call_to_any_of(&terminator.kind, all_pri_funcs),
+        TerminatorKind::Call { .. } | TerminatorKind::TailCall { .. } => {
+            is_call_to_any_of(&terminator.kind, all_pri_funcs)
+        }
         TerminatorKind::Goto { target } => {
             bb.statements.is_empty() && *target == mir_transform::NEXT_BLOCK
         }
@@ -1009,7 +1031,8 @@ fn is_instrumentation_block<'tcx>(
 
 #[inline]
 fn is_call_to_any_of<'tcx>(terminator: &TerminatorKind, all_funcs: &HashSet<DefId>) -> bool {
-    let TerminatorKind::Call { func, .. } = terminator else {
+    let (TerminatorKind::Call { func, .. } | TerminatorKind::TailCall { func, .. }) = terminator
+    else {
         return false;
     };
     func.const_fn_def()

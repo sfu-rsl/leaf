@@ -68,7 +68,8 @@ impl<'tcx> BasicBlockDataSplitExt<'tcx> for BasicBlockData<'tcx> {
 pub(crate) fn noop_blocks_with<'tcx>(
     body: &mut Body<'tcx>,
     predicate: impl Fn(&BasicBlockData<'tcx>) -> bool,
-) {
+) -> usize {
+    let mut count = 0;
     for block in body.basic_blocks_mut().iter_mut() {
         if predicate(block) {
             block.retain_statements(|_| true);
@@ -98,6 +99,8 @@ pub(crate) fn noop_blocks_with<'tcx>(
                 kind: TerminatorKind::Goto { target },
                 ..terminator
             });
+            count += 1;
         }
     }
+    count
 }

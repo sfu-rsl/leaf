@@ -457,6 +457,13 @@ mod implementation {
              * something from arena. So, we have to clone the body. */
             let mut body = ORIGINAL_OPTIMIZED_MIR.get()(tcx, id).clone();
             let mut storage = global::get_storage();
+            /* NOTE: Ideally this should not happen.
+             * However, it is observed that in some cases (presumably because of inlining),
+             * there are existing calls to our instrumentation functions, and they are
+             * treated as regular blocks.
+             * Clearing existing instrumentation (and redoing them) is not supposed to change
+             * the behavior, at least as long as the control flow is changed by the instrumentation. */
+            instr::clear_existing_instrumentation(tcx, &mut body, &mut storage);
             T::visit_mir_body_before(tcx, &body, &mut storage);
             T::transform_mir_body(tcx, &mut body, &mut storage);
             T::visit_mir_body_after(tcx, &body, &mut storage);
@@ -471,6 +478,7 @@ mod implementation {
              * something from arena. So, we have to clone the body. */
             let mut body = ORIGINAL_EXTERN_OPTIMIZED_MIR.get()(tcx, id).clone();
             let mut storage = global::get_storage();
+            instr::clear_existing_instrumentation(tcx, &mut body, &mut storage);
             T::visit_mir_body_before(tcx, &body, &mut storage);
             T::transform_mir_body(tcx, &mut body, &mut storage);
             T::visit_mir_body_after(tcx, &body, &mut storage);
