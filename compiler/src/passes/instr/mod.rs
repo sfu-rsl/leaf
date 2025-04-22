@@ -598,9 +598,10 @@ where
             Memory {
                 kind,
                 is_ptr_aligned,
+                is_volatile,
             } => {
                 // Currently, no instrumentation
-                self.instrument_memory_intrinsic_call(&params, kind, is_ptr_aligned);
+                self.instrument_memory_intrinsic_call(&params, kind, is_ptr_aligned, is_volatile);
             }
             NoOp | ConstEvaluated | Contract => {
                 // Currently, no instrumentation
@@ -647,12 +648,13 @@ where
         params: &CallParams<'_, 'tcx>,
         kind: decision::MemoryIntrinsicKind,
         is_ptr_aligned: bool,
+        is_volatile: bool,
     ) {
         let mut call_adder = self.call_adder.before();
         let ptr_arg = params.args.get(0);
         let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
         let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, call_adder.tcx()));
-        let mut call_adder = call_adder.perform_memory_op(is_ptr_aligned, ptr_ref.zip(ptr_ty));
+        let mut call_adder = call_adder.perform_memory_op(is_ptr_aligned, is_volatile, ptr_ref.zip(ptr_ty));
         let dest_ref = call_adder.reference_place(params.destination);
         let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
         let mut call_adder = call_adder.assign(dest_ref, dest_ty);

@@ -116,8 +116,8 @@ pub mod sym {
                 intrinsic_atomic_binary_op,
                 intrinsic_atomic_fence,
 
-                intrinsic_volatile_load,
-                intrinsic_volatile_store,
+                intrinsic_memory_load,
+                intrinsic_memory_store,
             }
 
             pub(crate) mod atomic {
@@ -167,8 +167,8 @@ pub mod sym {
                 }
 
                 symbols_for_mem_intrinsics! {
-                    intrinsic_volatile_load,
-                    intrinsic_volatile_store,
+                    intrinsic_memory_load,
+                    intrinsic_memory_store,
                 }
             }
         }

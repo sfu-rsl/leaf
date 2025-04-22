@@ -465,11 +465,13 @@ mod implementation {
         pub fn perform_memory_op<'b, 'tcx>(
             &'b mut self,
             is_ptr_aligned: bool,
+            is_volatile: bool,
             ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
         ) -> RuntimeCallAdder<MemoryIntrinsicContext<'b, 'tcx, C>> {
             self.with_context(|base| MemoryIntrinsicContext {
                 base,
                 is_ptr_aligned,
+                is_volatile,
                 ptr_and_ty,
             })
         }
@@ -2169,10 +2171,11 @@ mod implementation {
         {
             self.add_bb_for_memory_op_intrinsic_call(
                 // TODO: Decide the function based on volatile or not
-                sym::intrinsics::memory::intrinsic_volatile_load,
+                sym::intrinsics::memory::intrinsic_memory_load,
                 vec![
                     operand::move_for_local(self.dest_ref().into()),
                     operand::const_from_bool(self.tcx(), self.context.is_ptr_aligned()),
+                    operand::const_from_bool(self.tcx(), self.context.is_volatile()),
                 ],
                 Default::default(),
             );
@@ -2181,10 +2184,11 @@ mod implementation {
         fn store(&mut self, val: OperandRef) {
             self.add_bb_for_memory_op_intrinsic_call(
                 // TODO: Decide the function based on volatile or not
-                sym::intrinsics::memory::intrinsic_volatile_store,
+                sym::intrinsics::memory::intrinsic_memory_store,
                 vec![
                     operand::move_for_local(val.into()),
                     operand::const_from_bool(self.tcx(), self.context.is_ptr_aligned()),
+                    operand::const_from_bool(self.tcx(), self.context.is_volatile()),
                 ],
                 Default::default(),
             )

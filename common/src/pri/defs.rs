@@ -284,17 +284,19 @@ pub mod macros {
 
           // ----- Memory -----
           #[allow(unused_parens)]
-          { fn intrinsic_volatile_load(
+          { fn intrinsic_memory_load(
                 ptr: OperandRef,
                 ptr_type_id: ($type_id_ty),
                 dest: PlaceRef,
                 is_aligned: bool,
+                is_volatile: bool,
           ) }
-          { fn intrinsic_volatile_store(
+          { fn intrinsic_memory_store(
                 ptr: OperandRef,
                 ptr_type_id: ($type_id_ty),
                 val: OperandRef,
                 is_aligned: bool,
+                is_volatile: bool,
           ) }
 
           // All atomic operations have an ordering, majority get applied on a pointer.
@@ -669,9 +671,9 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_volatile_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_aligned:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_aligned:bool,is_volatile:bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_volatile_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_aligned:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_aligned:bool,is_volatile:bool,);
             }
         };
         (modifier: $modifier:path) => {

@@ -714,7 +714,7 @@ impl ProgramRuntimeInterface for BasicPri {
         // No-op.
     }
 
-    fn intrinsic_volatile_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, _is_aligned: bool) {
+    fn intrinsic_memory_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, _is_aligned: bool, _is_volatile: bool) {
         let src_ptr = take_back_operand(ptr);
         let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
             h.from_ptr(src_ptr.clone(), ptr_type_id)
@@ -723,7 +723,7 @@ impl ProgramRuntimeInterface for BasicPri {
         assign_to(dest, |h| h.use_of(src_pointee_value))
     }
 
-    fn intrinsic_volatile_store(ptr: OperandRef, ptr_type_id: Self::TypeId, src: OperandRef, is_aligned: bool) {
+    fn intrinsic_memory_store(ptr: OperandRef, ptr_type_id: Self::TypeId, src: OperandRef, _is_aligned: bool, _is_volatile: bool) {
         let dst_ptr = take_back_operand(ptr);
         let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
             h.from_ptr(dst_ptr.clone(), ptr_type_id)

@@ -252,7 +252,7 @@ mod intrinsics {
         Memory {
             kind: MemoryIntrinsicKind,
             is_ptr_aligned: bool,
-            // TODO: Add volatile
+            is_volatile: bool,
         },
         NoOp,
         ConstEvaluated,
@@ -843,16 +843,17 @@ mod intrinsics {
     }
 
     fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
-        let (kind, is_ptr_aligned) = match intrinsic.name {
-            rsym::volatile_load => (MemoryIntrinsicKind::Load, true),
-            rsym::unaligned_volatile_load => (MemoryIntrinsicKind::Load, false),
-            rsym::volatile_store => (MemoryIntrinsicKind::Store, true),
-            rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store, false),
+        let (kind, is_ptr_aligned, is_volatile) = match intrinsic.name {
+            rsym::volatile_load => (MemoryIntrinsicKind::Load, true, true),
+            rsym::unaligned_volatile_load => (MemoryIntrinsicKind::Load, false, true),
+            rsym::volatile_store => (MemoryIntrinsicKind::Store, true, true),
+            rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store, false, true),
             _ => unreachable!(),
         };
         IntrinsicDecision::Memory {
             kind,
             is_ptr_aligned,
+            is_volatile,
         }
     }
 
