@@ -185,27 +185,36 @@ mod binary {
             &mut self,
             answers: impl ExactSizeIterator<Item = (Self::Id, Self::Answer)>,
         ) -> Result<PathBuf, BinaryFileAnswerError> {
-            if answers.len() > self.buffer.len() {
-                self.buffer
-                    .extend(core::iter::repeat_n(0, answers.len() - self.buffer.len()));
-            }
-
-            let valid_range = 0..answers.len();
-
             // The buffer is growing and at least as wide as the default answers.
             self.buffer[0..self.default_answers.len()].copy_from_slice(&self.default_answers);
+            let mut filled = self.default_answers.len();
+            let mut max_upper = self.default_answers.len();
 
-            for (id, ans) in answers {
-                let index = id.into();
-                let byte_ans = ans.ok_or_else(|| BinaryFileAnswerError::NonByte(index))?;
-                if !valid_range.contains(&index) {
-                    return Err(BinaryFileAnswerError::Incomplete);
-                }
-
-                self.buffer[index] = byte_ans;
+            if answers.len() > self.buffer.len() {
+                self.buffer.reserve(answers.len() - self.buffer.len());
             }
 
-            self.write(valid_range).map_err(BinaryFileAnswerError::Io)
+            for (id, ans) in answers {
+                let index = id;
+                let byte_ans = ans.ok_or_else(|| BinaryFileAnswerError::NonByte(index))?;
+
+                if index >= max_upper {
+                    max_upper = index + 1;
+                    if max_upper > self.buffer.len() {
+                        self.buffer.resize(max_upper, 0);
+                    }
+                }
+                self.buffer[index] = byte_ans;
+                if index >= self.default_answers.len() {
+                    filled += 1;
+                }
+            }
+            // If there are bytes not filled with the default answers nor answers.
+            if filled < max_upper {
+                return Err(BinaryFileAnswerError::Incomplete);
+            }
+
+            self.write(0..max_upper).map_err(BinaryFileAnswerError::Io)
         }
     }
 }
