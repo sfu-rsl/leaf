@@ -288,15 +288,23 @@ pub mod macros {
                 ptr: OperandRef,
                 ptr_type_id: ($type_id_ty),
                 dest: PlaceRef,
-                is_aligned: bool,
                 is_volatile: bool,
+                is_aligned: bool,
           ) }
           { fn intrinsic_memory_store(
                 ptr: OperandRef,
                 ptr_type_id: ($type_id_ty),
                 val: OperandRef,
-                is_aligned: bool,
                 is_volatile: bool,
+                is_aligned: bool,
+          ) }
+          { fn intrinsic_memory_copy(
+                ptr: OperandRef,
+                ptr_type_id: ($type_id_ty),
+                dst: OperandRef,
+                count: OperandRef,
+                is_volatile: bool,
+                is_overlapping: bool,
           ) }
 
           // All atomic operations have an ordering, majority get applied on a pointer.
@@ -674,6 +682,8 @@ pub mod macros {
                 #[allow(unused_parens)]fn intrinsic_memory_load(ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_volatile:bool,is_aligned:bool,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_memory_store(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_memory_copy(ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_overlapping:bool,);
             }
         };
         (modifier: $modifier:path) => {

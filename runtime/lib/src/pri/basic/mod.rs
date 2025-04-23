@@ -714,7 +714,7 @@ impl ProgramRuntimeInterface for BasicPri {
         // No-op.
     }
 
-    fn intrinsic_memory_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, _is_aligned: bool, _is_volatile: bool) {
+    fn intrinsic_memory_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, _is_volatile: bool, _is_aligned: bool,) {
         let src_ptr = take_back_operand(ptr);
         let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
             h.from_ptr(src_ptr.clone(), ptr_type_id)
@@ -723,13 +723,17 @@ impl ProgramRuntimeInterface for BasicPri {
         assign_to(dest, |h| h.use_of(src_pointee_value))
     }
 
-    fn intrinsic_memory_store(ptr: OperandRef, ptr_type_id: Self::TypeId, src: OperandRef, _is_aligned: bool, _is_volatile: bool) {
+    fn intrinsic_memory_store(ptr: OperandRef, ptr_type_id: Self::TypeId, src: OperandRef, _is_volatile: bool, _is_aligned: bool,) {
         let dst_ptr = take_back_operand(ptr);
         let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
             h.from_ptr(dst_ptr.clone(), ptr_type_id)
         });
         let src_value = take_back_operand(src);
         assign_to_place(dst_place, |h| h.use_of(src_value))
+    }
+
+    fn intrinsic_memory_copy(ptr: OperandRef, ptr_type_id: Self::TypeId, dst: OperandRef, is_volatile: bool, is_overlapping: bool,) {
+        todo!("Implement memory copy intrinsic");
     }
 }
 

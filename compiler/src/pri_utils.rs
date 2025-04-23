@@ -74,7 +74,7 @@ pub mod sym {
 
         common::pri::pass_func_names_to!(symbols_in_pri, all_comma_separated);
 
-        pub(crate) const ALL_MAINS: [LeafSymbol; 104] =
+        pub(crate) const ALL_MAINS: [LeafSymbol; 105] =
             common::pri::pass_func_names_to!(bracket, all_comma_separated);
 
         pub(crate) mod intrinsics {
@@ -118,6 +118,7 @@ pub mod sym {
 
                 intrinsic_memory_load,
                 intrinsic_memory_store,
+                intrinsic_memory_copy,
             }
 
             pub(crate) mod atomic {
@@ -169,6 +170,7 @@ pub mod sym {
                 symbols_for_mem_intrinsics! {
                     intrinsic_memory_load,
                     intrinsic_memory_store,
+                    intrinsic_memory_copy,
                 }
             }
         }

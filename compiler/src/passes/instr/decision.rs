@@ -283,7 +283,9 @@ mod intrinsics {
         Store {
             is_ptr_aligned: bool,
         },
-        Copy,
+        Copy {
+            is_overlapping: bool,
+        },
     }
 
     macro_rules! of_mir_translated_funcs {
@@ -859,6 +861,18 @@ mod intrinsics {
             }, true),
             rsym::unaligned_volatile_store => (MemoryIntrinsicKind::Store {
                 is_ptr_aligned: false,
+            }, true),
+            rsym::copy => (MemoryIntrinsicKind::Copy {
+                is_overlapping: true,
+            }, false),
+            rsym::copy_nonoverlapping => (MemoryIntrinsicKind::Copy {
+                is_overlapping: false,
+            }, false),
+            rsym::volatile_copy_memory => (MemoryIntrinsicKind::Copy {
+                is_overlapping: true,
+            }, true),
+            rsym::volatile_copy_nonoverlapping_memory => (MemoryIntrinsicKind::Copy {
+                is_overlapping: false,
             }, true),
             _ => unreachable!(),
         };

@@ -196,6 +196,8 @@ pub(crate) trait MemoryIntrinsicHandler<'tcx> {
         Self: Assigner<'tcx>;
 
     fn store(&mut self, val: OperandRef, is_ptr_aligned: bool);
+
+    fn copy(&mut self, dst: OperandRef, count: OperandRef, is_overlapping: bool);
 }
 
 pub(crate) trait AtomicIntrinsicHandler<'tcx> {
@@ -2187,6 +2189,21 @@ mod implementation {
                     operand::move_for_local(val.into()),
                     operand::const_from_bool(self.tcx(), self.context.is_volatile()),
                     operand::const_from_bool(self.tcx(), is_ptr_aligned),
+                ],
+                Default::default(),
+            )
+        }
+
+
+        fn copy(&mut self, dst_ref: OperandRef, count_ref: OperandRef, is_overlapping: bool) {
+            self.add_bb_for_memory_op_intrinsic_call(
+                // TODO: Decide the function based on volatile or not
+                sym::intrinsics::memory::intrinsic_memory_copy,
+                vec![
+                    operand::move_for_local(dst_ref.into()),
+                    operand::move_for_local(count_ref.into()),
+                    operand::const_from_bool(self.tcx(), self.context.is_volatile()),
+                    operand::const_from_bool(self.tcx(), is_overlapping),
                 ],
                 Default::default(),
             )

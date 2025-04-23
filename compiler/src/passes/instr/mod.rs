@@ -663,6 +663,11 @@ where
                 let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
                 call_adder.store(val_ref, is_ptr_aligned)
             }
+            Copy { is_overlapping } => {
+                let dst_ref = call_adder.reference_operand_spanned(&params.args[1]);
+                let count_ref = call_adder.reference_operand_spanned(&params.args[2]);
+                call_adder.copy(dst_ref, count_ref, is_overlapping)
+            }
             _ => unreachable!(),
         }
     }
