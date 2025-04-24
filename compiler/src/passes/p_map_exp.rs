@@ -1,5 +1,5 @@
 use rustc_middle::{
-    mir::{BasicBlock, Body, HasLocalDecls},
+    mir::{BasicBlock, Body, HasLocalDecls, TerminatorEdges},
     ty::TyCtxt,
 };
 
@@ -92,12 +92,12 @@ fn visit_body<'tcx>(
     let mut ret_points = Vec::new();
     let mut calls = Calls::new();
 
-    let first_cfg_affecting_starting = |bb: BasicBlock| {
+    let first_non_single_edge = |bb: BasicBlock| {
         let mut current = bb;
-        while let Some(next) = body.basic_blocks[current]
+        while let Some(TerminatorEdges::Single(next)) = body.basic_blocks[current]
             .terminator
             .as_ref()
-            .and_then(|t| t.kind.as_goto())
+            .map(|t| t.edges())
         {
             current = next;
         }
@@ -112,11 +112,12 @@ fn visit_body<'tcx>(
                 index.as_u32(),
                 targets
                     .into_iter()
-                    .map(|(bb, c)| (first_cfg_affecting_starting(bb.into()).as_u32(), c))
+                    .map(|(bb, c)| (first_non_single_edge(bb.into()).as_u32(), c))
                     .collect(),
             );
         };
 
+        // FIXME: Utilize the `edges` instead.
         match &block.terminator().kind {
             FalseEdge {
                 real_target: target,

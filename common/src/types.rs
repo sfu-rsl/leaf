@@ -150,6 +150,62 @@ pub mod trace {
             }
         }
 
+        /// # Returns
+        /// A stronger constraint that satisfies both, or `None` if unsatisfiable (empty set).
+        pub fn and(&self, other: &Self, universe_size: impl Fn() -> usize) -> Option<Self>
+        where
+            C: PartialEq + Clone,
+        {
+            use ConstraintKind::*;
+            match (self, other) {
+                (True, True) => Some(True),
+                (False, False) => Some(False),
+                (True, False) | (False, True) => None,
+                (OneOf(cases), OneOf(other_cases)) => {
+                    let intersection: Vec<C> = cases
+                        .into_iter()
+                        .filter(|c| other_cases.contains(&c))
+                        .cloned()
+                        .collect();
+                    (!intersection.is_empty()).then_some(OneOf(intersection))
+                }
+                (NoneOf(non_cases), NoneOf(other_non_cases)) => {
+                    let union: Vec<C> = non_cases
+                        .into_iter()
+                        .chain(
+                            other_non_cases
+                                .into_iter()
+                                .filter(|c| !non_cases.contains(c)),
+                        )
+                        .cloned()
+                        .collect();
+                    (union.len() < universe_size()).then_some(NoneOf(union))
+                }
+                (OneOf(cases), NoneOf(non_cases)) | (NoneOf(non_cases), OneOf(cases)) => {
+                    let diff: Vec<C> = cases
+                        .into_iter()
+                        .filter(|c| !non_cases.contains(&c))
+                        .cloned()
+                        .collect();
+                    (!diff.is_empty()).then_some(OneOf(diff))
+                }
+                (True | False, OneOf(..) | NoneOf(..)) | (OneOf(..) | NoneOf(..), True | False) => {
+                    panic!("Constraint types must be the same")
+                }
+            }
+        }
+
+        /// # Returns
+        /// A weaker constraint that is satisfied by both, or `None` if always satisfiable (universal set).
+        pub fn or(&self, other: &Self, universe_size: impl Fn() -> usize) -> Option<Self>
+        where
+            C: PartialEq + Clone,
+        {
+            ConstraintKind::and(&self.as_ref().not(), &other.as_ref().not(), universe_size)
+                .map(|c| c.not())
+                .map(|c| c.map(Clone::clone))
+        }
+
         #[inline]
         pub fn is_boolean(&self) -> bool {
             match self {

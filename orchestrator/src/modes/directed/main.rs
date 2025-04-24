@@ -4,6 +4,9 @@
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
 #![feature(exit_status_error)]
+#![feature(substr_range)]
+#![feature(hash_extract_if)]
+#![feature(iterator_try_reduce)]
 
 mod outgen;
 mod reachability;
@@ -69,6 +72,8 @@ fn main() -> ExitCode {
     for edge in director.find_edges_toward(&p_map, &reachability, &args.target) {
         process_edge(&p_map, &solver, &mut next_input_dumper, edge);
     }
+
+    log_info!("Generated {} new inputs", next_input_dumper.total_count());
 
     ExitCode::SUCCESS
 }
@@ -234,11 +239,12 @@ fn process_edge(
         src: edge.src,
         dst: edge.dst,
     };
-    let result = solver.satisfy_edge(&edge);
-    if let Some(result) = result {
-        log_debug!("Result: {:?}", result.0);
-        if matches!(result.0, z3::SatResult::Sat) {
-            next_input_dumper.dump_as_next_input(&result.1)
+    if let Some(results) = solver.satisfy_edge(&edge) {
+        for result in results {
+            log_debug!("Result: {:?}", result.0);
+            if matches!(result.0, z3::SatResult::Sat) {
+                next_input_dumper.dump_as_next_input(&result.1)
+            }
         }
     } else {
         log_debug!("Concrete edge: {}", edge.src.location);

@@ -50,28 +50,39 @@ impl<'a> Director<'a> {
                 let target_fn = target.body;
 
                 let next_fn_finder = make_next_fn_finder(p_map, reachability);
+                let mut proposed_edges = Vec::new();
 
                 while !fn_trace.is_empty() {
                     let current_fn = *fn_trace.last().unwrap();
                     log_trace!("Current function: {}", current_fn);
                     let intra_trace = get_tailing_intra_trace(trace);
+                    proposed_edges.clear();
 
                     let next_bb_finder = make_next_bb_finder(p_map, reachability, current_fn);
 
-                    if current_fn == target_fn {
-                        for edge in search_intra(&next_bb_finder, intra_trace, target.index) {
-                            yield edge;
-                        }
+                    macro_rules! yield_all_search_intra {
+                        ($target: expr) => {
+                            for edge in search_intra(
+                                &next_bb_finder,
+                                intra_trace,
+                                &mut proposed_edges,
+                                $target,
+                            ) {
+                                yield edge;
+                            }
+                        };
                     }
 
-                    // We'll do it anyway because of recursive (target) functions.
+                    if current_fn == target_fn {
+                        yield_all_search_intra!(target.index);
+                    }
+                    // We continue anyway because of recursive (target) functions.
+
                     for next_fn in next_fn_finder.next_step(&fn_trace, &target_fn) {
                         log_trace!("Next function: {}", next_fn);
 
                         for call_site in get_call_sites(&p_map.call_graph, &current_fn, &next_fn) {
-                            for edge in search_intra(&next_bb_finder, intra_trace, call_site) {
-                                yield edge;
-                            }
+                            yield_all_search_intra!(call_site);
                         }
                     }
 
@@ -84,9 +95,7 @@ impl<'a> Director<'a> {
                      * NOTE: We can do better based on whether the dependency on the return value.
                      */
                     for ret_point in get_return_points(p_map, &current_fn) {
-                        for edge in search_intra(&next_bb_finder, intra_trace, ret_point) {
-                            yield edge;
-                        }
+                        yield_all_search_intra!(ret_point);
                     }
 
                     fn_trace.pop();
@@ -97,32 +106,34 @@ impl<'a> Director<'a> {
     }
 }
 
-fn search_intra<'a, 'b, F: NextStepFinder<Node = BasicBlock>>(
+fn search_intra<'a, 'b, 'c, F: NextStepFinder<Node = BasicBlock>>(
     next_bb_finder: &'a F,
     mut trace: &'b [SwitchStep],
+    proposed_edges: &'c mut Vec<(usize, BasicBlockIndex)>,
     target: BasicBlock,
-) -> impl Iterator<Item = DirectedEdge<'b>> + use<'a, 'b, F> {
+) -> impl Iterator<Item = DirectedEdge<'b>> + use<'a, 'b, 'c, F> {
     from_pinned_coroutine(
         #[coroutine]
         static move || {
-            let mut back_taken_step: Option<BasicBlock> = None;
             while let Some(current) = trace.last() {
                 log_trace!("Current bb: {}", current.location.index);
 
                 for next_bb in next_bb_finder.next_step(&trace, &target) {
-                    if back_taken_step.is_some_and(|s| s == next_bb || s == target) {
-                        log_trace!("Skipping back taken step");
+                    let edge = (current, next_bb);
+
+                    let key = (trace.len(), next_bb);
+                    if proposed_edges.contains(&key) {
+                        log_trace!("Skipping repeated edge");
                         continue;
                     }
+                    proposed_edges.push(key);
 
-                    let edge = (current, next_bb);
                     yield edge.into();
                 }
 
                 let Some((last, rest)) = trace.split_last() else {
                     unreachable!();
                 };
-                back_taken_step = Some(*last.borrow());
                 trace = rest;
             }
         },

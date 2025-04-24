@@ -11,6 +11,7 @@ use common::{
 
 pub(crate) struct NextInputGenerator {
     answers_writer: SwitchableAnswersWriter<BinaryFileMultiAnswersWriter>,
+    total_count: usize,
 }
 
 impl NextInputGenerator {
@@ -25,6 +26,7 @@ impl NextInputGenerator {
                 "bin".to_owned(),
                 Some(program_input),
             )),
+            total_count: 0,
         }
     }
 
@@ -42,7 +44,10 @@ impl NextInputGenerator {
         };
 
         match result {
-            Ok(path) => println!("{}", path.display()),
+            Ok(path) => {
+                self.total_count += 1;
+                println!("{}", path.display())
+            }
             Err(err) => match err {
                 BinaryFileAnswerError::Incomplete => {
                     panic!("Unexpected missing answer")
@@ -56,6 +61,10 @@ impl NextInputGenerator {
                 }
             },
         };
+    }
+
+    pub fn total_count(&self) -> usize {
+        self.total_count
     }
 }
 

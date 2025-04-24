@@ -8,7 +8,7 @@ use z3::ast::{self, Ast};
  * In this way we have a little more freedom to include our information such
  * as whether the bit vector is signed or not.
  */
-#[derive(Debug, Clone, dm::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, dm::Display)]
 #[display("{_0}")]
 pub enum AstNode<'ctx> {
     Bool(ast::Bool<'ctx>),
@@ -28,7 +28,7 @@ impl<'ctx> From<ArrayNode<'ctx>> for AstNode<'ctx> {
     }
 }
 
-#[derive(Debug, Clone, dm::Display)]
+#[derive(Debug, Clone, dm::Display, PartialEq, Eq)]
 #[display("{_0}")]
 pub struct BVNode<'ctx>(pub ast::BV<'ctx>, pub BVSort);
 
@@ -56,23 +56,23 @@ impl<'ctx> BVNode<'ctx> {
     }
 }
 
-#[derive(Debug, Clone, dm::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, dm::Display)]
 #[display("{_0}")]
 pub struct ArrayNode<'ctx>(pub ast::Array<'ctx>, pub ArraySort);
 
-#[derive(Debug, Clone, PartialEq, dm::From, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, dm::From, Serialize, Deserialize)]
 pub enum AstNodeSort {
     Bool,
     BitVector(BVSort),
     Array(ArraySort),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BVSort {
     pub is_signed: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, dm::From, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, dm::From, Serialize, Deserialize)]
 pub struct ArraySort {
     pub range: Box<AstNodeSort>,
 }
