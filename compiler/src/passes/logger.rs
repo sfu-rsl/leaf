@@ -1,5 +1,7 @@
 use rustc_middle::{mir, ty::TyCtxt};
 
+use crate::utils::mir::TyCtxtExt;
+
 use super::{Compilation, CompilationPass, Storage};
 
 /// A wrapper pass that logs pass methods.
@@ -82,7 +84,7 @@ where
             target: TAG_OBJECTS,
             "MIR body of {:?} (before):\n{}",
             body.source.def_id(),
-            get_mir_pretty(tcx, body)
+            tcx.pretty_mir(body),
         );
         T::visit_mir_body_before(tcx, body, storage)
     }
@@ -101,7 +103,7 @@ where
             target: TAG_OBJECTS,
             "MIR body {:?} (after):\n{}",
             body.source.def_id(),
-            get_mir_pretty(tcx, body)
+            tcx.pretty_mir(body),
         );
         T::visit_mir_body_after(tcx, body, storage)
     }
@@ -126,7 +128,7 @@ where
         log_debug!(
             target: TAG_OBJECTS,
             "MIR body to transform:\n{}",
-            get_mir_pretty(tcx, body)
+            tcx.pretty_mir(body),
         );
         log_debug!(target: TAG_OBJECTS, "Storage: {:#?}", storage);
         T::transform_mir_body(tcx, body, storage)
@@ -141,22 +143,6 @@ where
         log_debug!(target: TAG_OBJECTS, "Storage: {:#?}", storage);
         T::visit_codegen_units(tcx, units, storage)
     }
-}
-
-fn get_mir_pretty<'tcx>(tcx: TyCtxt<'tcx>, body: &mir::Body<'tcx>) -> String {
-    use mir::pretty::{PrettyPrintMirOptions, write_mir_fn};
-    let mut buffer = Vec::new();
-    write_mir_fn(
-        tcx,
-        body,
-        &mut |_, _| Ok(()),
-        &mut buffer,
-        PrettyPrintMirOptions {
-            include_extra_comments: false,
-        },
-    )
-    .unwrap();
-    String::from_utf8(buffer).unwrap()
 }
 
 pub(crate) trait CompilationPassLogExt {

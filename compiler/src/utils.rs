@@ -27,13 +27,17 @@ pub(crate) use chain;
 
 pub(crate) mod mir {
     use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
-    use rustc_middle::ty::{TyCtxt, TypingMode};
+    use rustc_middle::{
+        mir::Body,
+        ty::{TyCtxt, TypingMode},
+    };
     use rustc_span::def_id::{DefId, LocalDefId};
 
     pub(crate) trait TyCtxtExt<'tcx> {
         fn is_llvm_intrinsic(self, def_id: DefId) -> bool;
         fn module_of(self, def_id: DefId) -> impl Iterator<Item = DisambiguatedDefPathData>;
         fn typing_mode_for_body(self, def_id: LocalDefId) -> TypingMode<'tcx>;
+        fn pretty_mir(self, body: &Body<'tcx>) -> String;
     }
 
     impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
@@ -96,6 +100,22 @@ pub(crate) mod mir {
                 | DefKind::Impl { .. }
                 | DefKind::SyntheticCoroutineBody => TypingMode::non_body_analysis(),
             }
+        }
+
+        fn pretty_mir(self, body: &Body<'tcx>) -> String {
+            use rustc_middle::mir::pretty::{PrettyPrintMirOptions, write_mir_fn};
+            let mut buffer = Vec::new();
+            write_mir_fn(
+                self,
+                body,
+                &mut |_, _| Ok(()),
+                &mut buffer,
+                PrettyPrintMirOptions {
+                    include_extra_comments: false,
+                },
+            )
+            .unwrap();
+            String::from_utf8(buffer).unwrap()
         }
     }
 }
