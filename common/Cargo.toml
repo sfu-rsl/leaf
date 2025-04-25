@@ -16,13 +16,14 @@ tyexp = ["std", "serde", "dep:serde_json", "logging"]
 config = ["std", "dep:config", "logging"]
 directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std"]
-z3 = ["std", "trace_types", "dep:z3", "dep:z3-sys"]
+z3 = ["std", "trace_types", "dep:z3", "dep:z3-sys", "dep:delegate"]
 answers = ["std"]
 rkyv = ["dep:rkyv"]
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.
 
+delegate = { workspace = true, optional = true }
 derive_more = { workspace = true, default-features = false, features = [
     "full",
 ] }

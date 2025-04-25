@@ -1,5 +1,6 @@
+use delegate::delegate;
 use z3::{
-    self, Context, SatResult, Solver,
+    self, Context, Model, Optimize, SatResult, Solver,
     ast::{self, Ast},
 };
 
@@ -14,9 +15,77 @@ use super::super::{
 
 use super::node::*;
 
+enum SolverImpl<'ctx> {
+    Solver(Solver<'ctx>),
+    Optimize(Optimize<'ctx>),
+}
+
+/// An interface for both `Solver` and `Optimize`
+trait Z3Solver<'ctx> {
+    fn push(&self);
+    fn pop(&self);
+
+    fn assert(&self, ast: &ast::Bool<'ctx>);
+    fn check(&self) -> SatResult;
+    fn get_model(&self) -> Option<Model<'ctx>>;
+}
+
+impl<'ctx> Z3Solver<'ctx> for Solver<'ctx> {
+    delegate! {
+        to self {
+            fn push(&self);
+
+            fn assert(&self, ast: &ast::Bool<'ctx>);
+            fn check(&self) -> SatResult;
+            fn get_model(&self) -> Option<Model<'ctx>>;
+        }
+    }
+
+    fn pop(&self) {
+        self.pop(1);
+    }
+}
+
+impl<'ctx> Z3Solver<'ctx> for Optimize<'ctx> {
+    delegate! {
+        to self {
+            fn push(&self);
+            fn pop(&self);
+
+            fn assert(&self, ast: &ast::Bool<'ctx>);
+            fn get_model(&self) -> Option<Model<'ctx>>;
+        }
+    }
+
+    fn check(&self) -> SatResult {
+        self.check(&[])
+    }
+}
+
+impl<'ctx> Z3Solver<'ctx> for SolverImpl<'ctx> {
+    delegate! {
+        to match self {
+            Self::Solver(solver) => solver,
+            Self::Optimize(optimize) => optimize,
+        } {
+            #[through(Z3Solver)]
+            fn push(&self);
+            #[through(Z3Solver)]
+            fn pop(&self);
+
+            #[through(Z3Solver)]
+            fn assert(&self, ast: &ast::Bool<'ctx>);
+            #[through(Z3Solver)]
+            fn check(&self) -> SatResult;
+            #[through(Z3Solver)]
+            fn get_model(&self) -> Option<Model<'ctx>>;
+        }
+    }
+}
+
 pub struct WrappedSolver<'ctx, I> {
     context: &'ctx Context,
-    solver: Solver<'ctx>,
+    solver: SolverImpl<'ctx>,
     _phantom: core::marker::PhantomData<(I,)>,
 }
 
@@ -28,7 +97,7 @@ impl<'ctx, I> WrappedSolver<'ctx, I> {
     pub fn new(context: &'ctx Context) -> Self {
         Self {
             context,
-            solver: Solver::new(context),
+            solver: SolverImpl::Solver(Solver::new(context)),
             _phantom: Default::default(),
         }
     }
@@ -94,7 +163,7 @@ where
 
     fn check_using(
         &self,
-        solver: &Solver<'ctx>,
+        solver: &(impl Z3Solver<'ctx> + ?Sized),
         constraints: &[ast::Bool<'ctx>],
         vars: HashMap<I, AstNode<'ctx>>,
     ) -> (SatResult, HashMap<I, AstNode<'ctx>>) {
@@ -127,8 +196,24 @@ where
             result @ (SatResult::Unsat | SatResult::Unknown) => (result, HashMap::new()),
         };
 
-        solver.pop(1);
+        solver.pop();
         result
+    }
+}
+
+impl<'ctx, I> WrappedSolver<'ctx, I>
+where
+    I: Eq + Hash,
+{
+    pub fn consider_possible_answer(&mut self, var: AstNode<'ctx>, answer: AstNode<'ctx>) {
+        if let SolverImpl::Solver(..) = self.solver {
+            self.solver = SolverImpl::Optimize(Optimize::new(self.context));
+        }
+        let SolverImpl::Optimize(optimize) = &mut self.solver else {
+            unreachable!();
+        };
+
+        optimize.assert_soft(&var.dyn_ast()._eq(&answer.dyn_ast()), 1, None);
     }
 }
 
