@@ -7,7 +7,7 @@ use common::{pri::BasicBlockLocation, types::trace::Constraint, z3::serdes::SmtL
 
 type Expression = SmtLibExpr;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub(crate) struct SwitchStep<V = Expression, C = Expression> {
     pub location: BasicBlockLocation,
     pub decision: Option<Constraint<V, C>>,

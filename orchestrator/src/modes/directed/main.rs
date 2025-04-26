@@ -7,6 +7,7 @@
 #![feature(substr_range)]
 #![feature(hash_extract_if)]
 #![feature(iterator_try_reduce)]
+#![feature(iter_map_windows)]
 
 mod outgen;
 mod reachability;
@@ -65,7 +66,7 @@ fn main() -> ExitCode {
         Err(value) => return value,
     };
 
-    let solver = solve::Solver::new(&trace);
+    let solver = solve::Solver::new(&trace, &input, &p_map, &reachability);
     let director = two_level::Director::new(&trace);
     let mut next_input_dumper = NextInputGenerator::new(&args.outdir, args.target, &input);
 
