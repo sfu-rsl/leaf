@@ -113,12 +113,18 @@ def should_add_leaf_as_dep() -> bool:
     ]
 
 
-def common_cargo_build_options(dummy_crate_dir: Path) -> list[str]:
+def common_cargo_options(dummy_crate_dir: Path) -> list[str]:
     return [
         f"--manifest-path={dummy_crate_dir.joinpath('Cargo.toml')}",
         f"--target={BUILD_TARGET}",
-        f"--profile={'dev' if BUILD_PROFILE == 'debug' else BUILD_PROFILE}",
         "-Zbuild-std=core,std,panic_unwind,panic_abort,test",
+    ]
+
+
+def common_cargo_build_options(dummy_crate_dir: Path) -> list[str]:
+    return [
+        *common_cargo_options(dummy_crate_dir),
+        f"--profile={'dev' if BUILD_PROFILE == 'debug' else BUILD_PROFILE}",
         # You can switch to a single thread for easier debugging
         # "-j1",
     ]
@@ -290,37 +296,54 @@ def add_leaf_to_core(core_src_dir: Path, leaf_workspace_dir: Path, res_dir: Path
     apply_patches()
 
 
-def create_dummy_crate(work_dir: Path, res_dir: Path) -> Path:
+def ensure_no_trans_dependency(dummy_crate_dir: Path):
+    logging.info("Checking the dependency tree of the dummy crate")
+
+    process = run_command(
+        args=[
+            "cargo",
+            "tree",
+            "--prefix",
+            "none",
+            "--format",
+            r"{lib}",
+            *common_cargo_options(dummy_crate_dir),
+        ],
+        cwd=dummy_crate_dir,
+        env=common_env_vars(),
+        check=True,
+    )
+    deps = set(process.stdout.decode("utf-8").strip().splitlines()) - {"dummy"}
+    EXPECTED_DEPS = {"leafrtsh", "leafcmn"}
+    assert (
+        deps == EXPECTED_DEPS
+    ), f"Found transitive dependencies for the dummy crate. Dependencies: {deps}"
+
+
+def create_dummy_crate(
+    work_dir: Path, res_dir: Path, leaf_workspace_dir: Path, add_leaf_as_dep: bool
+) -> Path:
     template_dir = res_dir.joinpath("crate_template")
     crate_path = work_dir.joinpath("dummy_crate")
     if crate_path.exists():
         shutil.rmtree(crate_path)
     shutil.copytree(template_dir, crate_path)
 
-    return crate_path
-
-
-def set_dummy_crate_config_toml(
-    dummy_crate_dir: Path,
-    add_leaf_as_dep: bool,
-    enable_core_build_cfg: bool,
-):
     substitute_template(
-        dummy_crate_dir.joinpath(".cargo", "config.toml.template"),
+        crate_path.joinpath("Cargo.toml.template"),
+        leaf_workspace_dir=leaf_workspace_dir,
+        leaf_dep_switch=commenter(not add_leaf_as_dep),
+    )
+
+    enable_core_build_cfg = not add_leaf_as_dep
+    substitute_template(
+        crate_path.joinpath(".cargo", "config.toml.template"),
         leaf_as_in_core_switch=commenter(add_leaf_as_dep),
         leaf_as_external_switch=commenter(not add_leaf_as_dep),
         core_build_cfg_switch=commenter(not enable_core_build_cfg),
     )
 
-
-def set_dummy_crate_cargo_toml(
-    dummy_crate_dir: Path, add_leaf_as_dep: bool, leaf_workspace_dir: Path
-):
-    substitute_template(
-        dummy_crate_dir.joinpath("Cargo.toml.template"),
-        leaf_workspace_dir=leaf_workspace_dir,
-        leaf_dep_switch=commenter(not add_leaf_as_dep),
-    )
+    return crate_path
 
 
 def build_env_vars(toolchain_path: Path):
@@ -416,12 +439,9 @@ def main():
         "added as a dependency" if add_leaf_as_dep else "added to core library",
     )
 
-    dummy_crate_dir = create_dummy_crate(paths.work, paths.res)
-    set_dummy_crate_cargo_toml(dummy_crate_dir, add_leaf_as_dep, paths.leaf_workspace)
-    set_dummy_crate_config_toml(
-        dummy_crate_dir,
-        add_leaf_as_dep,
-        enable_core_build_cfg=not add_leaf_as_dep,
+    logging.debug("Creating a dummy crate")
+    dummy_crate_dir = create_dummy_crate(
+        paths.work, paths.res, paths.leaf_workspace, add_leaf_as_dep
     )
 
     run_command(
@@ -431,8 +451,8 @@ def main():
         check=True,
     )
 
+    logging.debug("Getting original toolchain path")
     orig_toolchain_path = get_toolchain_path(dummy_crate_dir)
-    logging.debug("Original toolchain path: %s", orig_toolchain_path)
 
     target_toolchain_path = orig_toolchain_path
     if not add_leaf_as_dep:
@@ -441,6 +461,9 @@ def main():
         ).absolute()
         logging.debug("Copied toolchain path: %s", target_toolchain_path)
 
+    logging.debug(
+        "Getting and ensuring toolchain path for building: %s", orig_toolchain_path
+    )
     toolchain_path = get_toolchain_path(
         dummy_crate_dir, env=build_env_vars(target_toolchain_path)
     )
@@ -453,6 +476,8 @@ def main():
         core_src = get_core_src_dir(toolchain_path)
         logging.debug("Core source dir: %s", core_src)
         add_leaf_to_core(core_src, paths.leaf_workspace, paths.res)
+    else:
+        ensure_no_trans_dependency(dummy_crate_dir)
 
     build_crate_with_core(dummy_crate_dir, toolchain_path)
     out_toolchain_path = make_toolchain(dummy_crate_dir, paths.out)

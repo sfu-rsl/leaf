@@ -164,7 +164,7 @@ mod driver_callbacks {
             Box::new(NoOpPass.to_callbacks())
         } else {
             let mut passes = if config.codegen_all_mir && is_ineffective_crate {
-                log_info!("Setting up passes as for a primary package in codegen all mode.");
+                log_info!("Setting up passes as for an ineffective primary package in codegen all mode.");
                 build_minimal_passes_in_codegen_all_mode()
             } else if config.codegen_all_mir
                 && is_dependency_crate(crate_options.crate_name.as_ref())

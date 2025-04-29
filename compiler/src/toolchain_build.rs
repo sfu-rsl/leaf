@@ -186,7 +186,7 @@ fn persist_toolchain(built_toolchain_path: &Path, target_triple: &str) -> Result
     Ok(dest)
 }
 
-pub(super) fn try_find_compatible_toolchain(sysroot: &Path) -> Option<PathBuf> {
+pub(super) fn try_find_compatible_toolchain(provided_sysroot: &Path) -> Option<PathBuf> {
     let toolchains = persistent_toolchains_path();
     fs::read_dir(toolchains)
         .ok()?
@@ -194,9 +194,10 @@ pub(super) fn try_find_compatible_toolchain(sysroot: &Path) -> Option<PathBuf> {
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
         .filter(|e| fs::read_dir(e.path()).is_ok_and(|mut d| d.next().is_some()))
         .map(|e| e.path())
-        .find(|p| is_sysroot_compatible(sysroot, Some(&p)))
+        .find(|p| is_sysroot_compatible(provided_sysroot, Some(&p)))
 }
 
+#[tracing::instrument(level = "debug", ret)]
 pub(super) fn is_sysroot_compatible(sysroot: &Path, built_sysroot: Option<&Path>) -> bool {
     // If the original set sysroot has the marker, it is our own sysroot.
     if sysroot.join(FILE_TOOLCHAIN_MARKER).exists() {

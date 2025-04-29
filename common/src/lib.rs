@@ -4,7 +4,7 @@
 #![feature(const_type_id)]
 #![cfg_attr(not(core_build), feature(register_tool))]
 #![cfg_attr(not(core_build), register_tool(leaf_attr))]
-#![cfg_attr(not(core_build), feature(path_add_extension))]
+#![cfg_attr(all(not(core_build), feature = "answers"), feature(path_add_extension))]
 #![no_std]
 
 #[cfg(feature = "std")]

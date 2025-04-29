@@ -1,7 +1,5 @@
 use super::types::TypeId;
 
-use derive_more as dm;
-
 #[cfg_attr(not(core_build), macro_export)]
 macro_rules! identity {
     ($($input:tt)+) => {
@@ -182,35 +180,42 @@ pub fn comma_separated<T: core::fmt::Display>(
         .join(", ")
 }
 
-#[derive(Default, dm::Deref, dm::DerefMut)]
-pub struct UnsafeSync<T>(T);
+#[cfg(feature = "unsafe_wrappers")]
+mod unsafe_wrappers {
+    use derive_more as dm;
 
-impl<T> UnsafeSync<T> {
-    pub const fn new(value: T) -> Self {
-        Self(value)
+    #[derive(Default, dm::Deref, dm::DerefMut)]
+    pub struct UnsafeSync<T>(T);
+
+    impl<T> UnsafeSync<T> {
+        pub const fn new(value: T) -> Self {
+            Self(value)
+        }
+
+        pub fn into_inner(self) -> T {
+            self.0
+        }
     }
 
-    pub fn into_inner(self) -> T {
-        self.0
+    unsafe impl<T> Sync for UnsafeSync<T> {}
+
+    #[derive(Default, dm::Deref, dm::DerefMut)]
+    pub struct UnsafeSend<T>(T);
+
+    impl<T> UnsafeSend<T> {
+        pub const fn new(value: T) -> Self {
+            Self(value)
+        }
+
+        pub fn into_inner(self) -> T {
+            self.0
+        }
     }
+
+    unsafe impl<T> Send for UnsafeSend<T> {}
 }
-
-unsafe impl<T> Sync for UnsafeSync<T> {}
-
-#[derive(Default, dm::Deref, dm::DerefMut)]
-pub struct UnsafeSend<T>(T);
-
-impl<T> UnsafeSend<T> {
-    pub const fn new(value: T) -> Self {
-        Self(value)
-    }
-
-    pub fn into_inner(self) -> T {
-        self.0
-    }
-}
-
-unsafe impl<T> Send for UnsafeSend<T> {}
+#[cfg(feature = "unsafe_wrappers")]
+pub use unsafe_wrappers::*;
 
 #[cfg(feature = "std")]
 pub fn current_instant_millis() -> u128 {

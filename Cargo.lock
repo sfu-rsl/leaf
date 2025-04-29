@@ -498,6 +498,7 @@ dependencies = [
  "runtime_basic_li",
  "runtime_noop",
  "serde",
+ "tracing",
  "tracing-subscriber",
 ]
 
