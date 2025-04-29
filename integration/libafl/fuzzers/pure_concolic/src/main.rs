@@ -1,7 +1,5 @@
 use core::num::NonZero;
 use std::{
-    borrow::Cow,
-    collections::HashSet,
     io::Write,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
@@ -9,13 +7,9 @@ use std::{
 };
 
 use clap::Parser;
-use sha2::digest::{self};
-use sha2::{self, Digest, Sha256};
 
-use libafl::{
-    executors::command::CommandConfigurator, prelude::*, stages::mutational::MultiMutationalStage,
-};
-use libafl_bolts::{AsSlice, Named, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
+use libafl::{executors::command::CommandConfigurator, prelude::*};
+use libafl_bolts::{AsSlice, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
 use libafl_leaf::{DivergingMutator, MultiMutationalStageWithStats};
 
 use ::common::log_debug;
@@ -86,8 +80,8 @@ pub fn main() {
 
     let observer = ();
     // For pure concolic execution, all distinct inputs are interesting
-    let mut feedback = feedback_and_fast!(DistinctInputFeedback::default());
-    let mut objective = feedback_and_fast!(CrashFeedback::new(), DistinctInputFeedback::default());
+    let mut feedback = feedback_and_fast!(ConstFeedback::True,);
+    let mut objective = feedback_and_fast!(CrashFeedback::new(), feedback.clone());
 
     let mut state = StdState::new(
         StdRand::with_seed(current_nanos()),
@@ -105,7 +99,8 @@ pub fn main() {
 
     let scheduler = QueueScheduler::new();
 
-    let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
+    let mut fuzzer =
+        StdFuzzer::with_bloom_input_filter(scheduler, feedback, objective, 1 << 20, 0.01);
 
     let mut executor = ProgramExecutionConfigurator {
         program: args.program.unwrap(),
@@ -225,40 +220,6 @@ fn is_new_or_disable<I: Clone, S: HasCurrentCorpusId + HasCurrentTestcase<I> + H
         Ok(false)
     } else {
         Ok(true)
-    }
-}
-
-type Hasher = Sha256;
-type Fingerprint = digest::Output<Hasher>;
-/// Feedback which considers distinct inputs as interesting based on their fingerprint (digest).
-#[derive(Default)]
-struct DistinctInputFeedback {
-    calculator: Hasher,
-    buf: Fingerprint,
-    tested_inputs: HashSet<Fingerprint>,
-}
-
-impl Named for DistinctInputFeedback {
-    fn name(&self) -> &Cow<'static, str> {
-        &Cow::Borrowed("DistinctInputFeedback")
-    }
-}
-
-impl<S> StateInitializer<S> for DistinctInputFeedback {}
-
-impl<EM, I: HasTargetBytes, OT, S> Feedback<EM, I, OT, S> for DistinctInputFeedback {
-    fn is_interesting(
-        &mut self,
-        _state: &mut S,
-        _manager: &mut EM,
-        input: &I,
-        _observers: &OT,
-        _exit_kind: &ExitKind,
-    ) -> Result<bool, Error> {
-        self.calculator.update(input.target_bytes().as_slice());
-        self.calculator.finalize_into_reset(&mut self.buf);
-        let result = self.tested_inputs.insert(self.buf);
-        Ok(result)
     }
 }
 

@@ -1437,7 +1437,6 @@ dependencies = [
  "libafl",
  "libafl_bolts",
  "log",
- "serde",
 ]
 
 [[package]]
@@ -2031,7 +2030,6 @@ dependencies = [
  "libafl",
  "libafl_bolts",
  "libafl_leaf",
- "sha2",
  "tracing-log",
  "tracing-subscriber",
 ]
