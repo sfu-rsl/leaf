@@ -8,9 +8,13 @@ use super::utils::StrError;
 
 type AdjListGraph<V, E> = HashMap<V, Vec<E>>;
 
-pub type Constraint = (usize, Option<u128>); // Target index, Target value (None for o.w.)
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub enum CfgConstraint {
+    Case(u128),
+    Otherwise,
+}
 
-pub type CfgEdgeDestination = (BasicBlockIndex, Option<Constraint>); // Target index, Possible constraint
+pub type CfgEdgeDestination = (BasicBlockIndex, Option<CfgConstraint>); // Target, Possible constraint
 pub type ControlFlowGraph = AdjListGraph<BasicBlockIndex, CfgEdgeDestination>;
 pub type CallGraphEdgeDestination<I> = (BasicBlockIndex, I);
 pub type CallGraph<I = DefId> = AdjListGraph<I, CallGraphEdgeDestination<I>>;

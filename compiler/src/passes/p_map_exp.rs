@@ -1,9 +1,11 @@
 use rustc_middle::{
-    mir::{BasicBlock, Body, HasLocalDecls, TerminatorEdges},
+    mir::{BasicBlock, Body, HasLocalDecls, TerminatorEdges, TerminatorKind},
     ty::TyCtxt,
 };
 
-use common::directed::{BasicBlockIndex, CfgEdgeDestination, ControlFlowGraph, DefId, ProgramMap};
+use common::directed::{
+    BasicBlockIndex, CfgConstraint, CfgEdgeDestination, ControlFlowGraph, DefId, ProgramMap,
+};
 
 use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
 use crate::utils::file::TyCtxtFileExt;
@@ -97,6 +99,7 @@ fn visit_body<'tcx>(
         while let Some(TerminatorEdges::Single(next)) = body.basic_blocks[current]
             .terminator
             .as_ref()
+            .filter(|t| !matches!(t.kind, TerminatorKind::Assert { .. }))
             .map(|t| t.edges())
         {
             current = next;
@@ -127,30 +130,36 @@ fn visit_body<'tcx>(
                 real_target: target,
                 unwind: _,
             }
+            | Drop {
+                target, unwind: _, ..
+            }
             | Goto { target } => {
                 insert_to_cfg(vec![(target.as_u32(), None)]);
             }
             SwitchInt { discr: _, targets } => {
-                let mut successors: Vec<(u32, Option<(usize, Option<u128>)>)> = Vec::new();
-                for (target_index, target) in targets.iter().enumerate() {
-                    successors.push((target.1.as_u32(), Some((target_index, Some(target.0)))));
+                let mut successors: Vec<CfgEdgeDestination> = Vec::new();
+                for (value, block) in targets.iter() {
+                    successors.push((block.as_u32(), Some(CfgConstraint::Case(value))));
                 }
                 if !body.basic_blocks[targets.otherwise()].is_empty_unreachable() {
-                    successors.push((targets.otherwise().as_u32(), Some((usize::MAX, None))));
+                    successors.push((targets.otherwise().as_u32(), Some(CfgConstraint::Otherwise)));
                 }
                 insert_to_cfg(successors);
             }
-            Return => ret_points.push(index.as_u32()),
-            UnwindResume | UnwindTerminate(_) | Unreachable | CoroutineDrop => {}
-            Drop {
-                target, unwind: _, ..
-            }
-            | Assert {
-                target, unwind: _, ..
+            Assert {
+                target,
+                expected,
+                unwind: _,
+                ..
             } => {
                 // TODO: Handle unwind
-                insert_to_cfg(vec![(target.as_u32(), None)]);
+                insert_to_cfg(vec![(
+                    target.as_u32(),
+                    Some(CfgConstraint::Case(*expected as u128)),
+                )]);
             }
+            Return => ret_points.push(index.as_u32()),
+            UnwindResume | UnwindTerminate(_) | Unreachable | CoroutineDrop => {}
             Call { func, target, .. } => {
                 use rustc_type_ir::TyKind::*;
                 match func.ty(body.local_decls(), tcx).kind() {

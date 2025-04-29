@@ -1,7 +1,7 @@
 use std::{collections::HashMap, rc::Rc};
 
 use common::{
-    directed::{CfgEdgeDestination, ProgramMap},
+    directed::{CfgConstraint, CfgEdgeDestination, ProgramMap},
     log_debug, log_info, log_warn,
     pri::BasicBlockIndex,
     types::trace::ConstraintKind,
@@ -50,20 +50,21 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
 
     /// # Remarks
     /// The metadata of the edge is the list of outgoing edges from the source switch node.
+    #[tracing::instrument(level = "debug", skip_all)]
     pub(crate) fn satisfy_edge(
         &self,
         edge: &DirectedEdge<'_, &[CfgEdgeDestination]>,
     ) -> Option<impl Iterator<Item = (z3::SatResult, HashMap<u32, AstNode<'ctx>>)>> {
         log_debug!(
-            "Edge to satisfy: {} toward {}, with discriminant: {}",
-            &edge.src.location,
-            edge.dst,
-            edge.src
+            discr = edge
+                .src
                 .decision
                 .as_ref()
                 .map(|d| &d.discr)
-                .map(|d| d.to_string())
-                .unwrap_or("??".to_owned())
+                .map(|d| d.to_string()),
+            "Edge to satisfy: {} toward {}",
+            &edge.src.location,
+            edge.dst,
         );
 
         let constraints = &self.parsed_trace[..=self
@@ -242,19 +243,18 @@ fn weaken_steps<'ctx>(
             weaken_constraint(
                 step,
                 edges,
-                next,
-                ENABLE_REACHABILITY.then_some(reachability),
+                ENABLE_REACHABILITY.then_some((reachability, next)),
             );
         });
 }
 
 /// # Remarks
 /// You can disable weakening based on reachability by passing `None`.
+#[tracing::instrument(level = "debug", skip(outgoing_edges, reachability))]
 fn weaken_constraint<'ctx>(
     step: &mut ParsedSwitchStep<'ctx>,
     outgoing_edges: &[CfgEdgeDestination],
-    next: Option<BasicBlockIndex>,
-    reachability: Option<&impl ProgramReachability>,
+    reachability: Option<(&impl ProgramReachability, Option<BasicBlockIndex>)>,
 ) {
     /* NOTE: A more effective approach would be looking at the next step in the trace.
      * However, as we don't have call jumps in the trace at the moment, we only do it at
@@ -270,7 +270,12 @@ fn weaken_constraint<'ctx>(
             (
                 *target,
                 constraint_kind_from_outgoing_edge(
-                    c.expect("Unconstrained decision is not expected.").1,
+                    c.unwrap_or_else(|| {
+                        unreachable!(
+                            "Unconstrained decision is not expected at {}",
+                            step.location
+                        )
+                    }),
                     outgoing_edges,
                     taken_decision.kind.is_boolean(),
                 ),
@@ -283,11 +288,16 @@ fn weaken_constraint<'ctx>(
         .as_ref()
         .map(|case| case.as_bit_vector().as_u128().unwrap());
 
-    let next = next.unwrap_or_else(|| {
+    let next = reachability.and_then(|(_, next)|next).unwrap_or_else(|| {
         out_going_kinds
             .iter()
             .find_map(|(target, kind)| (kind.eq(&taken_kind)).then_some(*target))
-            .expect("Could not map constraint back to CFG edge.")
+            .unwrap_or_else(|| {
+                panic!(
+                    "Could not map constraint back to CFG edge based on the taken step. Decision: {} at {}",
+                    taken_kind, step.location,
+                )
+            })
     });
 
     let possible_kinds = out_going_kinds
@@ -295,22 +305,28 @@ fn weaken_constraint<'ctx>(
         .filter(|(t, _)| {
             *t == next
                 || reachability
-                    .and_then(|r| r.cfg(step.location.body))
+                    .and_then(|(r, _)| r.cfg(step.location.body))
                     .is_some_and(|r| r.reachers(&next).contains(t))
         })
         .map(|(_, k)| k);
-
     let case_count = case_count(outgoing_edges);
     let weakened_kind = possible_kinds
         .into_iter()
         .try_reduce(|acc, k| acc.or(&k, || case_count))
-        .map(|k| k.expect("Could not map constraint back to CFG edge, no possible kind"));
+        .map(|k| {
+            k.unwrap_or_else(|| {
+                panic!(
+                    "Could not map constraint back to CFG edge based on target. Decision: {} at {}, Target: {}",
+                    taken_kind, step.location, next,
+                )
+            })
+        });
 
     if let Some(weakened_kind) = weakened_kind {
         taken_decision.kind = weakened_kind.map(ast_mapper(&taken_decision.discr));
     } else {
         log_debug!(
-            "Constraint removed. The next basic block ({}), was reachable from all edges of {:?}.",
+            "Removing constraint. The next basic block ({}), is reachable from all edges of {:?}.",
             next,
             step
         );
@@ -325,13 +341,12 @@ fn construct_constraint_kinds_to_satisfy<'ctx>(
     target: BasicBlockIndex,
 ) -> impl Iterator<Item = ConstraintKind<AstNode<'ctx>>> {
     // The value of the discriminant to take the edge. None for o.w.
-    let target_values = outgoing_edges
+    let target_case_values = outgoing_edges
         .iter()
         .filter(move |(t, _)| *t == target)
-        .map(|(_, c)| c.expect("Unconstrained decision is not expected."))
-        .map(|(_, value)| value.as_ref().copied());
+        .map(|(_, c)| c.expect("Unconstrained decision is not expected."));
 
-    let kinds = target_values.map(move |value| {
+    let kinds = target_case_values.map(move |value| {
         constraint_kind_from_outgoing_edge(value, outgoing_edges, taken_decision.kind.is_boolean())
     });
 
@@ -359,7 +374,7 @@ fn construct_constraint_kinds_to_satisfy<'ctx>(
 }
 
 fn constraint_kind_from_outgoing_edge(
-    edge_case: Option<u128>,
+    edge_case: CfgConstraint,
     all_edges: &[CfgEdgeDestination],
     is_boolean_switch: bool,
 ) -> ConstraintKind<u128> {
@@ -368,29 +383,20 @@ fn constraint_kind_from_outgoing_edge(
         let to_kind = |v| {
             if v == 0 { False } else { True }
         };
-        if let Some(value) = edge_case {
+        if let CfgConstraint::Case(value) = edge_case {
             to_kind(value)
         } else {
             debug_assert_eq!(all_edges.len(), 2);
             // Although we know that otherwise case for boolean switches is True,
             // let's not rely on the assumption.
-            let not_value = all_edges
-                .iter()
-                .find_map(|(_, v)| v.as_ref().and_then(|(_, v)| *v))
-                .unwrap();
+            let not_value = all_edges.iter().find_map(|(_, v)| v.flatten()).unwrap();
             to_kind(not_value).not()
         }
     } else {
-        if let Some(value) = edge_case {
+        if let CfgConstraint::Case(value) = edge_case {
             OneOf(vec![value])
         } else {
-            OneOf(
-                all_edges
-                    .iter()
-                    .filter_map(|(_, v)| v.as_ref().and_then(|(_, v)| *v))
-                    .collect(),
-            )
-            .not()
+            OneOf(all_edges.iter().filter_map(|(_, v)| v.flatten()).collect()).not()
         }
     }
 }
@@ -419,6 +425,19 @@ fn ast_mapper<'ctx>(discr: &AstNode<'ctx>) -> impl FnMut(u128) -> AstNode<'ctx> 
 fn case_count(outgoing_edges: &[CfgEdgeDestination]) -> usize {
     outgoing_edges
         .into_iter()
-        .filter(|(_, c)| c.is_some_and(|(_, v)| v.is_some()))
+        .filter(|(_, c)| c.flatten().is_some())
         .count()
+}
+
+trait ConstraintFlatten {
+    fn flatten(self) -> Option<u128>;
+}
+
+impl ConstraintFlatten for Option<CfgConstraint> {
+    fn flatten(self) -> Option<u128> {
+        self.and_then(|c| match c {
+            CfgConstraint::Case(value) => Some(value),
+            CfgConstraint::Otherwise => None,
+        })
+    }
 }

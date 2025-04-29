@@ -247,7 +247,5 @@ fn process_edge(
                 next_input_dumper.dump_as_next_input(&result.1)
             }
         }
-    } else {
-        log_debug!("Concrete edge: {}", edge.src.location);
     }
 }
