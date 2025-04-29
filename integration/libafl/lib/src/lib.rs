@@ -4,5 +4,5 @@
 mod mutation;
 mod stage;
 
-pub use mutation::DivergingMutator;
-pub use stage::NonBlockingMultiMutationalStage;
+pub use mutation::*;
+pub use stage::*;

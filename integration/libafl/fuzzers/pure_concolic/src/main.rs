@@ -16,7 +16,7 @@ use libafl::{
     executors::command::CommandConfigurator, prelude::*, stages::mutational::MultiMutationalStage,
 };
 use libafl_bolts::{AsSlice, Named, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
-use libafl_leaf::DivergingMutator;
+use libafl_leaf::{DivergingMutator, MultiMutationalStageWithStats};
 
 use ::common::log_debug;
 
@@ -157,7 +157,11 @@ pub fn main() {
     let mut stages = tuple_list!(IfStage::new(
         // Do not repeat inputs
         |_, _, s: &mut StdState<_, _, _, _>, _| { is_new_or_disable(s) },
-        tuple_list!(MultiMutationalStage::new(mutator)),
+        tuple_list!(MultiMutationalStageWithStats::new(
+            "DivergingInputGen".into(),
+            "total_diverging_input_generated".into(),
+            mutator
+        )),
     ));
 
     fuzzer
@@ -205,7 +209,7 @@ fn make_monitor() -> impl Monitor {
         use libafl::monitors::SimpleMonitor;
 
         #[cfg(not(feature = "tui"))]
-        SimpleMonitor::new(|s| println!("{s}"))
+        SimpleMonitor::with_user_monitor(|s| println!("{s}"))
     }
 }
 
