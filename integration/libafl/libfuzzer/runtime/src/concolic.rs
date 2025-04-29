@@ -5,7 +5,7 @@ use crate::options::LibfuzzerOptions;
 use libafl::{
     Evaluator, HasMetadata, HasNamedMetadata,
     corpus::HasCurrentCorpusId,
-    events::SendExiting,
+    events::{EventFirer, SendExiting},
     inputs::{HasMutatorBytes, Input},
     stages::{OptionalStage, Restartable, Stage},
     state::{HasCorpus, HasNestedStage, HasRand, Stoppable},
@@ -20,7 +20,7 @@ pub(super) fn make_concolic_stage<I, E, EM, S, Z>(
 ) -> impl Stage<E, EM, S, Z> + Restartable<S>
 where
     I: Input + HasMutatorBytes + Send + Clone + 'static,
-    EM: SendExiting,
+    EM: SendExiting + EventFirer<I, S>,
     S: HasCorpus<I>
         + HasCurrentCorpusId
         + HasRand
@@ -51,7 +51,13 @@ where
                 &workdir,
             )
         })
-        .map(|m| NonBlockingMultiMutationalStage::new(std::borrow::Cow::Borrowed("Concolic"), m))
+        .map(|m| {
+            NonBlockingMultiMutationalStage::new(
+                "Concolic".into(),
+                "total_concolic_inputs".into(),
+                m,
+            )
+        })
         .map(|s| tuple_list!(s));
     OptionalStage::new(opt_stage)
 }
