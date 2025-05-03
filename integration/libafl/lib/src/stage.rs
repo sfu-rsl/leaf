@@ -1,7 +1,7 @@
 use std::{borrow::Cow, marker::PhantomData, sync::mpsc, thread};
 
 use libafl::{
-    Error, Evaluator, HasMetadata, HasNamedMetadata,
+    Error, Evaluator, ExecuteInputResult, HasMetadata, HasNamedMetadata,
     corpus::HasCurrentCorpusId,
     events::{Event, EventFirer},
     monitors::stats::{AggregatorOps, UserStats, UserStatsValue},
@@ -14,12 +14,59 @@ use libafl::{
 };
 use libafl_bolts::Named;
 
+#[derive(Debug, Clone)]
+struct Stats {
+    generated_name: Cow<'static, str>,
+    generated: usize,
+    in_corpus_name: Cow<'static, str>,
+    in_corpus: usize,
+    solution_name: Cow<'static, str>,
+    solution: usize,
+}
+
+impl Stats {
+    fn new(base_name: Cow<'static, str>) -> Self {
+        Self {
+            generated_name: base_name.clone() + "_generated",
+            generated: 0,
+            in_corpus_name: base_name.clone() + "_in_corpus",
+            in_corpus: 0,
+            solution_name: base_name.clone() + "_solution",
+            solution: 0,
+        }
+    }
+
+    fn notify_mutant(&mut self, exe_result: ExecuteInputResult) {
+        self.generated += 1;
+
+        if exe_result.is_corpus() {
+            self.in_corpus += 1;
+        }
+        if exe_result.is_solution() {
+            self.solution += 1;
+        }
+    }
+
+    fn report<EM: EventFirer<I, S>, I, S>(&self, manager: &mut EM, state: &mut S) {
+        let mut fire = |name: &Cow<'static, str>, value| {
+            let _ = manager.fire(state, Event::UpdateUserStats {
+                name: name.clone(),
+                value: UserStats::new(UserStatsValue::Number(value as u64), AggregatorOps::Sum),
+                phantom: Default::default(),
+            });
+        };
+
+        fire(&self.generated_name, self.generated);
+        fire(&self.in_corpus_name, self.in_corpus);
+        fire(&self.solution_name, self.solution);
+    }
+}
+
 /// A copy of `MultiMutationalStage` with stats added in it.
 #[derive(Clone, Debug)]
 pub struct MultiMutationalStageWithStats<E, EM, I, M, S, Z> {
     name: Cow<'static, str>,
-    stats_name: Cow<'static, str>,
-    total_generated: usize,
+    stats: Stats,
     mutator: M,
     phantom: PhantomData<(E, EM, I, S, Z)>,
 }
@@ -29,8 +76,7 @@ impl<E, EM, I, M, S, Z> MultiMutationalStageWithStats<E, EM, I, M, S, Z> {
     pub fn new(name: Cow<'static, str>, stats_name: Cow<'static, str>, mutator: M) -> Self {
         Self {
             name,
-            stats_name,
-            total_generated: 0,
+            stats: Stats::new(stats_name),
             mutator,
             phantom: PhantomData,
         }
@@ -67,21 +113,16 @@ where
 
         let generated = self.mutator.multi_mutate(state, &input, None)?;
 
-        self.total_generated += generated.len();
-        report_new_inputs(
-            manager,
-            state,
-            self.stats_name.clone(),
-            self.total_generated,
-        );
-
         for new_input in generated {
             let (untransformed, post) = new_input.try_transform_into(state)?;
-            let (_, corpus_id) =
+            let (exe_result, corpus_id) =
                 fuzzer.evaluate_filtered(state, executor, manager, &untransformed)?;
             self.mutator.multi_post_exec(state, corpus_id)?;
             post.post_exec(state, corpus_id)?;
+            self.stats.notify_mutant(exe_result);
         }
+
+        self.stats.report(manager, state);
 
         Ok(())
     }
@@ -92,10 +133,9 @@ where
 #[derive(Debug)]
 pub struct NonBlockingMultiMutationalStage<E, EM, I, M, S, Z> {
     name: Cow<'static, str>,
-    stats_name: Cow<'static, str>,
+    stats: Stats,
     inputs: mpsc::SyncSender<I>,
     mutants: mpsc::Receiver<I>,
-    total_generated: usize,
     _phantom: PhantomData<(E, EM, I, M, S, Z)>,
 }
 
@@ -108,10 +148,9 @@ where
         let (inputs_sender, mutants_receiver) = Self::spawn_mutator_thread(mutator);
         Self {
             name,
-            stats_name,
+            stats: Stats::new(stats_name),
             inputs: inputs_sender,
             mutants: mutants_receiver,
-            total_generated: 0,
             _phantom: PhantomData,
         }
     }
@@ -146,7 +185,6 @@ impl<E, EM, I, M, S, Z> Named for NonBlockingMultiMutationalStage<E, EM, I, M, S
 impl<E, EM, I, M, S, Z> Stage<E, EM, S, Z> for NonBlockingMultiMutationalStage<E, EM, I, M, S, Z>
 where
     I: Clone + MutatedTransform<I, S>,
-    M: MultiMutator<I, S>,
     S: HasRand + HasNamedMetadata + HasCurrentTestcase<I> + HasCurrentCorpusId,
     EM: EventFirer<I, S>,
     Z: Evaluator<E, EM, I, S>,
@@ -163,20 +201,16 @@ where
         {
             // NOTE: We do it first to make the mutator less susceptible to concurrency issues.
             for new_input in self.mutants.try_iter() {
-                self.total_generated += 1;
-                report_new_inputs(
-                    manager,
-                    state,
-                    self.stats_name.clone(),
-                    self.total_generated,
-                );
-
                 let (untransformed, post) = new_input.try_transform_into(state)?;
-                let (_, corpus_id) =
+                let (exe_result, corpus_id) =
                     fuzzer.evaluate_filtered(state, executor, manager, &untransformed)?;
                 // FIXME: Call MultiMutator::multi_post_exec(state, corpus_id)?;
                 post.post_exec(state, corpus_id)?;
+
+                self.stats.notify_mutant(exe_result);
             }
+
+            self.stats.report(manager, state);
         }
 
         // Send the current input to the mutator.
@@ -229,19 +263,4 @@ where
     fn clear_progress(&mut self, state: &mut S) -> Result<(), Error> {
         RetryCountRestartHelper::clear_progress(state, &self.name)
     }
-}
-
-fn report_new_inputs<EM, I, S>(
-    manager: &mut EM,
-    state: &mut S,
-    stats_name: Cow<'static, str>,
-    count: usize,
-) where
-    EM: EventFirer<I, S>,
-{
-    let _ = manager.fire(state, Event::UpdateUserStats {
-        name: stats_name.clone(),
-        value: UserStats::new(UserStatsValue::Number(count as u64), AggregatorOps::Sum),
-        phantom: Default::default(),
-    });
 }
