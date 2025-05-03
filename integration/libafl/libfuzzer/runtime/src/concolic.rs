@@ -52,11 +52,7 @@ where
             )
         })
         .map(|m| {
-            NonBlockingMultiMutationalStage::new(
-                "Concolic".into(),
-                "total_concolic_inputs".into(),
-                m,
-            )
+            NonBlockingMultiMutationalStage::new("Concolic".into(), "concolic_inputs".into(), m)
         })
         .map(|s| tuple_list!(s));
     OptionalStage::new(opt_stage)
