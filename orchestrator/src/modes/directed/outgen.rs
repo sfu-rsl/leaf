@@ -8,14 +8,21 @@ use common::{
     pri::BasicBlockLocation,
     z3::{AstNode, BVNode, BVSort},
 };
+use orchestrator::{args::OutputFormat, utils::report_diverging_input};
 
 pub(crate) struct NextInputGenerator {
     answers_writer: SwitchableAnswersWriter<BinaryFileMultiAnswersWriter>,
     total_count: usize,
+    output_format: OutputFormat,
 }
 
 impl NextInputGenerator {
-    pub fn new(out_dir: &Path, target: BasicBlockLocation, program_input: &[u8]) -> Self {
+    pub fn new(
+        out_dir: &Path,
+        output_format: &OutputFormat,
+        target: BasicBlockLocation,
+        program_input: &[u8],
+    ) -> Self {
         Self {
             answers_writer: SwitchableAnswersWriter::new(BinaryFileMultiAnswersWriter::new(
                 out_dir.to_path_buf(),
@@ -27,11 +34,12 @@ impl NextInputGenerator {
                 Some(program_input),
             )),
             total_count: 0,
+            output_format: output_format.clone(),
         }
     }
 
     #[tracing::instrument(level= "debug", skip_all, fields(len = answers.len()))]
-    pub fn dump_as_next_input(&mut self, answers: &HashMap<u32, AstNode>) {
+    pub fn dump_as_next_input(&mut self, answers: &HashMap<u32, AstNode>, prefix_len: usize) {
         let result = self.answers_writer.write(
             answers
                 .iter()
@@ -46,7 +54,7 @@ impl NextInputGenerator {
         match result {
             Ok(path) => {
                 self.total_count += 1;
-                println!("{}", path.display())
+                report_diverging_input(&path, Some(prefix_len as f64), &self.output_format);
             }
             Err(err) => match err {
                 BinaryFileAnswerError::Incomplete => {

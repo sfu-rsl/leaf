@@ -1,16 +1,23 @@
 use core::iter;
 use std::{
     borrow::Cow,
+    collections::HashMap,
     path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
+use common::{conc_loop::GeneratedInputRecord, log_debug};
 use libafl::{
-    Error,
+    Error, HasMetadata,
+    corpus::Testcase,
     inputs::{HasMutatorBytes, Input},
     mutators::MultiMutator,
+    schedulers::TestcaseScore,
 };
-use libafl_bolts::Named;
+use libafl_bolts::{Named, SerdeAny};
+
+use derive_more as dm;
+use serde::{Deserialize, Serialize};
 
 pub struct DivergingMutator {
     orchestrator_path: PathBuf,
@@ -20,6 +27,47 @@ pub struct DivergingMutator {
     work_dir: PathBuf,
     input_path: Option<PathBuf>,
     command: Option<Command>,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, SerdeAny, dm::From)]
+pub struct DivergingInputScore(f64);
+
+pub struct DivergingInputTestcaseScore;
+
+#[derive(Debug, Default, Clone, Serialize, Deserialize, SerdeAny)]
+struct DivergingMutatorMetadata {
+    input_scores: HashMap<String, DivergingInputScore>,
+}
+
+impl<I, S> TestcaseScore<I, S> for DivergingInputTestcaseScore
+where
+    I: Input,
+    S: HasMetadata,
+{
+    fn compute(state: &S, entry: &mut Testcase<I>) -> Result<f64, Error> {
+        if let Ok(score) = entry.metadata::<DivergingInputScore>() {
+            return Ok(score.0);
+        }
+
+        let key = entry
+            .filename()
+            .clone()
+            .or_else(|| entry.input().as_ref().map(|i| i.generate_name(None)));
+        let score = key.and_then(|key| {
+            state
+                .metadata::<DivergingMutatorMetadata>()
+                .ok()
+                .map(|m| &m.input_scores)
+                .and_then(|m| m.get(&key))
+        });
+
+        if let Some(score) = score {
+            entry.add_metadata(score.clone());
+            return Ok(score.0);
+        }
+
+        Ok(0.0)
+    }
 }
 
 impl DivergingMutator {
@@ -51,26 +99,38 @@ impl Named for DivergingMutator {
 impl<I, S> MultiMutator<I, S> for DivergingMutator
 where
     I: Input + HasMutatorBytes,
+    S: HasMetadata,
 {
     fn multi_mutate(
         &mut self,
-        _state: &mut S,
+        state: &mut S,
         input: &I,
         max_count: Option<usize>,
     ) -> Result<Vec<I>, Error> {
-        let mutant_paths = self.run_input(input)?;
-        let max_count = max_count.unwrap_or(mutant_paths.len());
-        mutant_paths
+        let input_scores = &mut state
+            .metadata_or_insert_with::<DivergingMutatorMetadata>(Default::default)
+            .input_scores;
+        input_scores.clear();
+
+        let mutants = self.run_input(input)?;
+        let max_count = max_count.unwrap_or(mutants.len());
+        mutants
             .into_iter()
             .rev()
             .take(max_count)
-            .map(|p| I::from_file(p))
+            .map(|r| {
+                I::from_file(r.path).inspect(|input| {
+                    if let Some(score) = r.score {
+                        input_scores.insert(input.generate_name(None), score.into());
+                    }
+                })
+            })
             .try_collect::<Vec<I>>()
     }
 }
 
 impl DivergingMutator {
-    fn run_input<I: Input>(&mut self, input: &I) -> Result<Vec<PathBuf>, Error> {
+    fn run_input<I: Input>(&mut self, input: &I) -> Result<Vec<GeneratedInputRecord>, Error> {
         input.to_file(self.get_input_path())?;
 
         let child = self.get_command().spawn()?;
@@ -83,17 +143,18 @@ impl DivergingMutator {
             ))
         })?;
 
-        let mutants = String::from_utf8_lossy(output.stdout.as_slice())
-            .lines()
-            .map(PathBuf::from)
-            .map(|p| {
-                if p.is_absolute() {
-                    p
-                } else {
-                    self.work_dir.join(p)
-                }
+        let mutants = serde_json::Deserializer::from_slice(output.stdout.as_slice())
+            .into_iter()
+            .map(|r| {
+                r.map(|mut r: GeneratedInputRecord| {
+                    if !r.path.is_absolute() {
+                        r.path = self.work_dir.join(r.path)
+                    }
+                    r
+                })
             })
-            .collect::<Vec<_>>();
+            .try_collect::<Vec<_>>()
+            .map_err(|e| Error::os_error(e.into(), "Failed to read orchestrator's output"))?;
         log::debug!("Generated {} diverging inputs", mutants.len());
         Ok(mutants)
     }
@@ -111,6 +172,7 @@ impl DivergingMutator {
             const ARG_STDIN: &str = "--stdin";
             const ARG_OUT_DIR: &str = "--outdir";
             const ARG_SILENT: &str = "--silent";
+            const ARG_OUTPUT_FORMAT: &str = "--output-format";
             let mut cmd = Command::new(&self.orchestrator_path);
             cmd.current_dir(&self.work_dir)
                 .args([ARG_PROGRAM, &self.program_path.to_string_lossy()])
@@ -120,6 +182,7 @@ impl DivergingMutator {
                     &self.work_dir.join("mutants").to_string_lossy(),
                 ])
                 .arg(ARG_SILENT)
+                .args([ARG_OUTPUT_FORMAT, "json-stream"])
                 .args(self.orchestrator_args.iter())
                 .args(iter::once("--").chain(self.program_args.iter().map(String::as_str)))
                 .stdout(Stdio::piped())

@@ -10,7 +10,7 @@ use libafl::{
         Restartable, RetryCountRestartHelper, Stage,
         mutational::{MutatedTransform, MutatedTransformPost},
     },
-    state::{HasCurrentTestcase, HasRand},
+    state::{HasCurrentTestcase, HasRand, NopState},
 };
 use libafl_bolts::Named;
 
@@ -101,7 +101,7 @@ pub struct NonBlockingMultiMutationalStage<E, EM, I, M, S, Z> {
 
 impl<E, EM, I, M, S, Z> NonBlockingMultiMutationalStage<E, EM, I, M, S, Z>
 where
-    M: MultiMutator<I, ()> + Send + 'static,
+    M: MultiMutator<I, NopState<I>> + Send + 'static,
     I: Send + 'static,
 {
     pub fn new(name: Cow<'static, str>, stats_name: Cow<'static, str>, mutator: M) -> Self {
@@ -116,19 +116,17 @@ where
         }
     }
 
-    fn spawn_mutator_thread(mut mutator: M) -> (mpsc::SyncSender<I>, mpsc::Receiver<I>)
-    where
-        M: MultiMutator<I, ()> + Send + 'static,
-    {
+    fn spawn_mutator_thread(mut mutator: M) -> (mpsc::SyncSender<I>, mpsc::Receiver<I>) {
         let (inputs_sender, inputs_receiver) = mpsc::sync_channel(0);
         let (mutants_sender, mutants_receiver) = mpsc::channel();
 
         thread::spawn(move || {
+            let mut state = NopState::new();
             loop {
                 let Ok(input) = inputs_receiver.recv() else {
                     break;
                 };
-                let mutants = mutator.multi_mutate(&mut (), &input, None).unwrap();
+                let mutants = mutator.multi_mutate(&mut state, &input, None).unwrap();
                 for mutant in mutants.into_iter() {
                     mutants_sender.send(mutant).unwrap();
                 }

@@ -68,10 +68,18 @@ fn main() -> ExitCode {
 
     let solver = solve::Solver::new(&trace, &input, &p_map, &reachability);
     let director = two_level::Director::new(&trace);
-    let mut next_input_dumper = NextInputGenerator::new(&args.outdir, args.target, &input);
+    let mut next_input_dumper = NextInputGenerator::new(
+        &args.outdir,
+        &args.output_format.unwrap_or_default(),
+        args.target,
+        &input,
+    );
 
     for edge in director.find_edges_toward(&p_map, &reachability, &args.target) {
-        process_edge(&p_map, &solver, &mut next_input_dumper, edge);
+        let prefix_len = trace
+            .element_offset(edge.src)
+            .expect("Inconsistent referencing");
+        process_edge(&p_map, &solver, &mut next_input_dumper, edge, prefix_len);
     }
 
     log_info!("Generated {} new inputs", next_input_dumper.total_count());
@@ -234,6 +242,7 @@ fn process_edge(
     solver: &solve::Solver<'_, '_>,
     next_input_dumper: &mut NextInputGenerator,
     edge: DirectedEdge<'_>,
+    prefix_len: usize,
 ) {
     let edge = DirectedEdge {
         metadata: p_map.cfgs[&edge.src.location.body][&edge.src.location.index].as_slice(),
@@ -244,7 +253,7 @@ fn process_edge(
         for result in results {
             log_debug!("Result: {:?}", result.0);
             if matches!(result.0, z3::SatResult::Sat) {
-                next_input_dumper.dump_as_next_input(&result.1)
+                next_input_dumper.dump_as_next_input(&result.1, prefix_len)
             }
         }
     }

@@ -3,8 +3,16 @@ name = "libafl_leaf"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+errors_backtrace = ["libafl/errors_backtrace"]
+
 [dependencies]
-libafl = { workspace = true, features = ["std"] }
+common = { workspace = true, features = ["conc_loop", "serde"] }
+
+libafl = { workspace = true, features = ["std", "serdeany_autoreg"] }
 libafl_bolts = { workspace = true }
 
+derive_more ={ workspace = true }
 log = { version = "0.4.22" }
+serde = { workspace = true }
+serde_json = { workspace = true }

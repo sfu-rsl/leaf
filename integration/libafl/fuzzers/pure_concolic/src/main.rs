@@ -10,7 +10,7 @@ use clap::Parser;
 
 use libafl::{executors::command::CommandConfigurator, prelude::*};
 use libafl_bolts::{AsSlice, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
-use libafl_leaf::{DivergingMutator, MultiMutationalStageWithStats};
+use libafl_leaf::{DivergingInputTestcaseScore, DivergingMutator, MultiMutationalStageWithStats};
 
 use ::common::log_debug;
 
@@ -97,7 +97,7 @@ pub fn main() {
     )
     .unwrap();
 
-    let scheduler = QueueScheduler::new();
+    let scheduler = ProbabilitySamplingScheduler::<DivergingInputTestcaseScore>::new();
 
     let mut fuzzer =
         StdFuzzer::with_bloom_input_filter(scheduler, feedback, objective, 1 << 20, 0.01);
@@ -151,10 +151,10 @@ pub fn main() {
 
     let mut stages = tuple_list!(IfStage::new(
         // Do not repeat inputs
-        |_, _, s: &mut StdState<_, _, _, _>, _| { is_new_or_disable(s) },
+        |f, _, s: &mut StdState<_, _, _, _>, _| { is_new_or_disable(f, s) },
         tuple_list!(MultiMutationalStageWithStats::new(
             "DivergingInputGen".into(),
-            "total_diverging_input_generated".into(),
+            "diverging_input".into(),
             mutator
         )),
     ));
@@ -166,7 +166,7 @@ pub fn main() {
                 println!("Finished covering all instrumented parts");
             }
             _ => {
-                println!("Concolic loop stopped: {:?}", e);
+                println!("Concolic loop stopped: {}", e);
             }
         });
     let _ = std::fs::remove_dir_all(mutant_work_dir).inspect_err(|e| {
@@ -176,7 +176,17 @@ pub fn main() {
 
 fn process_args() -> Args {
     let mut args = Args::parse();
+    args.conc_program = args
+        .conc_program
+        .canonicalize()
+        .expect("Could not get path");
     args.program.get_or_insert(args.conc_program.clone());
+    args.program = Some(
+        args.program
+            .unwrap()
+            .canonicalize()
+            .expect("Could not get path"),
+    );
     args.orchestrator
         .get_or_insert_with(|| PathBuf::from(NAME_ORCHESTRATOR));
     args.workdir
@@ -208,18 +218,33 @@ fn make_monitor() -> impl Monitor {
     }
 }
 
-fn is_new_or_disable<I: Clone, S: HasCurrentCorpusId + HasCurrentTestcase<I> + HasCorpus<I>>(
-    state: &mut S,
-) -> Result<bool, Error> {
-    if state.current_testcase()?.scheduled_count() > 0 {
+fn is_new_or_disable<I, S, Z>(fuzzer: &mut Z, state: &mut S) -> Result<bool, Error>
+where
+    I: Clone,
+    S: HasCurrentCorpusId + HasCurrentTestcase<I> + HasCorpus<I>,
+    Z: HasScheduler<I, S>,
+    Z::Scheduler: RemovableScheduler<I, S>,
+{
+    let scheduled_count = state.current_testcase().ok().map(|t| t.scheduled_count());
+    match scheduled_count {
+        None => {
+            if state.current_corpus_id().is_ok() {
+                state.clear_corpus_id()?;
+            }
+            Ok(false)
+        }
+        Some(0) => Ok(true),
+        Some(_) => {
         let testcase = state.current_testcase().unwrap().clone();
         let current_id = state.current_corpus_id().unwrap().unwrap();
+            fuzzer
+                .scheduler_mut()
+                .on_remove(state, current_id, &Some(testcase.clone()))?;
         let corpus = state.corpus_mut();
-        corpus.remove(current_id)?;
         corpus.add_disabled(testcase)?;
+            state.clear_corpus_id()?;
         Ok(false)
-    } else {
-        Ok(true)
+        }
     }
 }
 
@@ -232,15 +257,14 @@ struct ProgramExecutionConfigurator {
 
 impl CommandConfigurator<BytesInput> for ProgramExecutionConfigurator {
     fn spawn_child(&mut self, input: &BytesInput) -> Result<Child, Error> {
-        log_debug!("Executing the program to test input");
-
         let mut command = Command::new(&self.program);
-
         command
             .args(self.args.iter())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
+
+        log_debug!("Executing the program to test input: {:?}", command);
 
         let child = command.spawn().expect("Failed to start the program");
         let mut stdin = child.stdin.as_ref().unwrap();

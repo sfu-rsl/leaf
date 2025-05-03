@@ -8,16 +8,16 @@ name = "leaff_pure_conc"
 path = "src/main.rs"
 
 [features]
+default = []
 tui = ["libafl/tui_monitor"]
 
 [dependencies]
 common = { workspace = true, features = ["logging"]}
 
-libafl = { workspace = true, features = ["std", "prelude"] }
+libafl = { workspace = true, features = ["std", "prelude", "errors_backtrace"] }
 libafl_bolts = { workspace = true }
-libafl_leaf = { workspace = true }
+libafl_leaf = { workspace = true, features = ["errors_backtrace"]}
 
 clap = { workspace = true, features = ["derive"] }
-sha2 = "0.10.8"
 tracing-subscriber = { workspace = true }
 tracing-log = "0.2.0"

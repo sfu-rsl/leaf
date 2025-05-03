@@ -1,10 +1,10 @@
 #![feature(exit_status_error)]
 
 extern crate orchestrator;
-use derive_more::derive::Deref;
+use derive_more::derive::{Deref, DerefMut};
 use orchestrator::{
-    args::CommonArgs,
-    utils::{ExecutionParams, output_silence_as_path},
+    args::{CommonArgs, OutputFormat},
+    utils::{ExecutionParams, output_silence_as_path, report_diverging_input},
     *,
 };
 
@@ -20,10 +20,11 @@ use std::{
     thread,
 };
 
-#[derive(Parser, Debug, Deref)]
+#[derive(Parser, Debug, Deref, DerefMut)]
 struct Args {
     #[command(flatten)]
     #[deref]
+    #[deref_mut]
     common: CommonArgs,
     /// Whether to print the diverging inputs as they are generated
     /// or collect them after the program finishes
@@ -34,7 +35,8 @@ struct Args {
 static COLLECTED_INPUTS: OnceLock<Mutex<HashSet<PathBuf>>> = OnceLock::new();
 
 fn main() -> ExitCode {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    args.output_format.get_or_insert_default();
 
     const FILE_PREFIX: &str = "diverging_";
 
@@ -55,7 +57,10 @@ fn main() -> ExitCode {
     COLLECTED_INPUTS.get_or_init(Default::default);
     let mut watcher = None;
     if args.live {
-        watcher = Some(watch_diverging_inputs(&args.outdir));
+        watcher = Some(watch_diverging_inputs(
+            &args.outdir,
+            &args.output_format.unwrap(),
+        ));
     }
 
     let result = utils::execute_once_for_div_inputs(
@@ -76,7 +81,7 @@ fn main() -> ExitCode {
 
     let mut inputs = COLLECTED_INPUTS.get().unwrap().lock().unwrap();
     grab().for_each(|entry| {
-        notify_found_input(&mut inputs, &entry.unwrap());
+        notify_found_input(&mut inputs, &entry.unwrap(), &args.output_format.unwrap());
     });
 
     if !args.silent && !result.status.success() {
@@ -87,7 +92,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn watch_diverging_inputs(dir: &Path) -> notify::RecommendedWatcher {
+fn watch_diverging_inputs(dir: &Path, output_format: &OutputFormat) -> notify::RecommendedWatcher {
     use notify::{
         Event, EventKind, RecursiveMode, Result, Watcher, event::CreateKind, recommended_watcher,
     };
@@ -100,7 +105,8 @@ fn watch_diverging_inputs(dir: &Path) -> notify::RecommendedWatcher {
         .watch(dir, RecursiveMode::NonRecursive)
         .expect("Could not set up the file watcher");
 
-    thread::spawn(|| {
+    let output_format = output_format.clone();
+    thread::spawn(move || {
         for res in rx {
             match res {
                 Err(e) => {
@@ -111,7 +117,7 @@ fn watch_diverging_inputs(dir: &Path) -> notify::RecommendedWatcher {
                     if matches!(event.kind, EventKind::Create(CreateKind::File)) {
                         debug_assert_eq!(event.paths.len(), 1);
                         let mut inputs = COLLECTED_INPUTS.get().unwrap().lock().unwrap();
-                        notify_found_input(&mut inputs, &event.paths[0]);
+                        notify_found_input(&mut inputs, &event.paths[0], &output_format);
                     }
                 }
             }
@@ -121,8 +127,12 @@ fn watch_diverging_inputs(dir: &Path) -> notify::RecommendedWatcher {
     watcher
 }
 
-fn notify_found_input(collected_inputs: &mut HashSet<PathBuf>, input_path: &Path) {
+fn notify_found_input(
+    collected_inputs: &mut HashSet<PathBuf>,
+    input_path: &Path,
+    output_format: &OutputFormat,
+) {
     if collected_inputs.insert(input_path.canonicalize().unwrap()) {
-        println!("{}", input_path.display());
+        report_diverging_input(input_path, None, output_format);
     }
 }

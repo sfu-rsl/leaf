@@ -14,6 +14,8 @@ use std::prelude::rust_2021::*;
 
 #[cfg(feature = "answers")]
 pub mod answers;
+#[cfg(feature = "conc_loop")]
+pub mod conc_loop;
 #[cfg(feature = "config")]
 pub mod config;
 #[cfg(feature = "directed")]

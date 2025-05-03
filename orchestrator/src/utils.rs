@@ -1,3 +1,4 @@
+use core::f64;
 use std::{
     collections::HashMap,
     fs::OpenOptions,
@@ -7,8 +8,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use common::log_debug;
+use common::{conc_loop::GeneratedInputRecord, log_debug};
 use derive_more::{Deref, From};
+
+use crate::args::OutputFormat;
 
 #[derive(Debug, Deref, From)]
 pub struct ExecutionOutput {
@@ -168,5 +171,21 @@ pub fn stdio_from_path(path: Option<impl AsRef<Path>>) -> Stdio {
         }
     } else {
         Stdio::null()
+    }
+}
+
+pub fn report_diverging_input(path: &Path, score: Option<f64>, output_format: &OutputFormat) {
+    match output_format {
+        OutputFormat::Csv => println!("{}, {}", path.display(), score.unwrap_or(f64::NAN)),
+        OutputFormat::JsonStream => {
+            println!(
+                "{}",
+                serde_json::ser::to_string(&GeneratedInputRecord {
+                    path: path.to_owned(),
+                    score
+                })
+                .unwrap()
+            )
+        }
     }
 }

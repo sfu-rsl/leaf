@@ -16,10 +16,18 @@ tyexp = ["std", "serde", "dep:serde_json", "logging"]
 config = ["std", "dep:config", "logging"]
 directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std", "dep:derive_more"]
-z3 = ["std", "trace_types", "unsafe_wrappers", "dep:z3", "dep:z3-sys", "dep:delegate"]
+z3 = [
+    "std",
+    "trace_types",
+    "unsafe_wrappers",
+    "dep:z3",
+    "dep:z3-sys",
+    "dep:delegate",
+]
 answers = ["std"]
 rkyv = ["dep:rkyv"]
 unsafe_wrappers = ["dep:derive_more"]
+conc_loop = ["std"]
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.

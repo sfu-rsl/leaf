@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::{default, path::PathBuf};
 
-use clap::Args;
+use clap::{Args, ValueEnum};
 
 fn parse_env_pair(s: &str) -> Result<(String, String), String> {
     let mut split = s.splitn(2, '=');
@@ -9,6 +9,13 @@ fn parse_env_pair(s: &str) -> Result<(String, String), String> {
         .zip(split.next())
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .ok_or_else(|| "Expected format: KEY=VALUE".to_owned())
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, Default)]
+pub enum OutputFormat {
+    #[default]
+    Csv,
+    JsonStream,
 }
 
 #[derive(Args, Debug)]
@@ -28,6 +35,9 @@ pub struct CommonArgs {
     /// Path to the directory to write new (diverging) inputs to
     #[arg(short, long)]
     pub outdir: PathBuf,
+    /// The format for the standard output of the orchestrator
+    #[arg(long)]
+    pub output_format: Option<OutputFormat>,
     /// Whether to return failure exit code in case the program does not finish successfully
     #[arg(short, long, action)]
     pub silent: bool,
