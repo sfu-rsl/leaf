@@ -91,7 +91,7 @@ pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
     fn rt<T: ?Sized + 'static>() -> TypeId {
         super::run_rec_guarded::<true, _>(
             /* If we are recursing, the value doesn't matter (although unsafe) */
-            unsafe { intrinsics::transmute([0u8; intrinsics::size_of::<TypeId>()]) },
+            unsafe { intrinsics::transmute([0xFFu8; intrinsics::size_of::<TypeId>()]) },
             || common::utils::type_id_of::<T>(),
         )
     }
