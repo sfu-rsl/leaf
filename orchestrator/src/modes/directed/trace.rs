@@ -61,18 +61,18 @@ mod json {
                 "The trace was not in the expected format: { value: { .. }, index: # }*";
             records
                 .filter_map(Result::ok)
-                .map(|mut raw_rec| {
-                    let raw_rec = raw_rec.as_object_mut().expect(FORMAT_MSG);
-                    let index = raw_rec
+                .map(|mut rec| {
+                    let rec = rec.as_object_mut().expect(FORMAT_MSG);
+                    let index = rec
                         .remove("index")
                         .and_then(|v| v.as_u64())
                         .expect(FORMAT_MSG) as usize;
-                    let rec = raw_rec
+                    let step = rec
                         .remove("value")
                         .and_then(|v| serde_json::from_value::<ExeTraceRecord<Value>>(v).ok())
                         .expect(FORMAT_MSG);
                     // We don't process the cases in the full trace, so plain json value is fine.
-                    (index, rec)
+                    (index, step)
                 })
                 .filter_map(|(index, record)| match record {
                     ExeTraceRecord::Branch { location, .. } => Some((index, location)),
@@ -90,16 +90,15 @@ mod json {
         where
             R: Read,
         {
-            let mut raw_value: Value = serde_json::from_reader(&mut self.sym_trace_reader)
-                .expect("Failed to read the full trace");
-            const FORMAT_MSG: &str = "The trace was not in the expected format: [ { step: { value: { body: [#, #], index: #}, index: # }, constraint: { discr: ttt, kind: ttt} }* ]";
-            let raw_trace = raw_value.as_array_mut().expect(FORMAT_MSG);
-            raw_trace
-                .into_iter()
-                .map(|item| {
-                    let item = item.as_object_mut().expect(FORMAT_MSG);
-                    let constraint = item.remove("constraint").expect(FORMAT_MSG);
-                    let step = item
+            let records = serde_json::Deserializer::from_reader(&mut self.sym_trace_reader)
+                .into_iter::<Value>();
+            const FORMAT_MSG: &str = "The trace was not in the expected format: { { step: { value: { body: [#, #], index: #}, index: # }, constraint: { discr: ttt, kind: ttt} } }*";
+            records
+                .filter_map(Result::ok)
+                .map(|mut rec| {
+                    let rec = rec.as_object_mut().expect(FORMAT_MSG);
+                    let constraint = rec.remove("constraint").expect(FORMAT_MSG);
+                    let step = rec
                         .get_mut("step")
                         .and_then(|v| v.as_object_mut())
                         .expect(FORMAT_MSG);
@@ -110,8 +109,8 @@ mod json {
                     let index = step
                         .get("index")
                         .and_then(|v| v.as_u64())
-                        .expect(FORMAT_MSG);
-                    (index as usize, (location, constraint))
+                        .expect(FORMAT_MSG) as usize;
+                    (index, (location, constraint))
                 })
                 .collect()
         }

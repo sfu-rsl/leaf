@@ -15,7 +15,8 @@ fn parse_env_pair(s: &str) -> Result<(String, String), String> {
 pub enum OutputFormat {
     #[default]
     Csv,
-    JsonStream,
+    #[value(alias("jsonl"))]
+    JsonLines,
 }
 
 #[derive(Args, Debug)]

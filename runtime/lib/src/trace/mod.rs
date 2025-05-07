@@ -13,6 +13,7 @@ pub(crate) mod sanity_check;
 pub(crate) use adapt::TraceManagerExt as AdapterTraceManagerExt;
 pub(crate) use agg::{AggregatorStepInspector, AggregatorTraceManager};
 pub(crate) use coverage::BranchCoverageStepInspector;
+pub(crate) use dump::StreamDumperStepInspector;
 pub(crate) use filter::{
     StepInspectorExt as FilterStepInspectorExt, TraceManagerExt as FilterTraceManagerExt,
 };

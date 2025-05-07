@@ -73,7 +73,8 @@ impl FileGenConfig {
 pub(crate) enum FileFormat {
     #[default]
     Json,
-    JsonStream,
+    #[serde(alias = "jsonl")]
+    JsonLines,
     Binary,
 }
 
@@ -81,8 +82,47 @@ impl FileFormat {
     pub(crate) fn default_extension(&self) -> &'static str {
         match self {
             Self::Json => "json",
-            Self::JsonStream => "jsons",
+            Self::JsonLines => "jsonl",
             Self::Binary => "bin",
         }
+    }
+
+    pub(crate) fn is_streamable(&self) -> bool {
+        match self {
+            Self::Json => false,
+            Self::JsonLines => true,
+            Self::Binary => false,
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct JsonLinesFormatter {
+    depth: usize,
+}
+
+use serde_json::ser::{CompactFormatter, Formatter as JsonFormatter};
+
+impl JsonFormatter for JsonLinesFormatter {
+    fn begin_object<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.depth += 1;
+        CompactFormatter.begin_object(writer)
+    }
+
+    fn end_object<W>(&mut self, writer: &mut W) -> io::Result<()>
+    where
+        W: ?Sized + io::Write,
+    {
+        self.depth -= 1;
+        CompactFormatter.end_object(writer).and_then(|_| {
+            if self.depth == 0 {
+                writer.write(&[b'\n']).map(|_| ())
+            } else {
+                Ok(())
+            }
+        })
     }
 }

@@ -20,7 +20,7 @@ use crate::{
         divergence::{DivergenceFilter, ImmediateDivergingAnswerFinder},
         sanity_check::ConstraintSanityChecker,
     },
-    utils::{RefView, alias::RRef},
+    utils::alias::RRef,
 };
 
 use super::{
@@ -120,15 +120,16 @@ pub(super) fn new_trace_manager(
     let mut case_translator = translator.clone();
 
     let agg_manager = AggregatorTraceManager::new(inner_inspectors);
-    dumpers.extend_opt(trace_config.constraints_dump.as_ref().map(|cfg| {
-        dumper::create_solver_constraints_dumper(
-            cfg,
-            agg_manager.steps(),
-            agg_manager.constraints(),
-        )
-    }));
 
-    let core_manager = agg_manager.adapt(
+    let inner_step_inspectors = trace_config
+        .constraints_dump
+        .as_ref()
+        .map(|cfg| dumper::create_solver_constraints_dumper(cfg))
+        .map(|inspector| Box::new(inspector) as Box<dyn StepInspector<_, _, _>>)
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    let core_manager = agg_manager.inspected_by(inner_step_inspectors).adapt(
         |s| s,
         move |v: ValueRef| Translation::of(v, &mut value_translator),
         move |c: ConstValue| Translation::of(c, &mut case_translator),
@@ -150,7 +151,7 @@ pub(super) fn new_trace_manager(
         .inspected_by(outer_agg_inspector)
         .adapt_step(move |s: Step| Indexed {
             index: *step_counter.as_ref().borrow(),
-                value: s,
+            value: s,
         })
         .inspected_by(dumping::create_timer_dumper_inspector(
             dumpers_ref.clone(),
@@ -541,54 +542,55 @@ mod shutdown {
 use shutdown::TraceManagerExt as ShutdownTraceManagerExt;
 
 mod dumper {
+    use crate::{trace::StreamDumperStepInspector, utils::file::FileFormat};
 
     use super::*;
 
-    pub(super) fn create_solver_constraints_dumper<'ctx, S, V, C, SList, CList>(
-        output_config: &OutputConfig,
-        steps_view: RefView<SList>,
-        constraints_view: RefView<CList>,
-    ) -> impl Dumper
+    pub(super) fn create_solver_constraints_dumper<'ctx, S, V, C>(
+        config: &OutputConfig,
+    ) -> impl StepInspector<S, V, C>
     where
         S: Borrow<Step> + HasIndex,
         V: Borrow<CurrentSolverValue<'ctx>>,
         C: Borrow<CurrentSolverCase<'ctx>>,
-        SList: AsRef<[S]>,
-        CList: AsRef<[Constraint<V, C>]>,
     {
-        #[derive(dm::From, Serialize)]
-        struct TraceItem<'a, DS: Serialize, CS: Serialize> {
-            step: Indexed<&'a Step>,
-            constraint: Constraint<DS, CS>,
-        }
-        match output_config {
+        let mut dumper_inspector = match config {
             OutputConfig::File(cfg) => {
-                const FILENAME_DEFAULT: &str = "sym_decisions";
-                create_ser_dumper!(cfg, "Sym Trace".to_owned(), FILENAME_DEFAULT, || {
-                    core::iter::zip(
-                        steps_view
-                            .borrow()
-                            .as_ref()
-                            .iter()
-                            .map(|s| (s.borrow(), s.index()).into()),
-                        constraints_view.borrow().as_ref().iter().map(|c| {
-                            c.as_ref()
-                                .map(|v| v.borrow().serializable(), |c| c.borrow().serializable())
-                        }),
-                    )
-                    .map(TraceItem::from)
-                    .collect::<Vec<_>>()
-                })
+                assert!(
+                    cfg.format.is_streamable(),
+                    "Only streamable formats are expected for symbolic constraints dumping"
+                );
+                match cfg.format {
+                    FileFormat::JsonLines => {
+                        const FILENAME_DEFAULT: &str = "sym_decisions";
+                        let file = cfg
+                            .open_or_create_single(FILENAME_DEFAULT, true)
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "Could not create file for symbolic constraints dumping: {e}"
+                                )
+                            });
+                        StreamDumperStepInspector::json_lines(file)
+                    }
+                    FileFormat::Binary | FileFormat::Json => unreachable!(),
+                }
             }
-        }
+        };
+
+        let inspector = move |step: &S, constraint: Constraint<&V, &C>| {
+            let step: Indexed<Step> = (step.borrow().clone(), step.index()).into();
+            let constraint =
+                constraint.map(|v| v.borrow().serializable(), |c| c.borrow().serializable());
+            dumper_inspector.inspect(&step, constraint.as_ref());
+        };
+        inspector
     }
 }
 
 mod dumping {
     use std::fs;
 
-    use common::pri::{BasicBlockIndex, DefId};
-    use serde::{Deserialize, de::DeserializeOwned};
+    use serde::de::DeserializeOwned;
 
     use crate::utils::file::{FileFormat, FileGenConfig};
 
@@ -670,7 +672,7 @@ mod dumping {
                             Ok(())
                         })
                     }
-                    FileFormat::JsonStream => {
+                    FileFormat::JsonLines => {
                         unimplemented!("Json stream format is not supported for this dumper")
                     }
                     FileFormat::Binary => {
@@ -884,7 +886,7 @@ mod helpers {
 }
 
 mod record {
-    use std::io::Write;
+    use serde_json::Serializer as JsonSerializer;
 
     use crate::{
         abs::{
@@ -892,20 +894,20 @@ mod record {
             backend::{CallTraceRecorder, DecisionTraceRecorder, PhasedCallTraceRecorder},
         },
         backends::basic::expr::ConstValue,
+        utils::file::JsonLinesFormatter,
     };
 
     use super::*;
 
     type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 
-    #[derive(Debug)]
     pub(crate) struct BasicExeTraceRecorder {
         pub(in super::super) counter: StepCounter,
         records: Vec<Indexed<ExeTraceRecord>>,
         stack: Vec<FuncDef>,
         last_call_site: Option<BasicBlockLocation>,
         last_ret_point: Option<BasicBlockLocation>,
-        stream_file: Option<std::fs::File>,
+        serializer: Option<JsonSerializer<std::fs::File, JsonLinesFormatter>>,
     }
 
     impl BasicExeTraceRecorder {
@@ -914,7 +916,7 @@ mod record {
                 .and_then(|c| match c {
                     OutputConfig::File(file) => Some(file),
                 })
-                .filter(|c| matches!(c.format, crate::utils::file::FileFormat::JsonStream))
+                .filter(|c| matches!(c.format, crate::utils::file::FileFormat::JsonLines))
                 .map(|c| {
                     c.open_or_create_single("exe_trace", true)
                         .unwrap_or_else(|e| {
@@ -923,7 +925,8 @@ mod record {
                 });
 
             Self {
-                stream_file: file,
+                serializer: file
+                    .map(|f| JsonSerializer::with_formatter(f, JsonLinesFormatter::default())),
                 counter: RRef::new(0.into()),
                 records: Default::default(),
                 stack: Default::default(),
@@ -1036,13 +1039,15 @@ mod record {
         }
 
         fn append_last_to_file(&mut self) {
-            let Some(file) = self.stream_file.as_mut() else {
+            let Some(serializer) = self.serializer.as_mut() else {
                 return;
             };
-            let _ = serde_json::to_writer(&mut *file, self.records.last().unwrap())
-                .inspect_err(|e| log_debug!("Failed to dump trace: {}", e))
-                .map_err(std::io::Error::other)
-                .and_then(|_| file.write(&[b'\n']));
+            let _ = self
+                .records
+                .last()
+                .unwrap()
+                .serialize(serializer)
+                .inspect_err(|e| log_debug!("Failed to dump trace: {}", e));
         }
     }
 }

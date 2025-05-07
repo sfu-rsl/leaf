@@ -90,13 +90,13 @@ pub fn execute_once_for_trace(
             type = "file"
             directory = "{dir}"
             prefix = "{full_trace_filename}"
-            format = "json_stream"
+            format = "jsonl"
 
             [exe_trace.constraints_dump]
             type = "file"
             directory = "{dir}"
             prefix = "{sym_trace_filename}"
-            format = "json"
+            format = "jsonl"
             "#,
             dir = traces_dir.display(),
         ),
@@ -177,7 +177,7 @@ pub fn stdio_from_path(path: Option<impl AsRef<Path>>) -> Stdio {
 pub fn report_diverging_input(path: &Path, score: Option<f64>, output_format: &OutputFormat) {
     match output_format {
         OutputFormat::Csv => println!("{}, {}", path.display(), score.unwrap_or(f64::NAN)),
-        OutputFormat::JsonStream => {
+        OutputFormat::JsonLines => {
             println!(
                 "{}",
                 serde_json::ser::to_string(&GeneratedInputRecord {
