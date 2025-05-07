@@ -7,8 +7,8 @@ use crate::{
 };
 
 use super::{
-    CalleeDef, ConcreteValue, FuncDef, GenericCallStackManager, UntupleHelper, ValueRef,
-    VariablesState,
+    CallFlowSanity, CalleeDef, ConcreteValue, FuncDef, GenericCallStackManager, UntupleHelper,
+    ValueRef, VariablesState,
     config::{CallConfig, ExternalCallStrategy},
     expr::place::DeterPlaceValueRef,
 };
@@ -377,7 +377,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         args.splice(arg_index..arg_index, untupled_args);
     }
 
-    fn notify_enter(&mut self, current_func: FuncDef) {
+    fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity {
         let arg_places = core::mem::replace(&mut self.arg_places, Default::default());
         let call_stack_frame = CallStackFrame {
             return_val_place: self.return_val_place.take(),
@@ -409,8 +409,9 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
             Err(None)
         };
 
+        let is_broken = arg_values_if_not_broken.is_err();
         if let Some(parent_frame) = self.stack.last_mut() {
-            parent_frame.is_callee_external = Some(arg_values_if_not_broken.is_err());
+            parent_frame.is_callee_external = Some(is_broken);
         }
 
         let arg_values = match arg_values_if_not_broken {
@@ -425,6 +426,12 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         self.push_new_stack_frame(arg_places.into_iter().zip(arg_values), call_stack_frame);
 
         log_debug!(target: TAG, "Entered the function");
+
+        if is_broken {
+            CallFlowSanity::Broken
+        } else {
+            CallFlowSanity::Expected
+        }
     }
 
     fn pop_stack_frame(&mut self) {
@@ -466,7 +473,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         }
     }
 
-    fn finalize_call(&mut self, result_dest: Self::Place) {
+    fn finalize_call(&mut self, result_dest: Self::Place) -> CallFlowSanity {
         self.log_span_reset();
 
         let is_external = self
@@ -479,10 +486,16 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
             });
         if !is_external {
             log_debug!(target: TAG, "Finalizing an internal call.");
-            self.finalize_internal_call(result_dest.as_ref())
+            self.finalize_internal_call(result_dest.as_ref());
         } else {
             log_debug!(target: TAG, "Finalizing an external call.");
-            self.finalize_external_call(result_dest.as_ref())
+            self.finalize_external_call(result_dest.as_ref());
+        }
+
+        if is_external {
+            CallFlowSanity::Broken
+        } else {
+            CallFlowSanity::Expected
         }
     }
 

@@ -15,10 +15,10 @@ format = "binary"
 [exe_trace]
 dump_interval = 5
 
-[exe_trace.decisions_dump]
+[exe_trace.control_flow_dump]
 type = "file"
 directory = "leaf_out"
-format = "json"
+format = "json_stream"
 
 [exe_trace.constraints_dump]
 type = "file"

@@ -3,7 +3,11 @@ use std::{fs, io::Read, path::Path};
 use serde::Deserialize;
 use serde_json::Value;
 
-use common::{pri::BasicBlockLocation, types::trace::Constraint, z3::serdes::SmtLibExpr};
+use common::{
+    pri::BasicBlockLocation,
+    types::trace::{Constraint, ExeTraceRecord},
+    z3::serdes::SmtLibExpr,
+};
 
 type Expression = SmtLibExpr;
 
@@ -50,27 +54,29 @@ mod json {
         where
             R: Read,
         {
-            let mut raw_value: Value = serde_json::from_reader(&mut self.full_trace_reader)
-                .expect("Failed to read the full trace");
-            const FORMAT_MSG: &str = "The trace was not in the expected format: [ { step: { value: { body: [#, #], index: #}, index: # } ... }* ]";
-            let raw_trace = raw_value.as_array_mut().expect(FORMAT_MSG);
-            raw_trace
-                .into_iter()
-                .map(|item| {
-                    let step = item
-                        .as_object_mut()
-                        .and_then(|o| o.get_mut("step"))
-                        .expect(FORMAT_MSG)
-                        .as_object_mut()
-                        .expect(FORMAT_MSG);
-                    let location = step.remove("value").expect(FORMAT_MSG);
-                    let location =
-                        serde_json::from_value::<BasicBlockLocation>(location).expect(FORMAT_MSG);
-                    let index = step
-                        .get("index")
+            let records = serde_json::Deserializer::from_reader(&mut self.full_trace_reader)
+                .into_iter::<Value>();
+
+            const FORMAT_MSG: &str =
+                "The trace was not in the expected format: { value: { .. }, index: # }*";
+            records
+                .filter_map(Result::ok)
+                .map(|mut raw_rec| {
+                    let raw_rec = raw_rec.as_object_mut().expect(FORMAT_MSG);
+                    let index = raw_rec
+                        .remove("index")
                         .and_then(|v| v.as_u64())
+                        .expect(FORMAT_MSG) as usize;
+                    let rec = raw_rec
+                        .remove("value")
+                        .and_then(|v| serde_json::from_value::<ExeTraceRecord<Value>>(v).ok())
                         .expect(FORMAT_MSG);
-                    (index as usize, location)
+                    // We don't process the cases in the full trace, so plain json value is fine.
+                    (index, rec)
+                })
+                .filter_map(|(index, record)| match record {
+                    ExeTraceRecord::Branch { location, .. } => Some((index, location)),
+                    ExeTraceRecord::Call { .. } | ExeTraceRecord::Return { .. } => None,
                 })
                 .collect()
         }

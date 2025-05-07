@@ -45,7 +45,10 @@ type IStep = Tagged<Indexed<Step>>;
 type IValue<'ctx> = Translation<ValueRef, CurrentSolverValue<'ctx>>;
 type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
 
+type StepCounter = RRef<usize>;
+
 pub(super) fn new_trace_manager(
+    step_counter: StepCounter,
     tags: RRef<Vec<Tag>>,
     sym_var_manager: RRef<impl SymVariablesManager + 'static>,
     trace_config: &ExecutionTraceConfig,
@@ -133,16 +136,8 @@ pub(super) fn new_trace_manager(
     let manager = core_manager;
 
     let outer_agg_inspector = AggregatorStepInspector::default();
-    dumpers.extend_opt(trace_config.decisions_dump.as_ref().map(|cfg| {
-        dumper::create_decisions_dumper(
-            cfg,
-            outer_agg_inspector.steps(),
-            outer_agg_inspector.constraints(),
-        )
-    }));
-    let dumpers_ref = Rc::new(RefCell::new(dumpers));
 
-    let mut counter = 0;
+    let dumpers_ref = Rc::new(RefCell::new(dumpers));
 
     manager
         .logged()
@@ -153,12 +148,9 @@ pub(super) fn new_trace_manager(
         .inspected_by(inspectors)
         .filtered_by(|_, c| c.discr.is_symbolic())
         .inspected_by(outer_agg_inspector)
-        .adapt_step(move |s: Step| {
-            counter += 1;
-            Indexed {
-                index: counter,
+        .adapt_step(move |s: Step| Indexed {
+            index: *step_counter.as_ref().borrow(),
                 value: s,
-            }
         })
         .inspected_by(dumping::create_timer_dumper_inspector(
             dumpers_ref.clone(),
@@ -549,48 +541,8 @@ mod shutdown {
 use shutdown::TraceManagerExt as ShutdownTraceManagerExt;
 
 mod dumper {
-    use crate::abs::ConstraintKind;
 
     use super::*;
-
-    pub(super) fn create_decisions_dumper<S, V, C, SList, CList>(
-        output_config: &OutputConfig,
-        steps_view: RefView<SList>,
-        constraints_view: RefView<CList>,
-    ) -> impl Dumper
-    where
-        S: Borrow<Step> + HasIndex,
-        C: Borrow<ConstValue>,
-        SList: AsRef<[S]>,
-        CList: AsRef<[Constraint<V, C>]>,
-    {
-        #[derive(dm::From, Serialize)]
-        struct TraceItem<'a, 'b> {
-            step: Indexed<&'a Step>,
-            decision: ConstraintKind<&'b ConstValue>,
-        }
-        match output_config {
-            OutputConfig::File(cfg) => {
-                const FILENAME_DEFAULT: &str = "decisions";
-                create_ser_dumper!(cfg, "Full Trace".to_owned(), FILENAME_DEFAULT, || {
-                    core::iter::zip(
-                        steps_view
-                            .borrow()
-                            .as_ref()
-                            .iter()
-                            .map(|s| (s.borrow(), s.index()).into()),
-                        constraints_view
-                            .borrow()
-                            .as_ref()
-                            .iter()
-                            .map(|c| c.kind.as_ref().map(|c| c.borrow())),
-                    )
-                    .map(TraceItem::from)
-                    .collect::<Vec<_>>()
-                })
-            }
-        }
-    }
 
     pub(super) fn create_solver_constraints_dumper<'ctx, S, V, C, SList, CList>(
         output_config: &OutputConfig,
@@ -697,7 +649,7 @@ mod dumping {
                                      name: String,
                                      default_filename: &str| {
                 let mut file = config
-                    .open_or_create_single(&default_filename)
+                    .open_or_create_single(&default_filename, false)
                     .unwrap_or_else(|e| panic!("Could not create file for {name}: {e}"));
 
                 match config.format {
@@ -718,8 +670,11 @@ mod dumping {
                             Ok(())
                         })
                     }
+                    FileFormat::JsonStream => {
+                        unimplemented!("Json stream format is not supported for this dumper")
+                    }
                     FileFormat::Binary => {
-                        unimplemented!("Binary output format is not supported yet")
+                        unimplemented!("Binary output format is not supported for this dumper")
                     }
                 }
             };
@@ -756,8 +711,8 @@ mod dumping {
             let snapshot = match config.format {
                 FileFormat::Json => serde_json::from_reader(file)
                     .map_err(|e| format!("Problem in parsing the file: {}", e.to_string())),
-                FileFormat::Binary => {
-                    unimplemented!("Binary output format is not supported yet")
+                _ => {
+                    unimplemented!("Only json is expected for snapshot")
                 }
             };
             snapshot
@@ -927,3 +882,168 @@ mod helpers {
         }
     }
 }
+
+mod record {
+    use std::io::Write;
+
+    use crate::{
+        abs::{
+            BasicBlockLocation, ConstraintKind, FuncDef,
+            backend::{CallTraceRecorder, DecisionTraceRecorder, PhasedCallTraceRecorder},
+        },
+        backends::basic::expr::ConstValue,
+    };
+
+    use super::*;
+
+    type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
+
+    #[derive(Debug)]
+    pub(crate) struct BasicExeTraceRecorder {
+        pub(in super::super) counter: StepCounter,
+        records: Vec<Indexed<ExeTraceRecord>>,
+        stack: Vec<FuncDef>,
+        last_call_site: Option<BasicBlockLocation>,
+        last_ret_point: Option<BasicBlockLocation>,
+        stream_file: Option<std::fs::File>,
+    }
+
+    impl BasicExeTraceRecorder {
+        pub fn new(config: Option<&OutputConfig>) -> Self {
+            let file = config
+                .and_then(|c| match c {
+                    OutputConfig::File(file) => Some(file),
+                })
+                .filter(|c| matches!(c.format, crate::utils::file::FileFormat::JsonStream))
+                .map(|c| {
+                    c.open_or_create_single("exe_trace", true)
+                        .unwrap_or_else(|e| {
+                            panic!("Could not create file for trace recording: {e}")
+                        })
+                });
+
+            Self {
+                stream_file: file,
+                counter: RRef::new(0.into()),
+                records: Default::default(),
+                stack: Default::default(),
+                last_call_site: Default::default(),
+                last_ret_point: Default::default(),
+            }
+        }
+    }
+
+    impl CallTraceRecorder for BasicExeTraceRecorder {
+        fn notify_call(
+            &mut self,
+            call_site: BasicBlockLocation,
+            entered_func: FuncDef,
+            broken: bool,
+        ) {
+            self.notify_step(ExeTraceRecord::Call {
+                from: call_site,
+                to: entered_func.def_id,
+                broken,
+            });
+        }
+
+        fn notify_return(
+            &mut self,
+            ret_point: BasicBlockLocation,
+            caller_func: FuncDef,
+            broken: bool,
+        ) {
+            self.notify_step(ExeTraceRecord::Return {
+                from: ret_point,
+                to: caller_func.def_id,
+                broken,
+            });
+        }
+    }
+
+    impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
+        #[tracing::instrument(level = "debug", skip(self))]
+        fn start_call(&mut self, call_site: BasicBlockLocation) {
+            self.last_call_site = Some(call_site);
+        }
+
+        #[tracing::instrument(level = "debug", skip(self))]
+        fn finish_call(&mut self, entered_func: FuncDef, broken: bool) {
+            self.stack.push(entered_func);
+            let Some(call_site) = self.last_call_site.take() else {
+                if !broken {
+                    panic!(
+                        "Last call site is expected when not broken, current: {}",
+                        entered_func
+                    )
+                } else {
+                    return;
+                }
+            };
+
+            self.notify_call(call_site, entered_func, broken);
+        }
+
+        #[tracing::instrument(level = "debug", skip(self))]
+        fn start_return(&mut self, ret_point: BasicBlockLocation) {
+            self.stack.pop().expect("Inconsistent stack info");
+            self.last_ret_point = Some(ret_point);
+        }
+
+        #[tracing::instrument(level = "debug", skip(self))]
+        fn finish_return(&mut self, broken: bool) {
+            let current = self.stack.last().copied().expect("Inconsistent stack info");
+            let Some(ret_point) = self.last_ret_point.take() else {
+                if !broken {
+                    panic!(
+                        "Last return point is expected when not broken, current: {}",
+                        current
+                    )
+                } else {
+                    return;
+                }
+            };
+
+            self.notify_return(ret_point, current, broken);
+        }
+    }
+
+    impl DecisionTraceRecorder for BasicExeTraceRecorder {
+        type Case = ConstValue;
+
+        fn notify_decision(
+            &mut self,
+            node_location: BasicBlockLocation,
+            kind: &ConstraintKind<Self::Case>,
+        ) {
+            self.notify_step(ExeTraceRecord::Branch {
+                location: node_location,
+                kind: kind.clone(),
+            });
+        }
+    }
+
+    impl BasicExeTraceRecorder {
+        #[tracing::instrument(level = "debug", skip(self), fields(index = *self.counter.as_ref().borrow()))]
+        fn notify_step(&mut self, record: ExeTraceRecord) {
+            let counter = RRef::as_ref(&self.counter);
+            *counter.borrow_mut() += 1;
+            self.records.push(Indexed {
+                value: record,
+                index: *counter.borrow(),
+            });
+            self.append_last_to_file();
+        }
+
+        fn append_last_to_file(&mut self) {
+            let Some(file) = self.stream_file.as_mut() else {
+                return;
+            };
+            let _ = serde_json::to_writer(&mut *file, self.records.last().unwrap())
+                .inspect_err(|e| log_debug!("Failed to dump trace: {}", e))
+                .map_err(std::io::Error::other)
+                .and_then(|_| file.write(&[b'\n']));
+        }
+    }
+}
+pub(crate) use record::BasicExeTraceRecorder;

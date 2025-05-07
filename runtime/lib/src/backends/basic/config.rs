@@ -102,7 +102,7 @@ pub(crate) struct ExecutionTraceConfig {
     pub inspectors: Vec<TraceInspectorType>,
 
     #[serde(default)]
-    pub decisions_dump: Option<OutputConfig>,
+    pub control_flow_dump: Option<OutputConfig>,
 
     #[serde(default)]
     pub constraints_dump: Option<OutputConfig>,

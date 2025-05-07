@@ -100,7 +100,7 @@ impl CompilationPass for Instrumentor {
         body: &Body<'tcx>,
         storage: &mut dyn Storage,
     ) {
-        record_switch_original_indices(body, storage);
+        record_original_indices(body, storage);
     }
 
     fn transform_mir_body<'tcx>(
@@ -146,11 +146,11 @@ fn transform<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, storage: &mut dyn S
     }
     mir_transform::split_blocks_with(body, requires_immediate_instr_after);
 
-    let switch_index_map = make_switch_orig_index_map(body, storage);
+    let orig_index_map = make_orig_index_map(body, storage);
 
     let mut modification = BodyInstrumentationUnit::new(body.local_decls());
     let mut call_adder = RuntimeCallAdder::new(tcx, &mut modification, &pri_items, storage);
-    let mut call_adder = call_adder.in_body(body, switch_index_map);
+    let mut call_adder = call_adder.in_body(body, orig_index_map);
 
     let is_entry = tcx.entry_fn(()).is_some_and(|(id, _)| id == def_id);
 
@@ -212,23 +212,20 @@ fn make_pri_items(tcx: TyCtxt) -> PriItems {
     }
 }
 
-fn record_switch_original_indices(body: &Body, storage: &mut dyn Storage) {
+fn record_original_indices(body: &Body, storage: &mut dyn Storage) {
     let mut entry = storage.get_or_default::<Vec<BasicBlock>>(KEY_SWITCH_ORIG_INDICES.to_owned());
-    *entry = SwitchBasicBlockRecorder::default().visit_body(body);
+    *entry = TerminatorLocationRecorder::default().visit_body(body);
 }
 
-fn make_switch_orig_index_map(
-    body: &Body,
-    storage: &mut dyn Storage,
-) -> HashMap<BasicBlock, BasicBlock> {
-    let split_indices = SwitchBasicBlockRecorder::default().visit_body(body);
+fn make_orig_index_map(body: &Body, storage: &mut dyn Storage) -> HashMap<BasicBlock, BasicBlock> {
+    let split_indices = TerminatorLocationRecorder::default().visit_body(body);
     let mut orig_indices =
         storage.get_or_default::<Vec<BasicBlock>>(KEY_SWITCH_ORIG_INDICES.to_owned());
     let orig_indices = core::mem::replace(orig_indices.as_mut(), Default::default());
     assert_eq!(
         split_indices.len(),
         orig_indices.len(),
-        "Change in the number of switches during the split is not expected"
+        "Change in the number of terminators during the split is not expected"
     );
     split_indices
         .into_iter()
@@ -1054,33 +1051,42 @@ impl MirSourceExt for MirSource<'_> {
     }
 }
 
-struct SwitchBasicBlockRecorder {
-    switch_bbs: Vec<BasicBlock>,
+/// Records the basic block in which the terminators of interest are located.
+/// # Remark
+/// As the traversal order is the same, we can use the result list
+/// for mapping the indices to their original ones after transformations that do
+/// not introduce terminator of interest, e.g. block splitting.
+struct TerminatorLocationRecorder {
+    select_bbs: Vec<BasicBlock>,
     current_bb: BasicBlock,
 }
 
-impl Default for SwitchBasicBlockRecorder {
+impl Default for TerminatorLocationRecorder {
     fn default() -> Self {
         Self {
-            switch_bbs: Default::default(),
+            select_bbs: Default::default(),
             current_bb: BasicBlock::ZERO,
         }
     }
 }
 
-impl SwitchBasicBlockRecorder {
+impl TerminatorLocationRecorder {
     fn visit_body<'tcx>(&mut self, body: &Body<'tcx>) -> Vec<BasicBlock> {
         for (index, block) in body.basic_blocks.iter_enumerated() {
             self.current_bb = index;
             self.visit_terminator_kind(&block.terminator().kind);
         }
-        self.switch_bbs.drain(..).collect()
+        self.select_bbs.drain(..).collect()
+    }
+
+    fn record(&mut self) {
+        self.select_bbs.push(self.current_bb);
     }
 }
 
-impl<'tcx> TerminatorKindVisitor<'tcx, ()> for SwitchBasicBlockRecorder {
+impl<'tcx> TerminatorKindVisitor<'tcx, ()> for TerminatorLocationRecorder {
     fn visit_switch_int(&mut self, _discr: &Operand<'tcx>, _targets: &mir::SwitchTargets) {
-        self.switch_bbs.push(self.current_bb);
+        self.record();
     }
 
     fn visit_assert(
@@ -1091,6 +1097,32 @@ impl<'tcx> TerminatorKindVisitor<'tcx, ()> for SwitchBasicBlockRecorder {
         _target: &BasicBlock,
         _unwind: &UnwindAction,
     ) {
-        self.switch_bbs.push(self.current_bb);
+        self.record();
+    }
+
+    fn visit_call(
+        &mut self,
+        _func: &Operand<'tcx>,
+        _args: &[Spanned<Operand<'tcx>>],
+        _destination: &Place<'tcx>,
+        _target: &Option<BasicBlock>,
+        _unwind: &UnwindAction,
+        _call_source: &mir::CallSource,
+        _fn_span: Span,
+    ) -> () {
+        self.record();
+    }
+
+    fn visit_tail_call(
+        &mut self,
+        _func: &Operand<'tcx>,
+        _args: &[Spanned<Operand<'tcx>>],
+        _fn_span: Span,
+    ) -> () {
+        self.record();
+    }
+
+    fn visit_return(&mut self) -> () {
+        self.record();
     }
 }

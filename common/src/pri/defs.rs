@@ -253,7 +253,13 @@ pub mod macros {
 
           // ----- Calling -----
           #[allow(unused_parens)]
-          { fn before_call_func(def: CalleeDef, func: OperandRef, args: ($slice_ty!(OperandRef)), are_args_tupled: bool) }
+          { fn before_call_func(
+              def: CalleeDef,
+              call_site: BasicBlockLocation,
+              func: OperandRef,
+              args: ($slice_ty!(OperandRef)),
+              are_args_tupled: bool
+          ) }
           #[allow(unused_parens)]
           { fn enter_func(def: FuncDef, arg_places: &[PlaceRef], ret_val_place: PlaceRef) }
           #[allow(unused_parens)]
@@ -264,7 +270,7 @@ pub mod macros {
               tupled_arg_index: LocalIndex,
               tupled_arg_type_id: TypeId,
           ) }
-          { fn return_from_func() }
+          { fn return_from_func(ret_point: BasicBlockLocation) }
           { fn override_return_value(operand: OperandRef) }
           { fn after_call_func(destination: PlaceRef) }
 
@@ -605,13 +611,13 @@ pub mod macros {
             }$modifier!{
                 fn assert_misaligned_ptr_deref(info:AssertionInfo,required:OperandRef,found:OperandRef,);
             }$modifier!{
-                #[allow(unused_parens)]fn before_call_func(def:CalleeDef,func:OperandRef,args:($slice_ty!(OperandRef)),are_args_tupled:bool);
+                #[allow(unused_parens)]fn before_call_func(def:CalleeDef,call_site:BasicBlockLocation,func:OperandRef,args:($slice_ty!(OperandRef)),are_args_tupled:bool);
             }$modifier!{
                 #[allow(unused_parens)]fn enter_func(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef);
             }$modifier!{
                 #[allow(unused_parens)]fn enter_func_tupled(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef,tupled_arg_index:LocalIndex,tupled_arg_type_id:TypeId,);
             }$modifier!{
-                fn return_from_func();
+                fn return_from_func(ret_point: BasicBlockLocation);
             }$modifier!{
                 fn override_return_value(operand:OperandRef);
             }$modifier!{

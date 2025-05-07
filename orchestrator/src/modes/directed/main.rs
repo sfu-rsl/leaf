@@ -224,7 +224,7 @@ fn execute_and_load_trace(
     })?;
 
     Ok(load_trace(
-        &args.outdir.join(NAME_FULL_TRACE).with_extension("json"),
+        &args.outdir.join(NAME_FULL_TRACE).with_extension("jsons"),
         &args.outdir.join(NAME_SYM_TRACE).with_extension("json"),
     ))
 }

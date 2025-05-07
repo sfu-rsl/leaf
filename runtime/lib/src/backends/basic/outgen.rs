@@ -24,7 +24,7 @@ impl BasicOutputGenerator {
 
         writers.extend(configs.iter().map(|c| match c {
             OutputConfig::File(file_config) => match file_config.format {
-                FileFormat::Json => todo!("Not implemented yet"),
+                FileFormat::Json | FileFormat::JsonStream => todo!("Not implemented yet"),
                 FileFormat::Binary => Box::new(BinaryFileAnswersWriter::new(file_config)),
             },
         } as Box<dyn BasicAnswersWriter>));

@@ -86,11 +86,11 @@ pub fn execute_once_for_trace(
         params,
         format!(
             r#"
-            [exe_trace.decisions_dump]
+            [exe_trace.control_flow_dump]
             type = "file"
             directory = "{dir}"
             prefix = "{full_trace_filename}"
-            format = "json"
+            format = "json_stream"
 
             [exe_trace.constraints_dump]
             type = "file"

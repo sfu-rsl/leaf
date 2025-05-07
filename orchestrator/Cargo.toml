@@ -31,9 +31,11 @@ common = { workspace = true, features = [
     "z3",
     "answers",
     "rkyv",
+    "conc_loop",
+    "serde",
 ] }
 
-tracing-subscriber = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
 tracing = { workspace = true }
 tracing-indicatif = "0.3.9"
 sha2 = "0.10.8"

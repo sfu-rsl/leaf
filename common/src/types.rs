@@ -63,12 +63,15 @@ pub struct CalleeDef {
     pub as_virtual: Option<(DynRawMetadata, u64)>,
 }
 
+// FIXME: Possibly large data structure.
+// FIXME: Merge virtual identifier with def_id
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct FuncDef {
     pub static_addr: RawAddress,
     pub as_dyn_method: Option<(DynRawMetadata, u64)>,
+    pub def_id: DefId,
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
@@ -76,8 +79,10 @@ pub struct FuncDef {
 pub mod trace {
     use std::{vec, vec::Vec};
 
+    use super::{BasicBlockLocation, DefId};
+
     #[derive(Debug, Clone)]
-    #[cfg_attr(feature = "trace_types", derive(serde::Serialize, serde::Deserialize))]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct Constraint<V, C> {
         pub discr: V,
         pub kind: ConstraintKind<C>,
@@ -129,7 +134,7 @@ pub mod trace {
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    #[cfg_attr(feature = "trace_types", derive(serde::Serialize, serde::Deserialize))]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ConstraintKind<C> {
         True,
         False,
@@ -235,6 +240,25 @@ pub mod trace {
         }
     }
 
+    #[derive(Debug)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    pub enum ExeTraceRecord<C> {
+        Call {
+            from: BasicBlockLocation,
+            to: DefId,
+            broken: bool,
+        },
+        Return {
+            from: BasicBlockLocation,
+            to: DefId,
+            broken: bool,
+        },
+        Branch {
+            location: BasicBlockLocation,
+            kind: ConstraintKind<C>,
+        },
+    }
+
     mod fmt {
         use core::fmt::{Display, Formatter, Result};
 
@@ -280,6 +304,27 @@ pub mod trace {
                             write!(f, "!in {}", comma_separated(options.iter()))
                         }
                     }
+                }
+            }
+        }
+
+        impl<C> Display for ExeTraceRecord<C>
+        where
+            C: Display,
+        {
+            fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+                match self {
+                    ExeTraceRecord::Call { from, to, broken } => write!(
+                        f,
+                        "{from} {sym}→ {to}",
+                        sym = if *broken { "~" } else { "" }
+                    ),
+                    ExeTraceRecord::Return { from, to, broken } => write!(
+                        f,
+                        "{from} {sym}↩ {to}",
+                        sym = if *broken { "~" } else { "" }
+                    ),
+                    ExeTraceRecord::Branch { location, kind } => write!(f, "{location}: {kind}"),
                 }
             }
         }

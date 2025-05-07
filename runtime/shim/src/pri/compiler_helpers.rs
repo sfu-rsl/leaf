@@ -178,10 +178,11 @@ pub fn callee_def_maybe_virtual<F: FnPtr, R: ?Sized>(
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-pub fn func_def_static<F: FnPtr>(addr: F) -> FuncDef {
+pub fn func_def_static<F: FnPtr>(addr: F, crate_id: u32, body_id: u32) -> FuncDef {
     FuncDef {
         static_addr: addr.addr(),
         as_dyn_method: None,
+        def_id: DefId(crate_id, body_id),
     }
 }
 
@@ -190,6 +191,8 @@ pub fn func_def_dyn_method<F: FnPtr, T: ?Sized, Dyn: ?Sized>(
     static_addr: F,
     receiver_ptr: *const T,
     identifier: u64,
+    crate_id: u32,
+    body_id: u32,
 ) -> FuncDef
 where
     *const T: CoerceUnsized<*const Dyn>,
@@ -207,6 +210,7 @@ where
             },
             identifier,
         )),
+        def_id: DefId(crate_id, body_id),
     }
 }
 

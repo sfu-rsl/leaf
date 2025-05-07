@@ -1713,10 +1713,17 @@ mod implementation {
         fn add_bb_for_basic_block_orig_location(&mut self) -> Local {
             let tcx = self.tcx();
             let def_id = self.body().source.def_id();
+            let current = self.context.block_index();
             let bb_index = self
                 .context
-                .block_original_index(self.context.block_index())
-                .expect("Original index is not available.");
+                .block_original_index(current)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Original index is not available for {:?}: {:?}",
+                        current,
+                        self.body().basic_blocks.get(current),
+                    )
+                });
             let (block, local) = self.make_bb_for_helper_call_with_all(
                 self.context.pri_helper_funcs().basic_block_location,
                 [],
@@ -1903,6 +1910,8 @@ mod implementation {
                 def_local
             };
 
+            let loc_local = self.add_bb_for_basic_block_orig_location();
+
             let func_ref = self.reference_operand(func);
 
             let arg_refs = args
@@ -1924,6 +1933,7 @@ mod implementation {
 
             let mut block = self.make_bb_for_call(sym::before_call_func, vec![
                 operand::move_for_local(def_local),
+                operand::move_for_local(loc_local),
                 operand::move_for_local(func_ref.into()),
                 operand::move_for_local(arguments_local),
                 operand::const_from_bool(tcx, are_args_tupled),
@@ -2003,7 +2013,11 @@ mod implementation {
         }
 
         fn return_from_func(&mut self) {
-            let block = self.make_bb_for_call(sym::return_from_func, vec![]);
+            let loc_local = self.add_bb_for_basic_block_orig_location();
+            let block =
+                self.make_bb_for_call(sym::return_from_func, vec![operand::move_for_local(
+                    loc_local,
+                )]);
             self.insert_blocks([block]);
         }
 
@@ -3080,12 +3094,16 @@ mod implementation {
                 fn_value: Operand<'tcx>,
             ) -> BlocksAndResult<'tcx> {
                 let (fn_ptr_ty, fn_ptr_local, ptr_assignment) =
-                    to_fn_ptr(tcx, call_adder, fn_value);
+                    to_fn_ptr(tcx, call_adder, fn_value.clone());
 
                 let (mut block, id_local) = call_adder.make_bb_for_helper_call_with_all(
                     call_adder.pri_helper_funcs().func_def_static,
                     vec![fn_ptr_ty.into()],
-                    vec![operand::move_for_local(fn_ptr_local)],
+                    [
+                        vec![operand::move_for_local(fn_ptr_local)],
+                        fn_def_id_operand_pair(tcx, &fn_value, call_adder).into(),
+                    ]
+                    .concat(),
                     None,
                 );
                 block.statements.push(ptr_assignment);
@@ -3106,7 +3124,7 @@ mod implementation {
                 method_id: DefId,
             ) -> BlocksAndResult<'tcx> {
                 let (fn_ptr_ty, fn_ptr_local, ptr_assignment) =
-                    to_fn_ptr(tcx, call_adder, fn_value);
+                    to_fn_ptr(tcx, call_adder, fn_value.clone());
 
                 let self_ty = trait_ref.self_ty();
                 let (raw_ptr_of_receiver_block, raw_ptr_of_receiver_local) = raw_ptr_of_receiver(
@@ -3138,11 +3156,15 @@ mod implementation {
                 let (mut block, id_local) = call_adder.make_bb_for_helper_call_with_all(
                     call_adder.pri_helper_funcs().func_def_dyn_method,
                     vec![fn_ptr_ty.into(), self_ty.into(), dyn_ty.into()],
-                    vec![
-                        operand::move_for_local(fn_ptr_local),
-                        operand::move_for_local(raw_ptr_of_receiver_local),
-                        operand::const_from_uint(tcx, identifier),
-                    ],
+                    [
+                        vec![
+                            operand::move_for_local(fn_ptr_local),
+                            operand::move_for_local(raw_ptr_of_receiver_local),
+                            operand::const_from_uint(tcx, identifier),
+                        ],
+                        fn_def_id_operand_pair(tcx, &fn_value, call_adder).into(),
+                    ]
+                    .concat(),
                     None,
                 );
                 block.statements.push(ptr_assignment);
@@ -3460,6 +3482,25 @@ mod implementation {
                 );
                 true
             }
+
+            fn fn_def_id_operand_pair<'tcx>(
+                tcx: TyCtxt<'tcx>,
+                fn_value: &Operand<'tcx>,
+                local_manager: &impl HasLocalDecls<'tcx>,
+            ) -> [Operand<'tcx>; 2] {
+                let fn_ty = fn_value.ty(local_manager, tcx);
+                let TyKind::FnDef(def_id, ..) = fn_ty.kind() else {
+                    unreachable!()
+                };
+                def_id_operand_pair(tcx, *def_id)
+            }
+
+            fn def_id_operand_pair<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> [Operand<'tcx>; 2] {
+                [
+                    operand::const_from_uint(tcx, def_id.krate.as_u32()),
+                    operand::const_from_uint(tcx, def_id.index.as_u32()),
+                ]
+            }
         }
 
         pub(super) fn prepare_operand_for_slice<'tcx>(
@@ -3700,10 +3741,13 @@ mod implementation {
         impl<'tcx, C> ForAssertion<'tcx> for C where C: ForOperandRef<'tcx> + BlockOriginalIndexProvider {}
 
         pub(crate) trait ForFunctionCalling<'tcx>:
-            ForInsertion<'tcx> + JumpTargetModifier
+            ForInsertion<'tcx> + JumpTargetModifier + BlockOriginalIndexProvider
         {
         }
-        impl<'tcx, C> ForFunctionCalling<'tcx> for C where C: ForInsertion<'tcx> + JumpTargetModifier {}
+        impl<'tcx, C> ForFunctionCalling<'tcx> for C where
+            C: ForInsertion<'tcx> + JumpTargetModifier + BlockOriginalIndexProvider
+        {
+        }
 
         pub(crate) trait ForReturning<'tcx>: ForInsertion<'tcx> {}
         impl<'tcx, C> ForReturning<'tcx> for C where C: ForInsertion<'tcx> {}

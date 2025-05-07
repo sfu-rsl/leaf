@@ -44,6 +44,7 @@ use self::{
     expr::{SymVarId, prelude::*},
     place::PlaceMetadata,
     state::{RawPointerVariableState, make_sym_place_handler},
+    trace::BasicExeTraceRecorder,
     types::BasicTypeManager,
 };
 
@@ -64,6 +65,7 @@ const LOG_TAG_TAGS: &str = "tags";
 pub struct BasicBackend {
     call_stack_manager: BasicCallStackManager,
     trace_manager: RRef<BasicTraceManager>,
+    trace_recorder: BasicExeTraceRecorder,
     expr_builder: RRef<BasicExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeManager>,
@@ -80,8 +82,12 @@ impl BasicBackend {
         let sym_var_manager = Rc::new(RefCell::new(BasicSymVariablesManager::new()));
 
         let tags_ref = Rc::new(RefCell::new(Vec::new()));
+
+        let trace_recorder =
+            BasicExeTraceRecorder::new(config.exe_trace.control_flow_dump.as_ref());
         let type_manager = type_manager_ref.clone();
         let trace_manager_ref = Rc::new(RefCell::new(trace::new_trace_manager(
+            trace_recorder.counter.clone(),
             tags_ref.clone(),
             sym_var_manager.clone(),
             &config.exe_trace,
@@ -118,6 +124,7 @@ impl BasicBackend {
                 &config.call,
             ),
             trace_manager,
+            trace_recorder,
             expr_builder,
             sym_values: sym_var_manager.clone(),
             type_manager,
@@ -617,6 +624,7 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
 pub(crate) struct BasicConstraintHandler<'a, EB> {
     location: BasicBlockLocation,
     trace_manager: RefMut<'a, BasicTraceManager>,
+    trace_recorder: &'a mut dyn DecisionTraceRecorder<Case = ConstValue>,
     expr_builder: RRef<EB>,
 }
 
@@ -624,6 +632,7 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
     fn new(backend: &'a mut BasicBackend, location: BasicBlockLocation) -> Self {
         Self {
             trace_manager: backend.trace_manager.borrow_mut(),
+            trace_recorder: &mut backend.trace_recorder,
             expr_builder: backend.expr_builder.clone(),
             location,
         }
@@ -669,6 +678,8 @@ impl<'a, EB: UnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, 
 
 impl<'a, EB> BasicConstraintHandler<'a, EB> {
     fn notify_constraint(&mut self, constraint: Constraint) {
+        self.trace_recorder
+            .notify_decision(self.location, &constraint.kind);
         self.trace_manager
             .notify_step(self.location.into(), constraint);
     }
@@ -712,6 +723,7 @@ impl<'a, EB> BasicSwitchHandler<'a, EB> {
 pub(crate) struct BasicFunctionHandler<'a> {
     call_stack_manager: &'a mut dyn CallStackManager,
     type_manager: &'a dyn TypeManager,
+    trace_recorder: &'a mut dyn PhasedCallTraceRecorder,
 }
 
 impl<'a> BasicFunctionHandler<'a> {
@@ -719,6 +731,7 @@ impl<'a> BasicFunctionHandler<'a> {
         Self {
             call_stack_manager: &mut backend.call_stack_manager,
             type_manager: backend.type_manager.as_ref(),
+            trace_recorder: &mut backend.trace_recorder,
         }
     }
 }
@@ -732,10 +745,12 @@ impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
     fn before_call(
         self,
         def: CalleeDef,
+        call_site: BasicBlockLocation,
         func: Self::Operand,
         args: impl Iterator<Item = Self::Arg>,
         are_args_tupled: bool,
     ) {
+        self.trace_recorder.start_call(call_site);
         self.call_stack_manager
             .prepare_for_call(def, func, args.collect(), are_args_tupled);
     }
@@ -764,7 +779,10 @@ impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
                     Box::new(BasicUntupleHelper::new(self.type_manager, tuple_type_id))
                 });
         }
-        self.call_stack_manager.notify_enter(def);
+
+        let sanity = self.call_stack_manager.notify_enter(def);
+        self.trace_recorder
+            .finish_call(def, matches!(sanity, CallFlowSanity::Broken));
     }
 
     #[inline]
@@ -773,14 +791,18 @@ impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
     }
 
     #[inline]
-    fn ret(self) {
+    fn ret(self, ret_point: BasicBlockLocation) {
+        self.trace_recorder.start_return(ret_point);
         self.call_stack_manager.pop_stack_frame();
     }
 
     fn after_call(self, result_dest: Self::Place) {
         debug_assert!(!result_dest.is_symbolic());
-        self.call_stack_manager
+        let sanity = self
+            .call_stack_manager
             .finalize_call(DeterPlaceValueRef::new(result_dest));
+        self.trace_recorder
+            .finish_return(matches!(sanity, CallFlowSanity::Broken));
     }
 
     fn metadata(self) -> Self::MetadataHandler {
@@ -945,6 +967,12 @@ impl<T> VariablesState for T where
 {
 }
 
+enum CallFlowSanity {
+    Expected,
+    /// The stack is broken (e.g., external function in between)
+    Broken,
+}
+
 trait GenericCallStackManager {
     type VariablesState: GenericVariablesState;
     type Place = <Self::VariablesState as GenericVariablesState>::PlaceValue;
@@ -971,13 +999,13 @@ trait GenericCallStackManager {
         untuple_helper: &dyn Fn() -> Box<dyn UntupleHelper + 'b>,
     );
 
-    fn notify_enter(&mut self, current_func: FuncDef);
+    fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity;
 
     fn pop_stack_frame(&mut self);
 
     fn override_return_value(&mut self, value: Self::Value);
 
-    fn finalize_call(&mut self, result_dest: Self::Place);
+    fn finalize_call(&mut self, result_dest: Self::Place) -> CallFlowSanity;
 
     fn top(&mut self) -> &mut Self::VariablesState;
 }

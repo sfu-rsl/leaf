@@ -514,6 +514,7 @@ impl ProgramRuntimeInterface for BasicPri {
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn before_call_func(
         def: CalleeDef,
+        call_site: BasicBlockLocation,
         func: OperandRef,
         args: &[OperandRef],
         are_args_tupled: bool,
@@ -521,6 +522,7 @@ impl ProgramRuntimeInterface for BasicPri {
         func_control(|h| {
             h.before_call(
                 def.into(),
+                call_site,
                 take_back_operand(func),
                 args.iter().map(|o| take_back_operand(*o)),
                 are_args_tupled,
@@ -559,8 +561,8 @@ impl ProgramRuntimeInterface for BasicPri {
         })
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
-    fn return_from_func() {
-        func_control(|h| h.ret())
+    fn return_from_func(ret_point: BasicBlockLocation) {
+        func_control(|h| h.ret(ret_point))
     }
     /// Overrides (forces) the return value of a function.
     /// In an external call chain, the value will be kept as the return value

@@ -1,5 +1,3 @@
-use tracing_subscriber::fmt::format::FmtSpan;
-
 const LOG_ENV: &str = "LEAFO_LOG";
 
 pub fn init_logging() {
@@ -8,9 +6,7 @@ pub fn init_logging() {
         .with_env_var(LOG_ENV.to_string())
         .from_env_lossy();
 
-    let fmt_layer = fmt::layer()
-        .with_writer(std::io::stderr)
-        .with_span_events(FmtSpan::ENTER);
+    let fmt_layer = fmt::layer().with_writer(std::io::stderr);
 
     let indicatif_layer = tracing_indicatif::IndicatifLayer::new();
 

@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use super::{
-    AssertKind, BasicBlockLocation, BinaryOp, CalleeDef, CastKind, Constraint, FieldIndex, FuncDef,
-    IntType, Local, PlaceUsage, Projection, SymVariable, Tag, TypeId, UnaryOp, ValueType,
-    VariantIndex,
+    AssertKind, BasicBlockLocation, BinaryOp, CalleeDef, CastKind, Constraint, ConstraintKind,
+    FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection, SymVariable, Tag, TypeId, UnaryOp,
+    ValueType, VariantIndex,
 };
 
 pub(crate) trait RuntimeBackend: Shutdown {
@@ -225,6 +225,7 @@ pub(crate) trait FunctionHandler {
     fn before_call(
         self,
         def: CalleeDef,
+        call_site: BasicBlockLocation,
         func: Self::Operand,
         args: impl Iterator<Item = Self::Arg>,
         are_args_tupled: bool,
@@ -240,7 +241,7 @@ pub(crate) trait FunctionHandler {
 
     fn override_return_value(self, value: Self::Operand);
 
-    fn ret(self);
+    fn ret(self, ret_point: BasicBlockLocation);
 
     fn after_call(self, result_dest: Self::Place);
 
@@ -323,6 +324,32 @@ pub(crate) trait CoreTypeProvider<V> {
     }
 
     fn try_to_value_type<'a>(&self, ty: V) -> Option<ValueType>;
+}
+
+pub(crate) trait CallTraceRecorder {
+    fn notify_call(&mut self, call_site: BasicBlockLocation, entered_func: FuncDef, broken: bool);
+
+    fn notify_return(&mut self, ret_point: BasicBlockLocation, caller_func: FuncDef, broken: bool);
+}
+
+pub(crate) trait PhasedCallTraceRecorder: CallTraceRecorder {
+    fn start_call(&mut self, call_site: BasicBlockLocation);
+
+    fn finish_call(&mut self, entered_func: FuncDef, broken: bool);
+
+    fn start_return(&mut self, ret_point: BasicBlockLocation);
+
+    fn finish_return(&mut self, broken: bool);
+}
+
+pub(crate) trait DecisionTraceRecorder {
+    type Case;
+
+    fn notify_decision(
+        &mut self,
+        node_location: BasicBlockLocation,
+        kind: &ConstraintKind<Self::Case>,
+    );
 }
 
 pub(crate) mod implementation {

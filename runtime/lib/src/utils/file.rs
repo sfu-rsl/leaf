@@ -49,11 +49,13 @@ impl FileGenConfig {
     pub(crate) fn open_or_create_single(
         &self,
         default_filename: &str,
+        truncate: bool,
     ) -> std::io::Result<fs::File> {
         self.ensure_dir().and_then(|_| {
             fs::File::options()
                 .write(true)
                 .create(true)
+                .truncate(truncate)
                 .open(self.single_file_path(default_filename))
         })
     }
@@ -71,6 +73,7 @@ impl FileGenConfig {
 pub(crate) enum FileFormat {
     #[default]
     Json,
+    JsonStream,
     Binary,
 }
 
@@ -78,6 +81,7 @@ impl FileFormat {
     pub(crate) fn default_extension(&self) -> &'static str {
         match self {
             Self::Json => "json",
+            Self::JsonStream => "jsons",
             Self::Binary => "bin",
         }
     }
