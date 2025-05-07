@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
 };
 
-use common::{conc_loop::GeneratedInputRecord, log_debug};
+use common::conc_loop::GeneratedInputRecord;
 use libafl::{
     Error, HasMetadata,
     corpus::Testcase,
@@ -182,7 +182,7 @@ impl DivergingMutator {
                     &self.work_dir.join("mutants").to_string_lossy(),
                 ])
                 .arg(ARG_SILENT)
-                .args([ARG_OUTPUT_FORMAT, "json-stream"])
+                .args([ARG_OUTPUT_FORMAT, "jsonl"])
                 .args(self.orchestrator_args.iter())
                 .args(iter::once("--").chain(self.program_args.iter().map(String::as_str)))
                 .stdout(Stdio::piped())

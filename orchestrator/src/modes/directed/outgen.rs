@@ -39,7 +39,7 @@ impl NextInputGenerator {
     }
 
     #[tracing::instrument(level= "debug", skip_all, fields(len = answers.len()))]
-    pub fn dump_as_next_input(&mut self, answers: &HashMap<u32, AstNode>, prefix_len: usize) {
+    pub fn dump_as_next_input(&mut self, answers: &HashMap<u32, AstNode>, score: Option<f64>) {
         let result = self.answers_writer.write(
             answers
                 .iter()
@@ -54,7 +54,7 @@ impl NextInputGenerator {
         match result {
             Ok(path) => {
                 self.total_count += 1;
-                report_diverging_input(&path, Some(prefix_len as f64), &self.output_format);
+                report_diverging_input(&path, score, &self.output_format);
             }
             Err(err) => match err {
                 BinaryFileAnswerError::Incomplete => {

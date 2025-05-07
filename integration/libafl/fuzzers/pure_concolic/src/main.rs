@@ -8,7 +8,9 @@ use std::{
 
 use clap::Parser;
 
-use libafl::{executors::command::CommandConfigurator, prelude::*};
+use libafl::{
+    corpus::ondisk::OnDiskMetadataFormat, executors::command::CommandConfigurator, prelude::*,
+};
 use libafl_bolts::{AsSlice, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
 use libafl_leaf::{DivergingInputTestcaseScore, DivergingMutator, MultiMutationalStageWithStats};
 
@@ -53,6 +55,10 @@ struct Args {
     /// Defaults to `workdir/corpus`.
     #[arg(long)]
     corpus_dir: Option<PathBuf>,
+    /// The seed used for random generation.
+    /// Set it to make the process deterministic.
+    #[arg(long)]
+    rand_seed: Option<u64>,
     /// Directories to load initial inputs from
     #[arg(long = "initial-input-dir")]
     initial_input_dirs: Vec<PathBuf>,
@@ -84,12 +90,17 @@ pub fn main() {
     let mut objective = feedback_and_fast!(CrashFeedback::new(), feedback.clone());
 
     let mut state = StdState::new(
-        StdRand::with_seed(current_nanos()),
-        InMemoryOnDiskCorpus::new(
-            args.corpus_dir
-                .clone()
-                .unwrap_or_else(|| args.workdir.as_ref().unwrap().join("corpus")),
-        )
+        StdRand::with_seed(args.rand_seed.unwrap()),
+        {
+            InMemoryOnDiskCorpus::with_meta_format_and_prefix(
+                args.corpus_dir
+                    .clone()
+                    .unwrap_or_else(|| args.workdir.as_ref().unwrap().join("corpus")),
+                Some(OnDiskMetadataFormat::JsonPretty),
+                None,
+                false,
+            )
+        }
         .unwrap(),
         OnDiskCorpus::new(args.artifacts_dir.join("crashes")).unwrap(),
         &mut feedback,
@@ -191,6 +202,7 @@ fn process_args() -> Args {
         .get_or_insert_with(|| PathBuf::from(NAME_ORCHESTRATOR));
     args.workdir
         .get_or_insert(std::env::temp_dir().join("leaf").join("pure_concolic"));
+    args.rand_seed.get_or_insert_with(current_nanos);
     args
 }
 
@@ -227,23 +239,30 @@ where
 {
     let scheduled_count = state.current_testcase().ok().map(|t| t.scheduled_count());
     match scheduled_count {
+        Some(0) => Ok(true),
+        Some(_) => {
+            let current_id = state.current_corpus_id().unwrap().unwrap();
+            let mut testcase = state.current_testcase().unwrap().clone();
+            state.corpus().load_input_into(&mut testcase)?;
+            state.corpus_mut().remove(current_id)?;
+            let testcase = Some(testcase);
+            fuzzer
+                .scheduler_mut()
+                .on_remove(state, current_id, &testcase)?;
+            let mut testcase = testcase.unwrap();
+            testcase.set_disabled(true);
+            let _ = state
+                .corpus_mut()
+                .add_disabled(testcase)
+                .inspect_err(|e| log_debug!("Problem with adding input back to the corpus {}", e));
+            state.clear_corpus_id()?;
+            Ok(false)
+        }
         None => {
             if state.current_corpus_id().is_ok() {
                 state.clear_corpus_id()?;
             }
             Ok(false)
-        }
-        Some(0) => Ok(true),
-        Some(_) => {
-        let testcase = state.current_testcase().unwrap().clone();
-        let current_id = state.current_corpus_id().unwrap().unwrap();
-            fuzzer
-                .scheduler_mut()
-                .on_remove(state, current_id, &Some(testcase.clone()))?;
-        let corpus = state.corpus_mut();
-        corpus.add_disabled(testcase)?;
-            state.clear_corpus_id()?;
-        Ok(false)
         }
     }
 }

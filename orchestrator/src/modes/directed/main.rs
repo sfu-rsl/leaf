@@ -23,7 +23,7 @@ use std::{
     process::ExitCode,
 };
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use derive_more::derive::Deref;
 
 use common::{
@@ -37,6 +37,11 @@ use reachability::{ProgramReachability, QSet, ReachabilityBiMap};
 use trace::{SwitchStep, SwitchTrace, TraceReader};
 use two_level::DirectedEdge;
 
+#[derive(ValueEnum, Debug, Clone)]
+enum Scoring {
+    PrefixLen,
+}
+
 #[derive(Parser, Debug, Deref)]
 struct Args {
     #[command(flatten)]
@@ -48,6 +53,8 @@ struct Args {
     reachability: Option<PathBuf>,
     #[arg(long, short)]
     target: BasicBlockLocation,
+    #[arg(long)]
+    scoring: Option<Scoring>,
 }
 
 fn main() -> ExitCode {
@@ -79,7 +86,14 @@ fn main() -> ExitCode {
         let prefix_len = trace
             .element_offset(edge.src)
             .expect("Inconsistent referencing");
-        process_edge(&p_map, &solver, &mut next_input_dumper, edge, prefix_len);
+        process_edge(
+            &p_map,
+            &solver,
+            &mut next_input_dumper,
+            edge,
+            prefix_len,
+            args.scoring.as_ref(),
+        );
     }
 
     log_info!("Generated {} new inputs", next_input_dumper.total_count());
@@ -243,6 +257,7 @@ fn process_edge(
     next_input_dumper: &mut NextInputGenerator,
     edge: DirectedEdge<'_>,
     prefix_len: usize,
+    scoring: Option<&Scoring>,
 ) {
     let edge = DirectedEdge {
         metadata: p_map.cfgs[&edge.src.location.body][&edge.src.location.index].as_slice(),
@@ -253,7 +268,12 @@ fn process_edge(
         for result in results {
             log_debug!("Result: {:?}", result.0);
             if matches!(result.0, z3::SatResult::Sat) {
-                next_input_dumper.dump_as_next_input(&result.1, prefix_len)
+                next_input_dumper.dump_as_next_input(
+                    &result.1,
+                    scoring.map(|s| match s {
+                        Scoring::PrefixLen => prefix_len as f64,
+                    }),
+                )
             }
         }
     }
