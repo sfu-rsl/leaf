@@ -206,6 +206,7 @@ pub mod trace {
         where
             C: PartialEq + Clone,
         {
+            // De Morgan's
             ConstraintKind::and(&self.as_ref().not(), &other.as_ref().not(), universe_size)
                 .map(|c| c.not())
                 .map(|c| c.map(Clone::clone))
@@ -290,20 +291,14 @@ pub mod trace {
                 match self {
                     True => write!(f, "{}", true),
                     False => write!(f, "{}", false),
-                    OneOf(options) => {
-                        if options.len() == 1 {
-                            write!(f, "== {}", options[0])
-                        } else {
-                            write!(f, "in {}", comma_separated(options.iter()))
-                        }
-                    }
-                    NoneOf(options) => {
-                        if options.len() == 1 {
-                            write!(f, "!= {}", options[0])
-                        } else {
-                            write!(f, "!in {}", comma_separated(options.iter()))
-                        }
-                    }
+                    OneOf(cases) => match cases.as_slice() {
+                        [single_case] => write!(f, "== {}", single_case),
+                        _ => write!(f, "in {}", comma_separated(cases.iter())),
+                    },
+                    NoneOf(cases) => match cases.as_slice() {
+                        [single_case] => write!(f, "!= {}", single_case),
+                        _ => write!(f, "!in {}", comma_separated(cases.iter())),
+                    },
                 }
             }
         }
@@ -316,12 +311,12 @@ pub mod trace {
                 match self {
                     ExeTraceRecord::Call { from, to, broken } => write!(
                         f,
-                        "{from} {sym}→ {to}",
+                        "{from} {sym}⤞ {to}",
                         sym = if *broken { "~" } else { "" }
                     ),
                     ExeTraceRecord::Return { from, to, broken } => write!(
                         f,
-                        "{from} {sym}↩ {to}",
+                        "{to} ⤝{sym} {from}",
                         sym = if *broken { "~" } else { "" }
                     ),
                     ExeTraceRecord::Branch { location, kind } => write!(f, "{location}: {kind}"),
