@@ -1,3 +1,6 @@
+/// Implementation of the reachability map which avoids loading/calculating sets
+/// until requested. This is based on the observation that the reachability map
+/// may contain many entries that are not queried for the target.
 use std::cell::LazyCell;
 use std::rc::Rc;
 
@@ -234,7 +237,7 @@ pub(crate) mod cache {
         path::Path,
     };
 
-    use serde::{Deserialize, Serialize, ser::SerializeMap};
+    use serde::{Deserialize, Serialize, de::DeserializeOwned, ser::SerializeMap};
 
     use super::*;
 
@@ -314,7 +317,7 @@ pub(crate) mod cache {
             .read(true)
             .open(cache_path)
             .and_then(|mut f| {
-                crate::utils::cache_deserialize::<LazyConsProgramReachability>(&mut f)
+                cache_deserialize::<LazyConsProgramReachability>(&mut f)
                     .map_err(std::io::Error::other)
             })
             .inspect_err(|e| log_debug!("Could not load the cache: {e}"))
@@ -337,22 +340,32 @@ pub(crate) mod cache {
                     .write(true)
                     .open(cache_path)
             })
-            .and_then(|mut f| {
-                crate::utils::cache_serialize(data, &mut f).map_err(std::io::Error::other)
-            })
+            .and_then(|mut f| cache_serialize(data, &mut f).map_err(std::io::Error::other))
     }
 
     pub(in super::super) fn load_file(
         mut file: impl Read,
     ) -> Result<LazyConsProgramReachability, std::io::Error> {
-        crate::utils::cache_deserialize::<LazyConsProgramReachability>(&mut file)
-            .map_err(std::io::Error::other)
+        cache_deserialize::<LazyConsProgramReachability>(&mut file).map_err(std::io::Error::other)
     }
 
     pub(in super::super) fn write_to_file(
         mut file: impl Write,
         data: &LazyConsProgramReachability,
     ) -> Result<(), std::io::Error> {
-        crate::utils::cache_serialize(data, &mut file).map_err(std::io::Error::other)
+        cache_serialize(data, &mut file).map_err(std::io::Error::other)
+    }
+
+    fn cache_serialize<T: Serialize>(
+        obj: &T,
+        w: &mut impl std::io::Write,
+    ) -> Result<(), impl std::error::Error + 'static> {
+        bincode::serde::encode_into_std_write(obj, w, bincode::config::standard()).map(|_| {})
+    }
+
+    fn cache_deserialize<T: DeserializeOwned>(
+        r: &mut impl std::io::Read,
+    ) -> Result<T, impl std::error::Error + 'static> {
+        bincode::serde::decode_from_std_read(r, bincode::config::standard())
     }
 }

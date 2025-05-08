@@ -6,13 +6,10 @@ edition = "2021"
 [lib]
 name = "orchestrator"
 
-[[bin]]
-name = "leafo_pure"
-path = "src/modes/pure_loop.rs"
 
 [[bin]]
 name = "leafo_onetime"
-path = "src/modes/onetime.rs"
+path = "src/modes/onetime/main.rs"
 
 [[bin]]
 name = "leafo_directed"

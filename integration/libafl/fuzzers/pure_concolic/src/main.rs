@@ -91,16 +91,14 @@ pub fn main() {
 
     let mut state = StdState::new(
         StdRand::with_seed(args.rand_seed.unwrap()),
-        {
-            InMemoryOnDiskCorpus::with_meta_format_and_prefix(
-                args.corpus_dir
-                    .clone()
-                    .unwrap_or_else(|| args.workdir.as_ref().unwrap().join("corpus")),
-                Some(OnDiskMetadataFormat::JsonPretty),
-                None,
-                false,
-            )
-        }
+        InMemoryOnDiskCorpus::with_meta_format_and_prefix(
+            args.corpus_dir
+                .clone()
+                .unwrap_or_else(|| args.workdir.as_ref().unwrap().join("corpus")),
+            Some(OnDiskMetadataFormat::JsonPretty),
+            None,
+            false,
+        )
         .unwrap(),
         OnDiskCorpus::new(args.artifacts_dir.join("crashes")).unwrap(),
         &mut feedback,
