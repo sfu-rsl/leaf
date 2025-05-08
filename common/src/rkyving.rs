@@ -1,8 +1,3 @@
-use rkyv::{
-    Archive, Archived, Deserialize, Resolver, Serialize, api::low::deserialize, rancor::Fallible,
-    tuple::ArchivedTuple2, with::ArchiveWith,
-};
-
 use crate::types::ArchivedDefId;
 
 use super::types::DefId;

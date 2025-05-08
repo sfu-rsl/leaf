@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use build_common::utils::workspace_path;
+use common::building::utils::workspace_path;
 
 const PATH_REACHABILITY_ANALYZER: [&str; 3] = ["scripts", "analyzers", "Reachability.dl"];
 
@@ -19,7 +19,7 @@ mod reachability {
 
     use std::{fs, process::Command};
 
-    use build_common::utils::output_dir;
+    use common::building::utils::output_dir;
 
     use super::*;
 

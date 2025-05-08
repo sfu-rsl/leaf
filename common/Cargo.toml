@@ -28,6 +28,7 @@ answers = ["std"]
 rkyv = ["dep:rkyv"]
 unsafe_wrappers = ["dep:derive_more"]
 conc_loop = ["std"]
+building = ["std"]
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.

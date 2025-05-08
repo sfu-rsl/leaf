@@ -273,10 +273,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "build_common"
-version = "0.1.0"
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -483,7 +479,6 @@ version = "0.1.0"
 dependencies = [
  "bimap",
  "bitflags 2.8.0",
- "build_common",
  "common",
  "config",
  "const_format",
@@ -1835,7 +1830,6 @@ name = "orchestrator"
 version = "0.1.0"
 dependencies = [
  "bincode 2.0.1",
- "build_common",
  "clap",
  "common",
  "csv",

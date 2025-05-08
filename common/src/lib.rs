@@ -5,6 +5,8 @@
 #![cfg_attr(not(core_build), feature(register_tool))]
 #![cfg_attr(not(core_build), register_tool(leaf_attr))]
 #![cfg_attr(all(not(core_build), feature = "answers"), feature(path_add_extension))]
+#![cfg_attr(all(not(core_build), feature = "building"), feature(exit_status_error))]
+
 #![no_std]
 
 #[cfg(feature = "std")]
@@ -14,6 +16,8 @@ use std::prelude::rust_2021::*;
 
 #[cfg(feature = "answers")]
 pub mod answers;
+#[cfg(feature = "building")]
+pub mod building;
 #[cfg(feature = "conc_loop")]
 pub mod conc_loop;
 #[cfg(feature = "config")]

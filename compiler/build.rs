@@ -6,7 +6,7 @@ use std::{
     process::Command,
 };
 
-use build_common::utils::*;
+use common::building::utils::*;
 
 const SHIM_LIB_PROJECT_DIR: [&str; 2] = ["runtime", "shim"];
 const SHIM_LIB_FILE_NAME: &str = "libleafrtsh.rlib";

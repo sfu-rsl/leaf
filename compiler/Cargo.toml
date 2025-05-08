@@ -13,10 +13,15 @@ path = "src/main.rs"
 ignore = "0.4.22"
 
 [build-dependencies]
-build_common = { workspace = true }
+common = { workspace = true, features = ["building"] }
 
 [dependencies]
-common = { workspace = true, features = ["tyexp", "config", "logging", "directed"] }
+common = { workspace = true, features = [
+    "tyexp",
+    "config",
+    "logging",
+    "directed",
+] }
 macros = { workspace = true }
 # Adding runtime flavors as dependencies, so they will be built along with the compiler.
 runtime_basic_li = { workspace = true }
