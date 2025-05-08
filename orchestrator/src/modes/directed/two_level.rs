@@ -86,14 +86,18 @@ impl<'a> Director<'a> {
                         }
                     }
 
-                    /* All return points are conservatively considered local targets.
+                    /* All return points are conservatively treated as local targets.
                      * There is an implicit edge from the current function to its caller.
-                     * If the caller can possibly reach the target, the return points can reach it.
-                     * This implicit edge is transitive for all the parent callers. Thus the above
-                     * condition will be "If one of the callers ...". The entry point will be among
-                     * the parent callers, thus the condition always hold and we don't check it.
-                     * NOTE: We can do better based on whether the dependency on the return value.
-                     */
+                     * If the caller can potentially reach the target, then the return points
+                     * can also reach it. This implicit edge is transitive across all parent callers.
+                     * Therefore, the condition becomes: "If one of the callers can reach the target...".
+                     * The entry point is among the parent callers, so this condition always holds,
+                     * and we don't need to explicitly check it.
+                     * The only exception is when we have already passed the point where the target
+                     * is reachable in the caller function. However, this should not represent a
+                     * significant portion of the work.
+                     * NOTE: This logic could be improved by considering whether there is a dependency
+                     * on the return value. */
                     for ret_point in get_return_points(p_map, &current_fn) {
                         yield_all_search_intra!(ret_point);
                     }
