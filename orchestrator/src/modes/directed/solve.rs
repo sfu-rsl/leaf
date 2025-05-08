@@ -425,8 +425,13 @@ fn ast_mapper<'ctx>(discr: &AstNode<'ctx>) -> impl FnMut(u128) -> AstNode<'ctx> 
 fn case_count(outgoing_edges: &[CfgEdgeDestination]) -> usize {
     outgoing_edges
         .into_iter()
-        .filter(|(_, c)| c.flatten().is_some())
-        .count()
+        .flat_map(|(_, c)| c)
+        .fold(0, |count, constraint| match constraint {
+            CfgConstraint::Case(_) => count.saturating_add(1),
+            /* While having otherwise, makes the universe practically infinite,
+             * it should appear for exhaustive matches. */
+            CfgConstraint::Otherwise => usize::MAX,
+        })
 }
 
 trait ConstraintFlatten {
