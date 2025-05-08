@@ -17,6 +17,14 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      - name: Prerequisite - Souffle
+        run: |
+          # Define the version you want to install
+          SOUFFLE_VERSION="2.5"  # Change this to the desired version
+          wget "https://github.com/souffle-lang/souffle/releases/download/${SOUFFLE_VERSION}/x86_64-ubuntu-2404-souffle-${SOUFFLE_VERSION}-Linux.deb"
+          sudo apt-get update
+          sudo dpkg -i "x86_64-ubuntu-2404-souffle-${SOUFFLE_VERSION}-Linux.deb" || sudo apt-get install -f
+
       - name: Build
         run: cargo build --verbose
 
