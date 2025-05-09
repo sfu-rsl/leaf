@@ -1,4 +1,4 @@
-use common::{tyexp::*, types::VariantIndex};
+pub use common::{type_info::*, types::VariantIndex};
 
 pub(crate) trait TypeInfoExt {
     fn as_single_variant(&self) -> Option<&VariantInfo>;
@@ -138,7 +138,7 @@ impl FieldsShapeInfoExt for FieldsShapeInfo {
 pub(crate) mod instance {
     use std::sync::OnceLock;
 
-    use common::tyexp::TypesData;
+    use common::type_info::TypesData;
 
     pub(crate) static PROGRAM_TYPES: OnceLock<TypesData> = OnceLock::new();
 }

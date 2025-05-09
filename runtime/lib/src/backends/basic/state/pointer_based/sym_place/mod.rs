@@ -117,7 +117,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         let ptr_val = self.retrieve_value(ptr_val, ptr_type_id);
         let pointee_ty = self
             .type_manager
-            .get_type(ptr_type_id)
+            .get_type(&ptr_type_id)
             .pointee_ty
             .unwrap()
             .into();

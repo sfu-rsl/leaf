@@ -9,17 +9,17 @@ use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
     backends::basic::{
         GenericVariablesState,
-        alias::{SymValueRefExprBuilder, TypeManager},
+        alias::{SymValueRefExprBuilder, TypeDatabase},
         config::{SymbolicPlaceConfig, SymbolicPlaceStrategy},
         expr::{
             lazy::RawPointerRetriever,
             place::{DeterministicPlaceValue, SymbolicPlaceValue},
         },
     },
-    tyexp::TypeInfoExt,
+    type_info::TypeInfoExt,
     utils::{InPlaceSelfHierarchical, alias::RRef},
 };
-use common::tyexp::{FieldsShapeInfo, StructShape, TypeInfo, UnionShape};
+use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo, UnionShape};
 
 use super::super::{
     ValueRef,
@@ -102,7 +102,7 @@ type MemoryObject = (SymValueRef, TypeId);
 /// they will be sent to the `fallback` state to be handled.
 pub(in super::super) struct RawPointerVariableState<EB> {
     memory: memory::Memory,
-    type_manager: Rc<dyn TypeManager>,
+    type_manager: Rc<dyn TypeDatabase>,
     sym_read_handler: SymPlaceHandlerObject,
     sym_write_handler: SymPlaceHandlerObject,
     expr_builder: RRef<EB>,
@@ -110,7 +110,7 @@ pub(in super::super) struct RawPointerVariableState<EB> {
 
 impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     pub fn new(
-        type_manager: Rc<dyn TypeManager>,
+        type_manager: Rc<dyn TypeDatabase>,
         sym_read_handler: SymPlaceHandlerObject,
         sym_write_handler: SymPlaceHandlerObject,
         expr_builder: RRef<EB>,
@@ -184,11 +184,11 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
 
     #[inline]
     fn get_type(&self, type_id: TypeId) -> &'static TypeInfo {
-        self.type_manager.get_type(type_id)
+        self.type_manager.get_type(&type_id)
     }
 
     fn get_type_size(&self, place_val: &DeterministicPlaceValue) -> Option<TypeSize> {
-        let ty = self.type_manager.get_type(place_val.type_id());
+        let ty = self.type_manager.get_type(&place_val.type_id());
         ty.is_sized().then_some(ty.size)
     }
 }
@@ -381,7 +381,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
 
     fn inspect_porter_sym_values(&self, porter: &PorterValue, porter_size: TypeSize) {
         for (offset, type_id, _) in &porter.sym_values {
-            let value_size = self.type_manager.get_type(*type_id).size;
+            let value_size = self.type_manager.get_type(type_id).size;
             if offset + value_size > porter_size {
                 unimplemented!(
                     "Overflowing symbolic values in a porter are not handled yet: {:?}",

@@ -30,8 +30,8 @@ pub mod logging;
 mod rkyving;
 #[cfg(feature = "serde")]
 mod serdes;
-#[cfg(feature = "tyexp")]
-pub mod tyexp;
+#[cfg(feature = "type_info")]
+pub mod type_info;
 #[cfg(feature = "z3")]
 pub mod z3;
 

@@ -8,7 +8,7 @@ mod place;
 mod state;
 mod sym_vars;
 mod trace;
-mod types;
+mod type_info;
 
 use std::{
     cell::{RefCell, RefMut},
@@ -17,10 +17,7 @@ use std::{
     rc::Rc,
 };
 
-use common::{
-    log_debug, log_info,
-    tyexp::{FieldsShapeInfo, StructShape, TagEncodingInfo, TagInfo, TypeInfo},
-};
+use common::{log_debug, log_info};
 use sym_vars::SymVariablesManager;
 
 use crate::{
@@ -29,13 +26,16 @@ use crate::{
         FuncDef, IntType, Local, LocalIndex, PlaceUsage, SymVariable, Tag, TypeId, UnaryOp,
         VariantIndex, backend::*, place::HasMetadata,
     },
-    tyexp::{FieldsShapeInfoExt, TypeInfoExt},
+    type_info::{
+        FieldsShapeInfo, FieldsShapeInfoExt, StructShape, TagEncodingInfo, TagInfo, TypeInfo,
+        TypeInfoExt,
+    },
     utils::alias::RRef,
 };
 
 use self::{
     alias::{
-        BasicExprBuilder, BasicSymExprBuilder, TraceManager, TypeManager,
+        BasicExprBuilder, BasicSymExprBuilder, TraceManager, TypeDatabase,
         ValueRefExprBuilder as OperationalExprBuilder,
         ValueRefUnaryExprBuilder as UnaryExprBuilder,
     },
@@ -45,7 +45,7 @@ use self::{
     place::PlaceMetadata,
     state::{RawPointerVariableState, make_sym_place_handler},
     trace::BasicExeTraceRecorder,
-    types::BasicTypeManager,
+    type_info::BasicTypeManager,
 };
 
 type BasicTraceManager = dyn TraceManager;
@@ -68,7 +68,7 @@ pub struct BasicBackend {
     trace_recorder: BasicExeTraceRecorder,
     expr_builder: RRef<BasicExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
-    type_manager: Rc<dyn TypeManager>,
+    type_manager: Rc<dyn TypeDatabase>,
     tags: RRef<Vec<Tag>>,
 }
 
@@ -206,7 +206,7 @@ impl RuntimeBackend for BasicBackend {
 pub(crate) struct BasicPlaceHandler<'a> {
     vars_state: &'a mut dyn VariablesState,
     usage: PlaceUsage,
-    type_manager: &'a dyn TypeManager,
+    type_manager: &'a dyn TypeDatabase,
 }
 
 impl PlaceHandler for BasicPlaceHandler<'_> {
@@ -221,8 +221,8 @@ impl PlaceHandler for BasicPlaceHandler<'_> {
 
     fn tag_of<'a>(self, info: Self::PlaceInfo<'a>) -> Self::DiscriminablePlace {
         let mut place = info;
-        let type_manager: &dyn TypeManager = self.type_manager;
-        let ty = type_manager.get_type(place.metadata().unwrap_type_id());
+        let type_manager: &dyn TypeDatabase = self.type_manager;
+        let ty = type_manager.get_type(&place.metadata().unwrap_type_id());
         let (tag_as_field, tag_encoding) = match ty.tag.as_ref() {
             Some(TagInfo::Constant { discr_bit_rep }) => {
                 return DiscriminantPossiblePlace::SingleVariant {
@@ -239,7 +239,7 @@ impl PlaceHandler for BasicPlaceHandler<'_> {
                     .address()
                     .wrapping_byte_add(tag_as_field.offset as usize),
             );
-            let tag_ty = type_manager.get_type(tag_as_field.ty);
+            let tag_ty = type_manager.get_type(&tag_as_field.ty);
             meta.set_type_id(tag_ty.id);
             if let Some(value_ty) = type_manager.try_to_value_type(tag_ty) {
                 meta.set_ty(value_ty);
@@ -288,7 +288,7 @@ pub(crate) struct BasicAssignmentHandler<'s, EB: OperationalExprBuilder> {
     dest: PlaceValueRef,
     vars_state: &'s mut dyn VariablesState,
     expr_builder: RRef<EB>,
-    type_manager: &'s dyn TypeManager,
+    type_manager: &'s dyn TypeDatabase,
 }
 
 impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
@@ -532,11 +532,11 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
     fn build_discriminant_expr(
         &self,
         tag_value: SymValueRef,
-        tag_encoding: &common::tyexp::TagEncodingInfo,
+        tag_encoding: &TagEncodingInfo,
         discr_ty_info: &LazyTypeInfo,
         tag_ty_info: &LazyTypeInfo,
     ) -> SymValueRef {
-        use common::tyexp::TagEncodingInfo::*;
+        use TagEncodingInfo::*;
         match tag_encoding {
             Direct => tag_value,
             Niche {
@@ -722,7 +722,7 @@ impl<'a, EB> BasicSwitchHandler<'a, EB> {
 
 pub(crate) struct BasicFunctionHandler<'a> {
     call_stack_manager: &'a mut dyn CallStackManager,
-    type_manager: &'a dyn TypeManager,
+    type_manager: &'a dyn TypeDatabase,
     trace_recorder: &'a mut dyn PhasedCallTraceRecorder,
 }
 
@@ -811,7 +811,7 @@ impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
 }
 
 struct BasicUntupleHelper<'a> {
-    type_manager: &'a dyn TypeManager,
+    type_manager: &'a dyn TypeDatabase,
     tuple_type_id: TypeId,
     type_info: Option<&'static TypeInfo>,
     fields_info: Option<&'static StructShape>,
@@ -850,7 +850,7 @@ impl GenericUntupleHelper for BasicUntupleHelper<'_> {
 }
 
 impl<'a> BasicUntupleHelper<'a> {
-    fn new(type_manager: &'a dyn TypeManager, tuple_type_id: TypeId) -> Self {
+    fn new(type_manager: &'a dyn TypeDatabase, tuple_type_id: TypeId) -> Self {
         Self {
             type_manager,
             tuple_type_id,
@@ -861,7 +861,7 @@ impl<'a> BasicUntupleHelper<'a> {
 
     #[inline]
     fn get_type(&self, type_id: TypeId) -> &'static TypeInfo {
-        self.type_manager.get_type(type_id)
+        self.type_manager.get_type(&type_id)
     }
 
     fn type_info(&mut self) -> &'static TypeInfo {

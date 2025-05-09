@@ -288,12 +288,7 @@ pub(crate) enum SolveResult<M> {
     Unknown,
 }
 
-pub(crate) trait TypeManager {
-    type Key;
-    type Value;
-
-    fn get_type(&self, key: Self::Key) -> Self::Value;
-}
+pub(crate) use common::type_info::TypeDatabase;
 
 macro_rules! fn_by_name {
     ($($name:ident),*$(,)?) => {
@@ -304,8 +299,8 @@ macro_rules! fn_by_name {
     };
 }
 
-pub(crate) trait CoreTypeProvider<V> {
-    common::tyexp::pass_core_type_names_to!(fn_by_name);
+pub trait CoreTypeProvider<V> {
+    common::type_info::pass_core_type_names_to!(fn_by_name);
 
     fn int_type(&self, ty: IntType) -> V {
         match (ty.is_signed, ty.bit_size as u32) {

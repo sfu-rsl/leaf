@@ -1,42 +1,41 @@
-use std::collections::HashMap;
+use delegate::delegate;
 
-use common::tyexp::{CoreTypes, TypeExport, TypesData, pass_core_type_names_to};
+use common::type_info::{CoreTypes, TypesData, pass_core_type_names_to, rw::TypeExport};
 
 use crate::{
-    abs::{IntType, backend::TypeManager},
-    tyexp,
+    abs::{IntType, backend::TypeDatabase},
+    type_info,
 };
 
 use super::{CoreTypeProvider, LazyTypeInfo, TypeId, TypeInfo, ValueType};
 
-pub(crate) struct BasicTypeManager<'t> {
-    all_types: &'t HashMap<TypeId, TypeInfo>,
-    core_types: CoreTypes<&'t TypeInfo>,
+pub(crate) struct BasicTypeManager<D: TypeDatabase<'static>> {
+    inner: D,
+    core_types: CoreTypes<&'static TypeInfo>,
 }
 
-impl<'t> BasicTypeManager<'t> {
-    fn new(types: &'t TypesData) -> Self {
+impl<D: TypeDatabase<'static>> BasicTypeManager<D> {
+    fn new(db: D) -> Self {
+        let core_types = db.core_types().map(|id| db.get_type(&id));
         Self {
-            all_types: &types.all_types,
-            core_types: types.core_types.map(|id| &types.all_types[&id]),
+            inner: db,
+            core_types,
         }
     }
 }
 
-impl Default for BasicTypeManager<'static> {
+impl Default for BasicTypeManager<&'static TypesData> {
     fn default() -> Self {
-        Self::new(tyexp::instance::PROGRAM_TYPES.get_or_init(|| TypeExport::read().unwrap()))
+        Self::new(type_info::instance::PROGRAM_TYPES.get_or_init(|| TypeExport::read().unwrap()))
     }
 }
 
-impl<'t> TypeManager for BasicTypeManager<'t> {
-    type Key = TypeId;
-    type Value = &'t TypeInfo;
-
-    fn get_type(&self, key: Self::Key) -> Self::Value {
-        self.all_types
-            .get(&key)
-            .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
+impl<D: TypeDatabase<'static>> TypeDatabase<'static> for BasicTypeManager<D> {
+    delegate! {
+        to self.inner {
+            fn opt_get_type(&self, key: &TypeId) -> Option<&'static TypeInfo>;
+            fn core_types(&self) -> &CoreTypes<TypeId>;
+        }
     }
 }
 
@@ -65,7 +64,7 @@ macro_rules! impl_float_type {
     };
 }
 
-impl<'t> CoreTypeProvider<ValueType> for BasicTypeManager<'t> {
+impl<D: TypeDatabase<'static>> CoreTypeProvider<ValueType> for BasicTypeManager<D> {
     fn bool(&self) -> ValueType {
         ValueType::Bool
     }
@@ -104,14 +103,14 @@ macro_rules! delegate_to_core_types {
         delegate::delegate! {
             to self.core_types {
                 $(
-                    fn $method(&self) -> &'t TypeInfo;
+                    fn $method(&self) -> &'static TypeInfo;
                 )*
             }
         }
     };
 }
 
-impl<'t> CoreTypeProvider<&'t TypeInfo> for BasicTypeManager<'t> {
+impl<'t, 'd, D: TypeDatabase<'static>> CoreTypeProvider<&'t TypeInfo> for BasicTypeManager<D> {
     pass_core_type_names_to!(delegate_to_core_types);
 
     fn try_to_value_type(&self, ty: &'t TypeInfo) -> Option<ValueType> {
@@ -144,16 +143,16 @@ macro_rules! impl_type {
     };
 }
 
-impl CoreTypeProvider<LazyTypeInfo> for BasicTypeManager<'static>
+impl<D: TypeDatabase<'static>> CoreTypeProvider<LazyTypeInfo> for BasicTypeManager<D>
 where
-    Self: CoreTypeProvider<&'static TypeInfo> + CoreTypeProvider<ValueType>,
+    Self: for<'t> CoreTypeProvider<&'t TypeInfo> + CoreTypeProvider<ValueType>,
 {
     pass_core_type_names_to!(impl_type);
 
     fn try_to_value_type<'a>(&self, ty: LazyTypeInfo) -> Option<ValueType> {
         match ty {
             LazyTypeInfo::IdPrimitive(_, ty) => self.try_to_value_type(ty),
-            LazyTypeInfo::Id(id) => self.try_to_value_type(self.get_type(id)),
+            LazyTypeInfo::Id(id) => self.try_to_value_type(self.get_type(&id)),
             LazyTypeInfo::Fetched(ty) => self.try_to_value_type(ty),
             LazyTypeInfo::Forced(ty) => self.try_to_value_type(ty.as_ref()),
             LazyTypeInfo::None => None,

@@ -164,69 +164,101 @@ pub struct GenericTypesData<All, Cores> {
 
 pub type TypesData = GenericTypesData<HashMap<TypeId, TypeInfo>, CoreTypes>;
 
-type SerializedTypesData = GenericTypesData<Vec<TypeInfo>, Vec<(String, TypeId)>>;
+pub trait TypeDatabase<'t> {
+    fn opt_get_type(&self, key: &TypeId) -> Option<&'t TypeInfo>;
 
-pub struct TypeExport;
-
-pub const FINAL_TYPE_EXPORT_FILE: &str = "types.json";
-
-// FIXME: Move these functions to a more appropriate place.
-// FIXME: Make this configurable and injectable.
-impl TypeExport {
-    pub fn read() -> Result<TypesData, StrError> {
-        let type_info_file_path =
-            crate::utils::search_current_ancestor_dirs_for(FINAL_TYPE_EXPORT_FILE)
-                .expect("Failed to find the type info file.");
-
-        let data = Self::parse_exported_types(type_info_file_path.display().to_string())?;
-        log_debug!("Retrieved {} types from file.", data.all_types.len());
-
-        let types = TypesData {
-            all_types: data
-                .all_types
-                .into_iter()
-                .map(|type_info| (type_info.id, type_info))
-                .collect(),
-            core_types: CoreTypes::try_from(
-                data.core_types.into_iter().collect::<Vec<_>>().as_slice(),
-            )
-            .unwrap(),
-        };
-
-        Ok(types)
+    fn get_type(&self, key: &TypeId) -> &'t TypeInfo {
+        self.opt_get_type(key)
+            .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
     }
 
-    pub fn write<'a>(
-        types: impl Iterator<Item = &'a TypeInfo>,
-        core_types: CoreTypes<TypeId>,
-        file_path: String,
-    ) {
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(file_path)
-            .expect("Unable to open file for type export");
-        let mut serializer = serde_json::Serializer::pretty(file);
-        let data = SerializedTypesData {
-            all_types: types.cloned().collect(),
-            core_types: core_types.to_pairs().to_vec(),
-        };
-        data.serialize(&mut serializer)
-            .expect("Failed to write types to file.");
+    fn core_types(&self) -> &CoreTypes<TypeId>;
+}
+
+impl<'t> TypeDatabase<'t> for &'t TypesData {
+    fn opt_get_type(&self, key: &TypeId) -> Option<&'t TypeInfo> {
+        self.all_types.get(key)
     }
 
-    pub fn parse_exported_types(file_path: String) -> Result<SerializedTypesData, StrError> {
-        let file =
-            OpenOptions::new()
-                .read(true)
-                .open(file_path)
-                .map_err(StrError::with_message(
-                    "Failed to open file for type export",
-                ))?;
-
-        let type_infos: SerializedTypesData = serde_json::from_reader(file)
-            .map_err(StrError::with_message("Failed to parse types from file."))?;
-        Ok(type_infos)
+    fn core_types(&self) -> &CoreTypes<TypeId> {
+        &self.core_types
     }
+}
+
+#[cfg(feature = "type_info_rw")]
+pub mod rw {
+    use super::*;
+
+    mod serdes {
+        use super::*;
+
+        type SerializedTypesData = GenericTypesData<Vec<TypeInfo>, Vec<(String, TypeId)>>;
+
+        pub struct TypeExporter;
+
+        pub const FINAL_TYPE_EXPORT_FILE: &str = "types.json";
+
+        // FIXME: Move these functions to a more appropriate place.
+        // FIXME: Make this configurable and injectable.
+        impl TypeExporter {
+            pub fn read() -> Result<TypesData, StrError> {
+                let type_info_file_path =
+                    crate::utils::search_current_ancestor_dirs_for(FINAL_TYPE_EXPORT_FILE)
+                        .expect("Failed to find the type info file.");
+
+                let data = Self::parse_exported_types(type_info_file_path.display().to_string())?;
+                log_debug!("Retrieved {} types from file.", data.all_types.len());
+
+                let types = TypesData {
+                    all_types: data
+                        .all_types
+                        .into_iter()
+                        .map(|type_info| (type_info.id, type_info))
+                        .collect(),
+                    core_types: CoreTypes::try_from(
+                        data.core_types.into_iter().collect::<Vec<_>>().as_slice(),
+                    )
+                    .unwrap(),
+                };
+
+                Ok(types)
+            }
+
+            pub fn write<'a>(
+                types: impl Iterator<Item = &'a TypeInfo>,
+                core_types: CoreTypes<TypeId>,
+                file_path: String,
+            ) {
+                let file = OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(file_path)
+                    .expect("Unable to open file for type export");
+                let mut serializer = serde_json::Serializer::pretty(file);
+                let data = SerializedTypesData {
+                    all_types: types.cloned().collect(),
+                    core_types: core_types.to_pairs().to_vec(),
+                };
+                data.serialize(&mut serializer)
+                    .expect("Failed to write types to file.");
+            }
+
+            pub fn parse_exported_types(
+                file_path: String,
+            ) -> Result<SerializedTypesData, StrError> {
+                let file = OpenOptions::new().read(true).open(file_path).map_err(
+                    StrError::with_message("Failed to open file for type export"),
+                )?;
+
+                let type_infos: SerializedTypesData = serde_json::from_reader(file)
+                    .map_err(StrError::with_message("Failed to parse types from file."))?;
+                Ok(type_infos)
+            }
+        }
+    }
+
+
+    pub type TypeExport = serdes::TypeExporter;
+    pub use serdes::FINAL_TYPE_EXPORT_FILE;
 }

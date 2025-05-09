@@ -1,5 +1,5 @@
 use super::super::alias::{
-    SymValueRefExprBuilder, TypeManager, ValueRefBinaryExprBuilder, ValueRefExprBuilder,
+    SymValueRefExprBuilder, TypeDatabase, ValueRefBinaryExprBuilder, ValueRefExprBuilder,
     ValueRefUnaryExprBuilder,
 };
 use super::{BinaryOp as BasicBinaryOp, UnaryOp as BasicUnaryOp, *};
@@ -23,7 +23,7 @@ pub(crate) type DefaultExprBuilder = toplevel::TopLevelBuilder;
 pub(crate) type DefaultSymExprBuilder =
     adapters::SymValueRefExprBuilderAdapter<toplevel::TopLevelBuilder>;
 
-pub(crate) fn new_expr_builder(type_manager: Rc<dyn TypeManager>) -> DefaultExprBuilder {
+pub(crate) fn new_expr_builder(type_manager: Rc<dyn TypeDatabase>) -> DefaultExprBuilder {
     DefaultExprBuilder::new(type_manager)
 }
 
@@ -50,7 +50,7 @@ mod toplevel {
     }
 
     impl TopLevelBuilder {
-        pub(crate) fn new(type_manager: Rc<dyn TypeManager>) -> Self {
+        pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
             Self {
                 sym_builder: SymbolicBuilder::new(type_manager.clone()),
                 conc_builder: ConcreteBuilder::default(),
@@ -194,7 +194,7 @@ mod symbolic {
     >;
 
     impl SymbolicBuilder {
-        pub(crate) fn new(type_manager: Rc<dyn TypeManager>) -> Self {
+        pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
             let uneval_resolver = UnevaluatedResolverBuilder {
                 type_manager,
                 sym_builder: Logger::<BaseSymbolicBuilder>::default(),
@@ -207,7 +207,7 @@ mod symbolic {
 
     #[derive(Clone)]
     pub(crate) struct UnevaluatedResolverBuilder<EB: SymValueRefExprBuilder> {
-        type_manager: Rc<dyn TypeManager>,
+        type_manager: Rc<dyn TypeDatabase>,
         sym_builder: EB,
     }
 

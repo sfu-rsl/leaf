@@ -11,7 +11,8 @@ crate-type = ["rlib"]
 
 [dependencies]
 common = { workspace = true, features = [
-    "tyexp",
+    "type_info",
+    "type_info_rw",
     "config",
     "logging",
     "trace_types",

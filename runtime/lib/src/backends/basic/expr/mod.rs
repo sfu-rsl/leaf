@@ -14,7 +14,7 @@ use std::{
 use delegate::delegate;
 use derive_more as dm;
 
-use common::tyexp::TypeInfo;
+use common::type_info::TypeInfo;
 
 use crate::abs::expr::sym_place::{Select, SymbolicReadTree};
 use crate::utils::meta::{define_reversible_pair, sub_enum};

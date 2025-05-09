@@ -14,7 +14,10 @@ use std::ops::DerefMut;
 
 use glob::glob;
 
-use common::{log_debug, log_warn, tyexp::*};
+use common::{
+    log_debug, log_warn,
+    type_info::{rw::*, *},
+};
 
 use super::{CompilationPass, Storage, StorageExt};
 use crate::utils::file::TyCtxtFileExt;

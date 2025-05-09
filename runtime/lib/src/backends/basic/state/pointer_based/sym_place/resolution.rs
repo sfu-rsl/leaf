@@ -81,13 +81,13 @@ trait SymbolicPlaceResolver:
 }
 
 pub(crate) struct DefaultSymPlaceResolver<'a> {
-    type_manager: &'a dyn TypeManager,
+    type_manager: &'a dyn TypeDatabase,
     retriever: &'a dyn RawPointerRetriever,
 }
 
 impl<'a> DefaultSymPlaceResolver<'a> {
     pub(crate) fn new(
-        type_manager: &'a dyn TypeManager,
+        type_manager: &'a dyn TypeDatabase,
         retriever: &'a dyn RawPointerRetriever,
     ) -> Self {
         Self {
@@ -102,11 +102,11 @@ mod implementation {
         abs::expr::sym_place::{
             SelectTarget, SymbolicReadResolver, SymbolicReadTreeLeafMutator::*,
         },
-        tyexp::TypeInfoExt,
+        type_info::TypeInfoExt,
     };
 
     use super::*;
-    use common::{log_warn, tyexp::ArrayShape};
+    use common::{log_warn, type_info::ArrayShape};
 
     impl SymbolicPlaceResolver for DefaultSymPlaceResolver<'_> {
         #[tracing::instrument(level = "debug", skip(self))]
@@ -149,7 +149,7 @@ mod implementation {
         fn resolve_deref_of_sym(&self, host: &DerefSymHostPlace) -> Select {
             let pointee_type_id = self
                 .type_manager
-                .get_type(host.host_type_id)
+                .get_type(&host.host_type_id)
                 .pointee_ty
                 .expect("Host type must be a pointer type.");
 
@@ -284,7 +284,7 @@ mod implementation {
             base_address: RawAddress,
             shape: &ArrayShape,
         ) -> Vec<SinglePlaceResult> {
-            let item_ty = self.type_manager.get_type(shape.item_ty);
+            let item_ty = self.type_manager.get_type(&shape.item_ty);
             let mut result = Vec::with_capacity(shape.len as usize);
             for i in 0..shape.len {
                 /* NOTE: Wait, shouldn't we pay attention to `align` here?

@@ -1,16 +1,16 @@
-use common::tyexp::{FieldInfo, TypeInfo};
+use common::type_info::{FieldInfo, TypeInfo};
 use common::{log_debug, log_warn};
 
 use crate::{
     abs::{IntType, ValueType},
-    backends::basic::alias::TypeManager,
-    tyexp::TypeInfoExt,
+    backends::basic::alias::TypeDatabase,
+    type_info::TypeInfoExt,
 };
 
 use super::*;
 
 mod retrieval {
-    use common::tyexp::{FieldsShapeInfo, VariantInfo};
+    use common::type_info::{FieldsShapeInfo, VariantInfo};
     use common::types::TypeSize;
 
     use core::num::Wrapping;
@@ -25,7 +25,7 @@ mod retrieval {
     impl RawConcreteValue {
         pub(crate) fn type_as_scalar(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
         ) -> Result<ScalarType, &LazyTypeInfo> {
             type_manager
                 .try_to_value_type(self.1.clone())
@@ -48,7 +48,7 @@ mod retrieval {
         /// This should be ensured by the caller.
         pub(crate) unsafe fn try_retrieve_as_scalar(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
         ) -> Result<ConstValue, &LazyTypeInfo> {
             self.type_as_scalar(type_manager)
                 .map(|ty| retrieve_scalar(self.0, &ty))
@@ -64,7 +64,7 @@ mod retrieval {
         /// This should be ensured by the caller.
         pub(crate) unsafe fn retrieve(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
             field_retriever: &dyn RawPointerRetriever,
         ) -> Result<ConcreteValueRef, &LazyTypeInfo> {
             let ty = match &self.1 {
@@ -85,7 +85,7 @@ mod retrieval {
         unsafe fn retrieve_with_type(
             &self,
             ty: &TypeInfo,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
             field_retriever: &dyn RawPointerRetriever,
         ) -> ConcreteValueRef {
             let result = retrieve_by_type(self.0, ty, type_manager, field_retriever);
@@ -104,10 +104,10 @@ mod retrieval {
 
     impl LazyTypeInfo {
         #[inline]
-        pub(crate) fn get_type(&self, type_manager: &dyn TypeManager) -> Option<&TypeInfo> {
+        pub(crate) fn get_type(&self, type_manager: &dyn TypeDatabase) -> Option<&TypeInfo> {
             match self {
                 LazyTypeInfo::Id(ty_id) | LazyTypeInfo::IdPrimitive(ty_id, _) => {
-                    Some(type_manager.get_type(*ty_id))
+                    Some(type_manager.get_type(&ty_id))
                 }
                 LazyTypeInfo::Fetched(ty) => Some(*ty),
                 LazyTypeInfo::Forced(ty) => Some(ty.as_ref()),
@@ -242,7 +242,7 @@ mod retrieval {
     unsafe fn retrieve_by_type(
         addr: RawAddress,
         ty: &TypeInfo,
-        type_manager: &dyn TypeManager,
+        type_manager: &dyn TypeDatabase,
         field_retriever: &dyn RawPointerRetriever,
     ) -> ConcreteValue {
         log_debug!("Retrieving value at {:p} of type: {:?}", addr, ty.id);
@@ -257,12 +257,12 @@ mod retrieval {
             "Unsized types are not expected to be retrieved.",
         );
         if let Some(variant) = ty.as_single_variant() {
-            use common::tyexp::FieldsShapeInfo::*;
+            use common::type_info::FieldsShapeInfo::*;
             match &variant.fields {
                 Array(shape) => retrieve_array(
                     addr,
                     shape.len as usize,
-                    type_manager.get_type(shape.item_ty),
+                    type_manager.get_type(&shape.item_ty),
                     |addr| field_retriever.retrieve(addr, shape.item_ty),
                 )
                 .into(),
@@ -278,7 +278,7 @@ mod retrieval {
                     None => retrieve_struct(addr, &shape.fields, field_retriever).into(),
                     Some(pointee_ty) => {
                         debug_assert!(
-                            !type_manager.get_type(pointee_ty).is_sized(),
+                            !type_manager.get_type(&pointee_ty).is_sized(),
                             "Pointer with struct shape is expected to be fat."
                         );
                         retrieve_fat_ptr(addr, ty.id, &shape.fields, field_retriever)
@@ -349,7 +349,7 @@ mod retrieval {
     }
 
     struct MaskedValueBuilder<'a, 'b, EB: SymValueRefExprBuilder> {
-        type_manager: &'a dyn TypeManager,
+        type_manager: &'a dyn TypeDatabase,
         expr_builder: &'b mut EB,
     }
 
@@ -377,7 +377,7 @@ mod retrieval {
                         SymValue::Expression(Expr::Partial(_))
                     ));
 
-                    let value_ty = self.type_manager.get_type(*ty_id);
+                    let value_ty = self.type_manager.get_type(ty_id);
                     let value_size = value_ty.size;
 
                     let sym_value = self.to_bit_rep(sym_value, value_ty);
@@ -550,7 +550,7 @@ mod retrieval {
     impl PorterValue {
         pub(crate) fn try_to_masked_value<'a, 'b, EB: SymValueRefExprBuilder>(
             &self,
-            type_manager: &'a dyn TypeManager,
+            type_manager: &'a dyn TypeDatabase,
             expr_builder: &'b mut EB,
         ) -> Result<SymValueRef, &LazyTypeInfo> {
             let whole_ty = self.as_concrete.type_as_scalar(type_manager)?;
@@ -565,7 +565,7 @@ mod retrieval {
     impl ConcreteValue {
         pub(crate) fn try_resolve_as_const(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
         ) -> Option<ConstValue> {
             match self {
                 ConcreteValue::Const(value) => Some(value.clone()),
@@ -586,10 +586,10 @@ mod proj {
     fn pseudo_array_ty_from_slice(
         slice_ty: &TypeInfo,
         len: u64,
-        type_manager: &dyn TypeManager,
+        type_manager: &dyn TypeDatabase,
     ) -> TypeInfo {
         debug_assert!(slice_ty.is_slice());
-        let item_ty = type_manager.get_type(slice_ty.expect_array().item_ty);
+        let item_ty = type_manager.get_type(&slice_ty.expect_array().item_ty);
         let array_ty =
             TypeInfo::new_pseudo_array_from_slice(&slice_ty, len, item_ty.align, item_ty.size);
         log_debug!("Pseudo array type: {:?}", array_ty);
@@ -599,12 +599,12 @@ mod proj {
     impl FatPtrValue {
         pub(crate) fn deref(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
             retriever: &dyn RawPointerRetriever,
         ) -> RawConcreteValue {
             let addr = self.address.expect_addr(type_manager, retriever);
-            let ty = type_manager.get_type(self.ty);
-            let pointee_ty = type_manager.get_type(ty.pointee_ty.unwrap());
+            let ty = type_manager.get_type(&self.ty);
+            let pointee_ty = type_manager.get_type(&ty.pointee_ty.unwrap());
             let value = if pointee_ty.is_slice() {
                 // Simulate an array.
                 let len = self
@@ -625,7 +625,7 @@ mod proj {
     impl ConcreteValue {
         pub(crate) fn expect_int(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
             retriever: &dyn RawPointerRetriever,
         ) -> u128 {
             match self {
@@ -641,7 +641,7 @@ mod proj {
 
         pub(crate) fn expect_addr(
             &self,
-            type_manager: &dyn TypeManager,
+            type_manager: &dyn TypeDatabase,
             retriever: &dyn RawPointerRetriever,
         ) -> RawAddress {
             match self {
