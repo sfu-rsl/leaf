@@ -4,7 +4,7 @@ use std::{collections::HashMap, path::Path, string::String, vec::Vec};
 use serde::{Deserialize, Serialize};
 
 pub use super::types::{BasicBlockIndex, DefId};
-use super::utils::StrError;
+use super::utils::MessagedError;
 
 type AdjListGraph<V, E> = HashMap<V, Vec<E>>;
 
@@ -34,35 +34,35 @@ pub struct ProgramMap<I: Eq + Hash = DefId> {
 }
 
 impl ProgramMap {
-    pub fn read(path: &Path) -> Result<Self, StrError> {
+    pub fn read(path: &Path) -> Result<Self, MessagedError> {
         let file =
             std::fs::OpenOptions::new()
                 .read(true)
                 .open(path)
-                .map_err(StrError::with_message(
+                .map_err(MessagedError::with(
                     "Failed to open file for reading program map",
                 ))?;
 
-        let result = serde_json::from_reader(file).map_err(StrError::with_message(
+        let result = serde_json::from_reader(file).map_err(MessagedError::with(
             "Failed to parse program map from file.",
         ))?;
         Ok(result)
     }
 
-    pub fn write(&self, path: impl AsRef<Path>) -> Result<(), StrError> {
+    pub fn write(&self, path: impl AsRef<Path>) -> Result<(), MessagedError> {
         let file = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
             .truncate(true)
             .open(path)
-            .map_err(StrError::with_message(
+            .map_err(MessagedError::with(
                 "Failed to open file for writing program map",
             ))?;
         let mut serializer = serde_json::Serializer::pretty(file);
         let serializable = self.clone();
         serializable
             .serialize(&mut serializer)
-            .map_err(StrError::with_message(
+            .map_err(MessagedError::with(
                 "Failed to serialize program map to file.",
             ))
     }

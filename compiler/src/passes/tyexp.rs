@@ -12,11 +12,9 @@ use std::collections::HashMap;
 use std::env::{self};
 use std::ops::DerefMut;
 
-use glob::glob;
-
 use common::{
     log_debug, log_warn,
-    type_info::{rw::*, *},
+    type_info::{self, *},
 };
 
 use super::{CompilationPass, Storage, StorageExt};
@@ -26,9 +24,6 @@ const KEY_TYPE_MAP: &str = "type_ids";
 
 const TAG_TYPE_EXPORT: &str = "type_export";
 
-/*
- * TypeExporter pass to export type information
- */
 #[derive(Default)]
 pub(crate) struct TypeExporter;
 
@@ -42,39 +37,30 @@ impl CompilationPass for TypeExporter {
         tcx: rustc_middle::ty::TyCtxt,
         storage: &mut dyn Storage,
     ) {
-        let mut type_map = capture_all_types(storage, tcx);
+        let type_map = capture_all_types(storage, tcx);
 
-        // TODO: #379
-        // FIXME: Clean up
         let out_dir = tcx.output_dir();
         let is_single_file_program =
             out_dir.as_os_str().is_empty() || !rustc_session::utils::was_invoked_from_cargo();
-        let file_path = if is_single_file_program {
-            out_dir.join(FINAL_TYPE_EXPORT_FILE)
-        }
-        else if env::var("CARGO_PRIMARY_PACKAGE").is_ok() {
-            aggregate_type_info(&mut type_map, Some(out_dir.display().to_string()));
-
+        let out_dir = if is_single_file_program {
+            Some(out_dir.as_path())
+        } else if env::var("CARGO_PRIMARY_PACKAGE").is_ok() {
             /* For compiling a single file program, the final type export file is placed in the same directory as the program file.
              * For compiling a project, the final type export file is placed in the output directory (i.e. "./target/debug/") */
-            out_dir
-                .parent()
-                .unwrap()
-                .join(FINAL_TYPE_EXPORT_FILE)
+            Some(out_dir.parent().unwrap())
         } else {
-            out_dir.join(format!(
-                "types-{}{}.json",
-                env::var("CARGO_PKG_NAME").unwrap().replace("-", "_"), // to follow the naming convention of the metadata output file
-                tcx.sess.opts.cg.extra_filename
-            ))
+            // Types for dependencies should not be required.
+            None
+        };
+
+        if let Some(out_dir) = out_dir {
+            type_info::rw::write_types_db_in(
+                type_map.values(),
+                get_core_types(tcx).map(|t| type_id(tcx, t)),
+                &out_dir,
+            )
+            .expect("Failed to write type info");
         }
-        .display()
-        .to_string();
-        TypeExport::write(
-            type_map.values(),
-            get_core_types(tcx).map(|t| type_id(tcx, t)),
-            file_path,
-        );
     }
 }
 
@@ -159,25 +145,6 @@ fn add_type_information_to_map<'tcx>(
 
 fn type_id<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> TypeId {
     TypeId::new(tcx.type_id_hash(ty).as_u128()).unwrap()
-}
-
-fn aggregate_type_info(type_map: &mut HashMap<TypeId, TypeInfo>, path_prefix: Option<String>) {
-    let path_prefix = path_prefix.unwrap_or_else(|| ".".to_string());
-    let dep_types_file_pattern = format!("{}/**/types-*.json", path_prefix);
-    for entry in glob(dep_types_file_pattern.as_str())
-        .expect(format!("Failed to read glob pattern: {}", dep_types_file_pattern).as_str())
-    {
-        let file_path = entry
-            .expect("Failed to read glob entry")
-            .display()
-            .to_string();
-        let type_infos = TypeExport::parse_exported_types(file_path).unwrap();
-        for type_info in type_infos.all_types {
-            if !type_map.contains_key(&type_info.id) {
-                type_map.insert(type_info.id, type_info);
-            }
-        }
-    }
 }
 
 struct PlaceVisitor<'tcx, 's, 'b> {

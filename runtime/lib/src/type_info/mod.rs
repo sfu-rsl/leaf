@@ -138,7 +138,14 @@ impl FieldsShapeInfoExt for FieldsShapeInfo {
 pub(crate) mod instance {
     use std::sync::OnceLock;
 
-    use common::type_info::TypesData;
+    use common::type_info::{
+        TypeDatabase,
+        rw::{self, LoadedTypeDatabase},
+    };
 
-    pub(crate) static PROGRAM_TYPES: OnceLock<TypesData> = OnceLock::new();
+    pub(crate) static PROGRAM_TYPES: OnceLock<LoadedTypeDatabase> = OnceLock::new();
+
+    pub(crate) fn get() -> impl TypeDatabase<'static> {
+        PROGRAM_TYPES.get_or_init(|| rw::read_types_db().expect("Failed to read type info"))
+    }
 }

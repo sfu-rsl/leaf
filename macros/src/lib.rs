@@ -1,6 +1,6 @@
 use ignore::WalkBuilder;
 use proc_macro::TokenStream;
-use quote::{format_ident, quote};
+use quote::{ToTokens, format_ident, quote};
 use regex::Regex;
 use std::path::{MAIN_SEPARATOR, Path};
 use syn::{Attribute, ImplItem, ItemFn, ItemImpl, LitStr, parse_macro_input};
@@ -128,4 +128,16 @@ pub fn trait_log_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
         #input
     };
     output.into()
+}
+
+/// Conditionally derives serde's and rkyv's traits if the features are enabled.
+#[proc_macro_attribute]
+pub fn cond_derive_serde_rkyv(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    let attrs: Vec<Attribute> = syn::parse_quote! {
+        #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+        #[cfg_attr(feature = "rkyv", derive(::rkyv::Archive, ::rkyv::Serialize, ::rkyv::Deserialize))]
+    };
+    let mut input = parse_macro_input!(input as syn::DeriveInput);
+    input.attrs.extend(attrs);
+    input.to_token_stream().into()
 }

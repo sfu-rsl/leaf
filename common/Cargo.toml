@@ -13,7 +13,15 @@ std = []
 logging = ["dep:tracing"]
 serde = ["dep:serde"]
 type_info = ["std"]
-type_info_rw = ["type_info", "rkyv", "serde", "dep:serde_json", "logging"]
+type_info_rw = [
+    "type_info",
+    "rkyv",
+    "serde",
+    "dep:macros",
+    "dep:serde_json",
+    "dep:once_map",
+    "logging",
+]
 config = ["std", "dep:config", "logging"]
 directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std", "dep:derive_more"]
@@ -35,6 +43,8 @@ building = ["std"]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.
 # Take it seriously even if the dependency is no_std-compatible.
 
+macros = { workspace = true, optional = true }
+
 delegate = { workspace = true, optional = true }
 derive_more = { workspace = true, optional = true, default-features = false, features = [
     "full",
@@ -42,6 +52,7 @@ derive_more = { workspace = true, optional = true, default-features = false, fea
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 rkyv = { workspace = true, optional = true }
+once_map = { version = "0.4.21", optional = true }
 log = { version = "0.4.20", optional = true }
 config = { workspace = true, optional = true }
 tracing = { version = "0.1", optional = true, features = [
@@ -55,4 +66,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(place_addr)',
     'cfg(abs_concrete)',
     'cfg(core_build)',
+    'cfg(types_db_fmt, values("json", "rkyv"))',
 ] }

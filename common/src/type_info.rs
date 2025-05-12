@@ -1,17 +1,13 @@
 use core::ops::RangeInclusive;
-use std::{collections::HashMap, fs::OpenOptions};
+use std::{collections::HashMap, fs::OpenOptions, prelude::rust_2021::*};
 
-use serde::{Deserialize, Serialize};
-
-use crate::{
-    types::*,
-    utils::{StrError, array_backed_struct},
-    *,
-};
+use macros::cond_derive_serde_rkyv;
 
 pub use crate::types::{Alignment, TypeId, TypeSize};
+use crate::{log_info, types::*, utils::array_backed_struct};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypeInfo {
     pub id: TypeId,
     // Type name.
@@ -40,13 +36,15 @@ impl TypeInfo {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VariantInfo {
     pub index: VariantIndex,
     pub fields: FieldsShapeInfo,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FieldsShapeInfo {
     NoFields,
     Array(ArrayShape),
@@ -54,13 +52,15 @@ pub enum FieldsShapeInfo {
     Union(UnionShape),
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ArrayShape {
     pub len: u64,
     pub item_ty: TypeId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructShape {
     pub fields: Vec<FieldInfo>,
 }
@@ -68,13 +68,15 @@ pub struct StructShape {
 // We use the same struct to avoid redundancy. Offset is not used for unions.
 pub type UnionShape = StructShape;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldInfo {
     pub ty: TypeId,
     pub offset: u64,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TagInfo {
     Constant {
         discr_bit_rep: u128,
@@ -85,7 +87,8 @@ pub enum TagInfo {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TagEncodingInfo {
     Direct,
     Niche {
@@ -117,7 +120,7 @@ pub use pass_core_type_names_to;
 macro_rules! define_core_types {
     ($($name: ident),*$(,)?) => {
         array_backed_struct! {
-            #[derive(Serialize, Deserialize)]
+            #[cond_derive_serde_rkyv]
             pub struct CoreTypes<V = TypeId> {
                 $($name),*
             }: V;
@@ -156,7 +159,7 @@ impl<V: Copy> From<NamedCoreTypes<V>> for CoreTypes<V> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[cond_derive_serde_rkyv]
 pub struct GenericTypesData<All, Cores> {
     pub all_types: All,
     pub core_types: Cores,
@@ -187,78 +190,206 @@ impl<'t> TypeDatabase<'t> for &'t TypesData {
 
 #[cfg(feature = "type_info_rw")]
 pub mod rw {
+    use core::error::Error as StdError;
+    use std::path::Path;
+
     use super::*;
 
+    #[cfg(feature = "serde")]
     mod serdes {
+        use serde::Serialize;
+
         use super::*;
 
         type SerializedTypesData = GenericTypesData<Vec<TypeInfo>, Vec<(String, TypeId)>>;
 
-        pub struct TypeExporter;
+        pub(super) const FILENAME_DB: &str = "types.json";
 
-        pub const FINAL_TYPE_EXPORT_FILE: &str = "types.json";
+        #[cfg(types_db_fmt = "json")]
+        pub(super) fn read(db_path: impl AsRef<Path>) -> Result<TypesData, Box<dyn StdError>> {
+            use crate::{log_debug, utils::MessagedError};
 
-        // FIXME: Move these functions to a more appropriate place.
-        // FIXME: Make this configurable and injectable.
-        impl TypeExporter {
-            pub fn read() -> Result<TypesData, StrError> {
-                let type_info_file_path =
-                    crate::utils::search_current_ancestor_dirs_for(FINAL_TYPE_EXPORT_FILE)
-                        .expect("Failed to find the type info file.");
+            let file = OpenOptions::new()
+                .read(true)
+                .open(db_path.as_ref())
+                .map_err(MessagedError::with("Failed to open file for type export"))?;
 
-                let data = Self::parse_exported_types(type_info_file_path.display().to_string())?;
-                log_debug!("Retrieved {} types from file.", data.all_types.len());
+            let data: SerializedTypesData = serde_json::from_reader(file)
+                .map_err(MessagedError::with("Failed to parse types from file."))?;
 
-                let types = TypesData {
-                    all_types: data
-                        .all_types
-                        .into_iter()
-                        .map(|type_info| (type_info.id, type_info))
-                        .collect(),
-                    core_types: CoreTypes::try_from(
-                        data.core_types.into_iter().collect::<Vec<_>>().as_slice(),
-                    )
-                    .unwrap(),
-                };
+            log_debug!("Retrieved {} types from file.", data.all_types.len());
 
-                Ok(types)
-            }
+            let types = TypesData {
+                all_types: data
+                    .all_types
+                    .into_iter()
+                    .map(|type_info| (type_info.id, type_info))
+                    .collect(),
+                core_types: CoreTypes::try_from(
+                    data.core_types.into_iter().collect::<Vec<_>>().as_slice(),
+                )
+                .unwrap(),
+            };
 
-            pub fn write<'a>(
-                types: impl Iterator<Item = &'a TypeInfo>,
-                core_types: CoreTypes<TypeId>,
-                file_path: String,
-            ) {
-                let file = OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(file_path)
-                    .expect("Unable to open file for type export");
-                let mut serializer = serde_json::Serializer::pretty(file);
-                let data = SerializedTypesData {
-                    all_types: types.cloned().collect(),
-                    core_types: core_types.to_pairs().to_vec(),
-                };
-                data.serialize(&mut serializer)
-                    .expect("Failed to write types to file.");
-            }
+            Ok(types)
+        }
 
-            pub fn parse_exported_types(
-                file_path: String,
-            ) -> Result<SerializedTypesData, StrError> {
-                let file = OpenOptions::new().read(true).open(file_path).map_err(
-                    StrError::with_message("Failed to open file for type export"),
-                )?;
+        pub(super) fn write<'a>(
+            all_types: impl Iterator<Item = &'a TypeInfo>,
+            core_types: CoreTypes<TypeId>,
+            out_dir: impl AsRef<Path>,
+        ) -> Result<(), Box<dyn StdError>> {
+            let file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(out_dir.as_ref().join(FILENAME_DB))
+                .map_err(Box::<dyn StdError>::from)?;
 
-                let type_infos: SerializedTypesData = serde_json::from_reader(file)
-                    .map_err(StrError::with_message("Failed to parse types from file."))?;
-                Ok(type_infos)
-            }
+            let mut serializer = serde_json::Serializer::pretty(file);
+            let data = SerializedTypesData {
+                all_types: all_types.cloned().collect(),
+                core_types: core_types.to_pairs().to_vec(),
+            };
+            data.serialize(&mut serializer)
+                .map_err(Box::<dyn StdError>::from)
         }
     }
 
+    #[cfg(feature = "rkyv")]
+    mod rkyving {
+        use once_map::OnceMap;
+        use rkyv::rancor::{Error, OptionExt};
 
-    pub type TypeExport = serdes::TypeExporter;
-    pub use serdes::FINAL_TYPE_EXPORT_FILE;
+        use super::*;
+
+        type ArchivedTypesData = <TypesData as rkyv::Archive>::Archived;
+
+        pub struct OwnedArchivedTypesData {
+            raw: Box<[u8]>,
+            deserialized: GenericTypesData<OnceMap<TypeId, Box<TypeInfo>>, CoreTypes>,
+        }
+
+        impl OwnedArchivedTypesData {
+            fn new(raw: Box<[u8]>) -> Result<Self, Error> {
+                let core_types = rkyv::access::<ArchivedTypesData, Error>(&raw)
+                    .and_then(|a| rkyv::deserialize::<CoreTypes, Error>(&a.core_types))?;
+                Ok(Self {
+                    raw,
+                    deserialized: GenericTypesData {
+                        all_types: Default::default(),
+                        core_types,
+                    },
+                })
+            }
+
+            fn access(&self) -> &ArchivedTypesData {
+                unsafe { rkyv::access_unchecked(&self.raw) }
+            }
+        }
+
+        impl TypeDatabase<'static> for &'static OwnedArchivedTypesData {
+            fn opt_get_type(&self, key: &TypeId) -> Option<&'static TypeInfo> {
+                self.deserialized
+                    .all_types
+                    .try_insert(*key, |key| {
+                        self.access()
+                            .all_types
+                            .get(&rkyv::primitive::ArchivedNonZeroU128::from_native(*key))
+                            .into_error::<Error>()
+                            .map(|a| {
+                                rkyv::deserialize::<TypeInfo, Error>(a)
+                                    .map(Box::new)
+                                    .expect("Failed to deserialize")
+                            })
+                    })
+                    .ok()
+            }
+
+            fn core_types(&self) -> &CoreTypes<TypeId> {
+                &self.deserialized.core_types
+            }
+        }
+
+        pub(super) const FILENAME_DB: &str = "types.rkyv";
+
+        pub(super) fn read(
+            db_path: impl AsRef<Path>,
+        ) -> Result<OwnedArchivedTypesData, Box<dyn StdError>> {
+            let raw = std::fs::read(db_path)?;
+            OwnedArchivedTypesData::new(raw.into_boxed_slice()).map_err(Into::into)
+        }
+
+        pub(super) fn write<'a>(
+            all_types: impl Iterator<Item = &'a TypeInfo>,
+            core_types: CoreTypes<TypeId>,
+            out_dir: impl AsRef<Path>,
+        ) -> Result<(), Box<dyn StdError>> {
+            let file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(out_dir.as_ref().join(FILENAME_DB))
+                .map_err(Box::<dyn StdError>::from)?;
+
+            let data = TypesData {
+                all_types: all_types
+                    .cloned()
+                    .map(|mut t| {
+                        // Clearing the space-consuming name, as this format is not read by human.
+                        t.name = String::new();
+                        t
+                    })
+                    .map(|t| (t.id, t))
+                    .collect(),
+                core_types,
+            };
+
+            rkyv::api::high::to_bytes_in::<_, Error>(&data, rkyv::ser::writer::IoWriter::new(file))
+                .map(|_| ())
+                .map_err(Box::<dyn StdError>::from)
+        }
+    }
+
+    #[cfg(types_db_fmt = "json")]
+    pub type LoadedTypeDatabase = TypesData;
+    #[cfg(types_db_fmt = "rkyv")]
+    pub type LoadedTypeDatabase = rkyving::OwnedArchivedTypesData;
+
+    #[cfg(types_db_fmt = "json")]
+    pub const FILENAME_DB: &str = serdes::FILENAME_DB;
+
+    #[cfg(types_db_fmt = "rkyv")]
+    pub const FILENAME_DB: &str = rkyving::FILENAME_DB;
+
+    pub fn read_types_db() -> Result<LoadedTypeDatabase, Box<dyn StdError>> {
+        log_info!("Finding and reading types db");
+
+        let path = crate::utils::search_current_ancestor_dirs_for(FILENAME_DB)
+            .ok_or_else(|| Box::<dyn StdError>::from("Failed to find types db"))?;
+
+        #[cfg(types_db_fmt = "json")]
+        let result = serdes::read();
+        #[cfg(types_db_fmt = "rkyv")]
+        let result = rkyving::read(path);
+        result
+    }
+
+    pub fn write_types_db_in<'a>(
+        types: impl Iterator<Item = &'a TypeInfo>,
+        core_types: CoreTypes<TypeId>,
+        out_dir: impl AsRef<Path>,
+    ) -> Result<(), Box<dyn StdError>> {
+        log_info!("Writing type info db in: `{}`", out_dir.as_ref().display());
+
+        // Writing in JSON format may be used for debugging purposes, so making it easier to enable.
+        let result = if cfg!(types_db_fmt = "json") {
+            serdes::write(types, core_types, out_dir)
+        } else if cfg!(types_db_fmt = "rkyv") {
+            rkyving::write(types, core_types, out_dir)
+        } else {
+            unreachable!()
+        };
+        result
+    }
 }

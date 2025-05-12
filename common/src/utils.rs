@@ -128,18 +128,18 @@ macro_rules! array_backed_struct {
 }
 pub(crate) use array_backed_struct;
 
-#[cfg(any(feature = "tyexp", feature = "directed"))]
-mod str_err {
+#[cfg(any(feature = "type_info_rw", feature = "directed"))]
+mod msg_err {
     use core::{error::Error, fmt::Display};
     use std::boxed::Box;
 
     #[derive(Debug)]
-    pub struct StrError {
+    pub struct MessagedError {
         pub message: &'static str,
         pub cause: Option<Box<dyn Error>>,
     }
 
-    impl StrError {
+    impl MessagedError {
         pub fn new(message: &'static str, cause: impl Error + 'static) -> Self {
             Self {
                 message,
@@ -147,18 +147,18 @@ mod str_err {
             }
         }
 
-        pub fn with_message<E: Error + 'static>(message: &'static str) -> impl FnOnce(E) -> Self {
+        pub fn with<E: Error + 'static>(message: &'static str) -> impl FnOnce(E) -> Self {
             move |e| Self::new(message, e)
         }
     }
 
-    impl Error for StrError {
+    impl Error for MessagedError {
         fn source(&self) -> Option<&(dyn Error + 'static)> {
             self.cause.as_ref().and_then(|cause| cause.source())
         }
     }
 
-    impl Display for StrError {
+    impl Display for MessagedError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{}", self.message)?;
             if let Some(cause) = &self.cause {
@@ -168,8 +168,8 @@ mod str_err {
         }
     }
 }
-#[cfg(any(feature = "tyexp", feature = "directed"))]
-pub(crate) use str_err::StrError;
+#[cfg(any(feature = "type_info_rw", feature = "directed"))]
+pub(crate) use msg_err::MessagedError;
 
 #[cfg(feature = "std")]
 pub fn comma_separated<T: core::fmt::Display>(

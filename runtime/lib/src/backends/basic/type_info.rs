@@ -1,6 +1,6 @@
 use delegate::delegate;
 
-use common::type_info::{CoreTypes, TypesData, pass_core_type_names_to, rw::TypeExport};
+use common::type_info::{CoreTypes, pass_core_type_names_to};
 
 use crate::{
     abs::{IntType, backend::TypeDatabase},
@@ -24,10 +24,8 @@ impl<D: TypeDatabase<'static>> BasicTypeManager<D> {
     }
 }
 
-impl Default for BasicTypeManager<&'static TypesData> {
-    fn default() -> Self {
-        Self::new(type_info::instance::PROGRAM_TYPES.get_or_init(|| TypeExport::read().unwrap()))
-    }
+pub(crate) fn default_type_manager() -> BasicTypeManager<impl TypeDatabase<'static>> {
+    BasicTypeManager::new(type_info::instance::get())
 }
 
 impl<D: TypeDatabase<'static>> TypeDatabase<'static> for BasicTypeManager<D> {

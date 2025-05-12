@@ -74,7 +74,7 @@ pub struct BasicBackend {
 
 impl BasicBackend {
     pub fn new(config: BasicBackendConfig) -> Self {
-        let type_manager_ref = Rc::new(BasicTypeManager::default());
+        let type_manager_ref = Rc::new(type_info::default_type_manager());
         let expr_builder_ref = Rc::new(RefCell::new(expr::builders::new_expr_builder(
             type_manager_ref.clone(),
         )));

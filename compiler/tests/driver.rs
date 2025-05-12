@@ -24,7 +24,7 @@ const RUST_FLAGS: [&str; 2] = ["-Awarnings", "-Coverflow-checks=off"];
 const PATH_LEAFC: &str = env!("CARGO_BIN_EXE_leafc");
 
 const DIR_SAMPLES_ROOT: &str = "samples";
-const FILENAME_TYPES: &str = "types.json";
+const FILENAME_TYPES: &str = common::type_info::rw::FILENAME_DB;
 const FILENAME_EXECUTION_IGNORE: &str = ".test_execution_rs.ignore";
 const FILENAME_COMPILE_IGNORE: &str = ".test_compile_rs.ignore";
 

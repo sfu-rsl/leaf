@@ -6,6 +6,8 @@ rustflags = [
     "place_addr",
     "--cfg",
     "abs_concrete",
+    "--cfg",
+    "types_db_fmt=\"rkyv\""
 ]
 
 [env]
