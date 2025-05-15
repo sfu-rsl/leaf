@@ -187,6 +187,10 @@ impl ProgramRuntimeInterface for BasicPri {
         Self::push_const_operand(value)
     }
     #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
+    fn ref_operand_const_addr(value: RawAddress) -> OperandRef {
+        Self::push_const_operand(value)
+    }
+    #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
     fn ref_operand_const_zst() -> OperandRef {
         Self::push_const_operand(Constant::Zst)
     }
@@ -710,6 +714,28 @@ impl ProgramRuntimeInterface for BasicPri {
 
     fn intrinsic_atomic_fence(_ordering: Self::AtomicOrdering, _single_thread: bool) {
         // No-op.
+    }
+
+    fn intrinsic_memory_load(ptr: OperandRef, ptr_type_id: Self::TypeId, dest: PlaceRef, _is_volatile: bool, _is_aligned: bool,) {
+        let src_ptr = take_back_operand(ptr);
+        let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
+            h.from_ptr(src_ptr.clone(), ptr_type_id)
+        });
+        let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
+        assign_to(dest, |h| h.use_of(src_pointee_value))
+    }
+
+    fn intrinsic_memory_store(ptr: OperandRef, ptr_type_id: Self::TypeId, src: OperandRef, _is_volatile: bool, _is_aligned: bool,) {
+        let dst_ptr = take_back_operand(ptr);
+        let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
+            h.from_ptr(dst_ptr.clone(), ptr_type_id)
+        });
+        let src_value = take_back_operand(src);
+        assign_to_place(dst_place, |h| h.use_of(src_value))
+    }
+
+    fn intrinsic_memory_copy(ptr: OperandRef, ptr_type_id: Self::TypeId, dst: OperandRef, is_volatile: bool, is_overlapping: bool,) {
+        todo!("Implement memory copy intrinsic");
     }
 }
 
