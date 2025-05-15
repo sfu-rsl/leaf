@@ -147,6 +147,10 @@ pub(crate) trait CastAssigner<'tcx> {
     fn transmuted(&mut self, ty: Ty<'tcx>);
 }
 
+pub(crate) trait StorageMarker {
+    fn mark_dead(&mut self, place: PlaceRef);
+}
+
 #[derive(Clone, Copy)]
 pub struct SwitchInfo<'tcx> {
     pub(super) node_index: BasicBlock,
@@ -1675,6 +1679,25 @@ mod implementation {
             self.add_bb_for_cast_assign_call_with_args(func_name, vec![operand::move_for_local(
                 id_local,
             )]);
+        }
+    }
+
+    impl<'tcx, C> StorageMarker for RuntimeCallAdder<C>
+    where
+        Self: MirCallAdder<'tcx> + BlockInserter<'tcx>,
+        C: ForInsertion<'tcx>,
+    {
+        fn mark_dead(&mut self, place: PlaceRef) {
+            debug_assert_matches!(
+                self.context.insertion_loc(),
+                Before(..),
+                "Marking storage as dead after it takes place is not expected."
+            );
+            let block =
+                self.make_bb_for_call(sym::mark_storage_dead, vec![operand::move_for_local(
+                    place.into(),
+                )]);
+            self.insert_blocks([block]);
         }
     }
 

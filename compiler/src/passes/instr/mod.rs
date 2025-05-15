@@ -37,9 +37,10 @@ use call::{
     CastAssigner, EntryFunctionHandler, FunctionHandler,
     InsertionLocation::*,
     IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
+    StorageMarker,
     context::{
-        AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, PriItemsProvider,
-        SourceInfoProvider, TyContextProvider,
+        AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, BodyProvider,
+        PriItemsProvider, SourceInfoProvider, TyContextProvider,
     },
     ctxtreqs,
 };
@@ -479,6 +480,11 @@ where
         // TODO
         Default::default()
     }
+
+    fn visit_storage_dead(&mut self, local: &mir::Local) {
+        let place = self.call_adder.reference_place(&(*local).into());
+        self.call_adder.before().mark_dead(place);
+    }
 }
 
 make_general_visitor!(pub(crate) LeafTerminatorKindVisitor);
@@ -503,6 +509,16 @@ where
     }
 
     fn visit_return(&mut self) {
+        rustc_mir_dataflow::impls::always_storage_live_locals(self.call_adder.body())
+            .iter()
+            .for_each(|l| {
+                if self.call_adder.body().local_kind(l) == mir::LocalKind::ReturnPointer {
+                    return;
+                }
+                let place = self.call_adder.reference_place(&l.into());
+                self.call_adder.before().mark_dead(place);
+            });
+
         self.call_adder.return_from_func();
     }
 

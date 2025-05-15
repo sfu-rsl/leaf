@@ -158,6 +158,15 @@ pub(super) fn take_back_operand(reference: OperandRef) -> OperandImpl {
     perform_on_operand_ref_manager(|rm| rm.take(reference))
 }
 
+pub(super) fn memory<T>(
+    memory_action: impl FnOnce(<BackendImpl as RuntimeBackend>::MemoryHandler<'_>) -> T,
+) -> T {
+    perform_on_backend(|r| {
+        let handler = r.memory();
+        memory_action(handler)
+    })
+}
+
 pub(super) fn constraint_at<T>(
     location: BasicBlockLocation,
     constraint_action: impl FnOnce(<BackendImpl as RuntimeBackend>::ConstraintHandler<'_>) -> T,

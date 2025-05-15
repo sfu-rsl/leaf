@@ -145,7 +145,8 @@ impl RuntimeBackend for BasicBackend {
         Self: 'a;
 
     type AssignmentHandler<'a>
-        = BasicAssignmentHandler<'a, BasicExprBuilder>
+    type MemoryHandler<'a>
+        = BasicMemoryHandler<'a>
     where
         Self: 'a;
 
@@ -188,6 +189,10 @@ impl RuntimeBackend for BasicBackend {
         dest: <Self::AssignmentHandler<'a> as AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a> {
         BasicAssignmentHandler::new(dest, self)
+    }
+
+    fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
+        BasicMemoryHandler::new(self)
     }
 
     fn constraint_at(&mut self, location: BasicBlockLocation) -> Self::ConstraintHandler<'_> {
@@ -621,6 +626,26 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
     }
 }
 
+pub(crate) struct BasicMemoryHandler<'s> {
+    vars_state: &'s mut dyn VariablesState,
+}
+
+impl<'s> BasicMemoryHandler<'s> {
+    fn new(backend: &'s mut BasicBackend) -> Self {
+        Self {
+            vars_state: backend.call_stack_manager.top(),
+        }
+    }
+}
+
+impl<'s> MemoryHandler for BasicMemoryHandler<'s> {
+    type Place = PlaceValueRef;
+
+    fn mark_dead(self, place: Self::Place) {
+        self.vars_state.drop_place(&place);
+    }
+}
+
 pub(crate) struct BasicConstraintHandler<'a, EB> {
     location: BasicBlockLocation,
     trace_manager: RefMut<'a, BasicTraceManager>,
@@ -956,6 +981,8 @@ trait GenericVariablesState {
     /// Sets the value of a place. Overwrites the previous value if any, also defines a new local
     /// variable if it does not exist.
     fn set_place(&mut self, place: &Self::PlaceValue, value: Self::Value);
+
+    fn drop_place(&mut self, place: &Self::PlaceValue);
 }
 
 trait VariablesState:

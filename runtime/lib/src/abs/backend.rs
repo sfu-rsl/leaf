@@ -18,6 +18,9 @@ pub(crate) trait RuntimeBackend: Shutdown {
     type AssignmentHandler<'a>: AssignmentHandler<Place = Self::Place, Operand = Self::Operand>
     where
         Self: 'a;
+    type MemoryHandler<'a>: MemoryHandler<Place = Self::Place>
+    where
+        Self: 'a;
     type ConstraintHandler<'a>: ConstraintHandler<Operand = Self::Operand>
     where
         Self: 'a;
@@ -40,6 +43,8 @@ pub(crate) trait RuntimeBackend: Shutdown {
         &'a mut self,
         dest: <Self::AssignmentHandler<'a> as AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a>;
+
+    fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a>;
 
     fn constraint_at(&mut self, location: BasicBlockLocation) -> Self::ConstraintHandler<'_>;
 
@@ -198,6 +203,12 @@ pub(crate) trait AssignmentHandler: Sized {
     fn use_if_eq(self, current: Self::Operand, expected: Self::Operand, then: Self::Operand);
 
     fn use_and_check_eq(self, val: Self::Operand, expected: Self::Operand);
+}
+
+pub(crate) trait MemoryHandler {
+    type Place;
+
+    fn mark_dead(self, place: Self::Place);
 }
 
 pub(crate) trait ConstraintHandler {

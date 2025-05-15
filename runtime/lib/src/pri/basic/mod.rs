@@ -427,6 +427,12 @@ impl ProgramRuntimeInterface for BasicPri {
         })
     }
 
+    fn mark_storage_dead(place: PlaceRef) {
+        let place_info = take_back_place_info(place);
+        let place = get_backend_place(abs::PlaceUsage::Write, |h| h.from_info(place_info));
+        memory(|h| h.mark_dead(place));
+    }
+
     fn take_branch_false(info: SwitchInfo) {
         switch(info, |h| h.take(false.into()))
     }

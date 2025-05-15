@@ -209,6 +209,9 @@ pub mod macros {
           #[allow(unused_parens)]
           { fn assign_shallow_init_box(dest: PlaceRef, operand: OperandRef, boxed_type_id: ($type_id_ty)) }
 
+          // ----- Memory -----
+          { fn mark_storage_dead(place: PlaceRef) }
+
           // ----- Switch -----
           #[allow(unused_parens)]
           { fn take_branch_false(info: SwitchInfo) }
@@ -587,6 +590,8 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn assign_shallow_init_box(dest:PlaceRef,operand:OperandRef,boxed_type_id:($type_id_ty));
             }$modifier!{
+                fn mark_storage_dead(place:PlaceRef);
+            }$modifier!{
                 #[allow(unused_parens)]fn take_branch_false(info:SwitchInfo);
             }$modifier!{
                 #[allow(unused_parens)]fn take_branch_ow_bool(info:SwitchInfo);
@@ -617,7 +622,7 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn enter_func_tupled(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef,tupled_arg_index:LocalIndex,tupled_arg_type_id:TypeId,);
             }$modifier!{
-                fn return_from_func(ret_point: BasicBlockLocation);
+                fn return_from_func(ret_point:BasicBlockLocation);
             }$modifier!{
                 fn override_return_value(operand:OperandRef);
             }$modifier!{

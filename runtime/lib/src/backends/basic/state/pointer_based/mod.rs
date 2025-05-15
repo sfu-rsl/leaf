@@ -249,6 +249,11 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
             PlaceValue::Symbolic(..) => todo!("#238"),
         }
     }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    fn drop_place(&mut self, place: &Self::PlaceValue) {
+        unimplemented!()
+    }
 }
 
 // Deterministic Place
