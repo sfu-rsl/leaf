@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use super::{
-    AssertKind, BasicBlockLocation, BinaryOp, CalleeDef, CastKind, Constraint, ConstraintKind,
-    FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection, SymVariable, Tag, TypeId, UnaryOp,
-    ValueType, VariantIndex,
+    AssertKind, AssignmentId, BasicBlockLocation, BinaryOp, CalleeDef, CastKind, Constraint,
+    ConstraintKind, FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection, SymVariable, Tag,
+    TypeId, UnaryOp, ValueType, VariantIndex,
 };
 
 pub(crate) trait RuntimeBackend: Shutdown {
@@ -41,6 +41,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
 
     fn assign_to<'a>(
         &'a mut self,
+        id: AssignmentId,
         dest: <Self::AssignmentHandler<'a> as AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a>;
 

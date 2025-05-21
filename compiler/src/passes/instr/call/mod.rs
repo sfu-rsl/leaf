@@ -2,7 +2,7 @@
 /// PRI in MIR bodies.
 pub(super) mod context;
 
-use context::DestinationProvider;
+use context::AssignmentInfoProvider;
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CastKind, ConstOperand, Local, Operand, Place, ProjectionElem,
@@ -15,7 +15,7 @@ use rustc_target::abi::{FieldIdx, VariantIdx};
 
 use common::{
     log_debug, log_warn,
-    pri::{AtomicBinaryOp, AtomicOrdering},
+    pri::{AssignmentId, AtomicBinaryOp, AtomicOrdering},
 };
 use core::iter;
 use serde::Serialize;
@@ -71,7 +71,7 @@ pub(crate) trait OperandReferencer<'tcx> {
     fn reference_operand(&mut self, operand: &Operand<'tcx>) -> OperandRef;
 }
 
-pub(crate) trait Assigner<'tcx>: DestinationProvider<'tcx> {
+pub(crate) trait Assigner<'tcx>: AssignmentInfoProvider<'tcx> {
     type Cast<'a>: CastAssigner<'tcx>
     where
         Self: 'a;
@@ -199,7 +199,11 @@ pub(crate) trait AtomicIntrinsicHandler<'tcx> {
     where
         Self: Assigner<'tcx>;
 
-    fn store(&mut self, val: OperandRef);
+    fn store(&mut self, val: OperandRef)
+    where
+        // This is a redundant requirement as it is a unit function with a ptr passed to it.
+        // However, it is used for the assignment id.
+        Self: Assigner<'tcx>;
 
     fn exchange(&mut self, val: OperandRef)
     where
@@ -425,11 +429,13 @@ mod implementation {
 
         pub fn assign<'b, 'tcx>(
             &'b mut self,
+            id: AssignmentId,
             dest_ref: PlaceRef,
             dest_ty: Ty<'tcx>,
         ) -> RuntimeCallAdder<AssignmentContext<'_, 'tcx, C>> {
             self.with_context(|base| AssignmentContext {
                 base,
+                id,
                 dest_ref,
                 dest_ty,
             })
@@ -622,12 +628,13 @@ mod implementation {
             }
         }
     }
-    impl<'tcx, C> DestinationProvider<'tcx> for RuntimeCallAdder<C>
+    impl<'tcx, C> AssignmentInfoProvider<'tcx> for RuntimeCallAdder<C>
     where
-        C: DestinationProvider<'tcx>,
+        C: AssignmentInfoProvider<'tcx>,
     {
         delegate! {
             to self.context {
+                fn assignment_id(&self) -> AssignmentId;
                 fn dest_ref(&self) -> PlaceRef;
                 fn dest_ty(&self) -> Ty<'tcx>;
             }
@@ -1536,7 +1543,10 @@ mod implementation {
             self.make_bb_for_call(
                 func_name,
                 [
-                    vec![operand::copy_for_local(self.context.dest_ref().into())],
+                    vec![
+                        operand::const_from_uint(self.tcx(), self.context.assignment_id()),
+                        operand::copy_for_local(self.context.dest_ref().into()),
+                    ],
                     args,
                 ]
                 .concat(),
@@ -2135,7 +2145,7 @@ mod implementation {
             let intrinsic_arg_num = arg_num(intrinsic_func);
 
             assert_eq!(
-                pri_func_arg_num,
+                pri_func_arg_num - 1, /* assignment_id */
                 intrinsic_arg_num + if has_return_value { 1 } else { 0 },
                 "Inconsistent number of arguments between intrinsic and its corresponding PRI function. {:?} -x-> {:?}",
                 intrinsic_func,
@@ -2160,7 +2170,10 @@ mod implementation {
             );
         }
 
-        fn store(&mut self, val: OperandRef) {
+        fn store(&mut self, val: OperandRef)
+        where
+            Self: Assigner<'tcx>,
+        {
             self.add_bb_for_atomic_intrinsic_call_with_ptr(
                 sym::intrinsics::atomic::intrinsic_atomic_store,
                 vec![operand::move_for_local(val.into())],
@@ -2261,7 +2274,9 @@ mod implementation {
             func: LeafAtomicIntrinsicSymbol,
             additional_args: Vec<Operand<'tcx>>,
             additional_blocks: Vec<BasicBlockData<'tcx>>,
-        ) {
+        ) where
+            Self: Assigner<'tcx>,
+        {
             let mut blocks = additional_blocks;
 
             let dst_ptr_type_id_local = {
@@ -2274,6 +2289,7 @@ mod implementation {
                 func,
                 vec![
                     vec![
+                        operand::const_from_uint(self.tcx(), self.assignment_id()),
                         operand::move_for_local(self.context.ptr().into()),
                         operand::move_for_local(dst_ptr_type_id_local),
                     ],
@@ -3737,10 +3753,10 @@ mod implementation {
         impl<'tcx, C> ForOperandRef<'tcx> for C where C: ForPlaceRef<'tcx> {}
 
         pub(crate) trait ForAssignment<'tcx>:
-            ForInsertion<'tcx> + DestinationProvider<'tcx>
+            ForInsertion<'tcx> + AssignmentInfoProvider<'tcx>
         {
         }
-        impl<'tcx, C> ForAssignment<'tcx> for C where C: ForInsertion<'tcx> + DestinationProvider<'tcx> {}
+        impl<'tcx, C> ForAssignment<'tcx> for C where C: ForInsertion<'tcx> + AssignmentInfoProvider<'tcx> {}
 
         pub(crate) trait ForCasting<'tcx>:
             CastOperandProvider + ForAssignment<'tcx>

@@ -17,7 +17,10 @@ use std::{
     rc::Rc,
 };
 
-use common::{log_debug, log_info};
+use common::{
+    log_debug, log_info,
+    pri::AssignmentId,
+};
 use sym_vars::SymVariablesManager;
 
 use crate::{
@@ -186,9 +189,10 @@ impl RuntimeBackend for BasicBackend {
 
     fn assign_to<'a>(
         &'a mut self,
+        id: AssignmentId,
         dest: <Self::AssignmentHandler<'a> as AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a> {
-        BasicAssignmentHandler::new(dest, self)
+        BasicAssignmentHandler::new(id, dest, self)
     }
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
@@ -289,7 +293,7 @@ impl OperandHandler for BasicOperandHandler<'_> {
     }
 }
 
-pub(crate) struct BasicAssignmentHandler<'s, EB: OperationalExprBuilder> {
+    id: AssignmentId,
     dest: PlaceValueRef,
     vars_state: &'s mut dyn VariablesState,
     expr_builder: RRef<EB>,
@@ -297,8 +301,9 @@ pub(crate) struct BasicAssignmentHandler<'s, EB: OperationalExprBuilder> {
 }
 
 impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
-    fn new(dest: PlaceValueRef, backend: &'s mut BasicBackend) -> Self {
+    fn new(id: AssignmentId, dest: PlaceValueRef, backend: &'s mut BasicBackend) -> Self {
         Self {
+            id,
             dest,
             vars_state: backend.call_stack_manager.top(),
             expr_builder: backend.expr_builder.clone(),

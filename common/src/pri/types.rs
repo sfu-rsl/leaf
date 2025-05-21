@@ -1,6 +1,6 @@
 pub use super::super::types::{
-    Alignment, BasicBlockIndex, BasicBlockLocation, CalleeDef, DefId, DynRawMetadata, FieldIndex,
-    FuncDef, LocalIndex, RawAddress, TypeId, TypeSize, VariantIndex,
+    Alignment, AssignmentId, BasicBlockIndex, BasicBlockLocation, CalleeDef, DefId, DynRawMetadata,
+    FieldIndex, FuncDef, LocalIndex, RawAddress, TypeId, TypeSize, VariantIndex,
 };
 
 pub type Ref = u64;

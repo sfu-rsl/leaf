@@ -244,46 +244,52 @@ impl ProgramRuntimeInterface for BasicPri {
         })
     }
 
-    fn assign_use(dest: PlaceRef, operand: OperandRef) {
-        assign_to(dest, |h| h.use_of(take_back_operand(operand)))
+    fn assign_use(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
+        assign_to(id, dest, |h| h.use_of(take_back_operand(operand)))
     }
-    fn assign_repeat(dest: PlaceRef, operand: OperandRef, count: usize) {
-        assign_to(dest, |h| h.repeat_of(take_back_operand(operand), count))
+    fn assign_repeat(id: AssignmentId, dest: PlaceRef, operand: OperandRef, count: usize) {
+        assign_to(id, dest, |h| h.repeat_of(take_back_operand(operand), count))
     }
-    fn assign_ref(dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
+    fn assign_ref(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
         // FIXME: Mutability does not necessarily mean writing.
         let place = if !is_mutable {
             take_place_info_to_read(place)
         } else {
             take_place_info_to_write(place)
         };
-        assign_to(dest, |h| h.ref_to(place, is_mutable))
+        assign_to(id, dest, |h| h.ref_to(place, is_mutable))
     }
-    fn assign_thread_local_ref(dest: PlaceRef /* TODO: #365 */) {
-        assign_to(dest, |h| h.thread_local_ref_to())
+    fn assign_thread_local_ref(id: AssignmentId, dest: PlaceRef /* TODO: #365 */) {
+        assign_to(id, dest, |h| h.thread_local_ref_to())
     }
-    fn assign_raw_ptr_of(dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
+    fn assign_raw_ptr_of(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
         // FIXME: Mutability does not necessarily mean writing.
         let place = if !is_mutable {
             take_place_info_to_read(place)
         } else {
             take_place_info_to_write(place)
         };
-        assign_to(dest, |h| h.address_of(place, is_mutable))
+        assign_to(id, dest, |h| h.address_of(place, is_mutable))
     }
-    fn assign_len(dest: PlaceRef, place: PlaceRef) {
+    fn assign_len(id: AssignmentId, dest: PlaceRef, place: PlaceRef) {
         // To be investigated. Not obvious whether it appears at all in the later stages.
         let place = take_place_info_to_read(place);
-        assign_to(dest, |h| h.len_of(place))
+        assign_to(id, dest, |h| h.len_of(place))
     }
 
-    fn assign_cast_char(dest: PlaceRef, operand: OperandRef) {
-        assign_to(dest, |h| {
+    fn assign_cast_char(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
+        assign_to(id, dest, |h| {
             h.cast_of(take_back_operand(operand), CastKind::ToChar)
         })
     }
-    fn assign_cast_integer(dest: PlaceRef, operand: OperandRef, bit_size: u64, is_signed: bool) {
-        assign_to(dest, |h| {
+    fn assign_cast_integer(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        bit_size: u64,
+        is_signed: bool,
+    ) {
+        assign_to(id, dest, |h| {
             h.cast_of(
                 take_back_operand(operand),
                 CastKind::ToInt(IntType {
@@ -293,49 +299,71 @@ impl ProgramRuntimeInterface for BasicPri {
             )
         })
     }
-    fn assign_cast_float(dest: PlaceRef, operand: OperandRef, e_bits: u64, s_bits: u64) {
-        assign_to(dest, |h| {
+    fn assign_cast_float(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        e_bits: u64,
+        s_bits: u64,
+    ) {
+        assign_to(id, dest, |h| {
             h.cast_of(
                 take_back_operand(operand),
                 CastKind::ToFloat(FloatType { e_bits, s_bits }),
             )
         })
     }
-    fn assign_cast_expose_prov(dest: PlaceRef, operand: OperandRef) {
-        assign_to(dest, |h| {
+    fn assign_cast_expose_prov(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
+        assign_to(id, dest, |h| {
             h.cast_of(take_back_operand(operand), CastKind::ExposeProvenance)
         })
     }
-    fn assign_cast_with_exposed_prov(dest: PlaceRef, operand: OperandRef, dst_type_id: TypeId) {
-        Self::assign_cast_pointer(dest, operand, dst_type_id);
+    fn assign_cast_with_exposed_prov(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        dst_type_id: TypeId,
+    ) {
+        Self::assign_cast_pointer(id, dest, operand, dst_type_id);
     }
-    fn assign_cast_to_another_ptr(dest: PlaceRef, operand: OperandRef, dst_type_id: TypeId) {
-        Self::assign_cast_pointer(dest, operand, dst_type_id);
+    fn assign_cast_to_another_ptr(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        dst_type_id: TypeId,
+    ) {
+        Self::assign_cast_pointer(id, dest, operand, dst_type_id);
     }
 
-    fn assign_cast_unsize(dest: PlaceRef, operand: OperandRef) {
-        assign_to(dest, |h| {
+    fn assign_cast_unsize(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
+        assign_to(id, dest, |h| {
             h.cast_of(take_back_operand(operand), CastKind::PointerUnsize)
         })
     }
-    fn assign_cast_sized_dyn(dest: PlaceRef, operand: OperandRef) {
-        assign_to(dest, |h| {
+    fn assign_cast_sized_dyn(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
+        assign_to(id, dest, |h| {
             h.cast_of(take_back_operand(operand), CastKind::SizedDynamize)
         })
     }
-    fn assign_cast_transmute(dest: PlaceRef, operand: OperandRef, dst_type_id: Self::TypeId) {
-        assign_to(dest, |h| {
+    fn assign_cast_transmute(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        dst_type_id: Self::TypeId,
+    ) {
+        assign_to(id, dest, |h| {
             h.cast_of(take_back_operand(operand), CastKind::Transmute(dst_type_id))
         })
     }
 
     fn assign_binary_op(
+        id: AssignmentId,
         dest: PlaceRef,
         operator: Self::BinaryOp,
         first: OperandRef,
         second: OperandRef,
     ) {
-        assign_to(dest, |h| {
+        assign_to(id, dest, |h| {
             h.binary_op_between(
                 operator,
                 take_back_operand(first),
@@ -343,76 +371,92 @@ impl ProgramRuntimeInterface for BasicPri {
             )
         })
     }
-    fn assign_unary_op(dest: PlaceRef, operator: Self::UnaryOp, operand: OperandRef) {
-        assign_to(dest, |h| {
+    fn assign_unary_op(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operator: Self::UnaryOp,
+        operand: OperandRef,
+    ) {
+        assign_to(id, dest, |h| {
             h.unary_op_on(operator, take_back_operand(operand))
         })
     }
 
-    fn set_discriminant(dest: PlaceRef, variant_index: u32) {
-        assign_to(dest, |h| h.variant_index(variant_index))
+    fn set_discriminant(id: AssignmentId, dest: PlaceRef, variant_index: u32) {
+        assign_to(id, dest, |h| h.variant_index(variant_index))
     }
-    fn assign_discriminant(dest: PlaceRef, place: PlaceRef) {
+    fn assign_discriminant(id: AssignmentId, dest: PlaceRef, place: PlaceRef) {
         let place_info = take_back_place_info(place);
         let place = get_backend_place(abs::PlaceUsage::Read, |h| h.tag_of(place_info));
-        assign_to(dest, |h| h.discriminant_from(place))
+        assign_to(id, dest, |h| h.discriminant_from(place))
     }
 
     // We use slice to simplify working with the interface.
-    fn assign_aggregate_array(dest: PlaceRef, items: &[OperandRef]) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_array(id: AssignmentId, dest: PlaceRef, items: &[OperandRef]) {
+        assign_to(id, dest, |h| {
             h.array_from(items.iter().map(|o| take_back_operand(*o)))
         })
     }
-    fn assign_aggregate_tuple(dest: PlaceRef, fields: &[OperandRef]) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_tuple(id: AssignmentId, dest: PlaceRef, fields: &[OperandRef]) {
+        assign_to(id, dest, |h| {
             let fields = Self::take_fields(fields);
             h.tuple_from(fields.into_iter())
         })
     }
-    fn assign_aggregate_struct(dest: PlaceRef, fields: &[OperandRef]) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_struct(id: AssignmentId, dest: PlaceRef, fields: &[OperandRef]) {
+        assign_to(id, dest, |h| {
             let fields = Self::take_fields(fields);
             h.adt_from(fields.into_iter(), None)
         })
     }
-    fn assign_aggregate_enum(dest: PlaceRef, fields: &[OperandRef], variant: VariantIndex) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_enum(
+        id: AssignmentId,
+        dest: PlaceRef,
+        fields: &[OperandRef],
+        variant: VariantIndex,
+    ) {
+        assign_to(id, dest, |h| {
             let fields = Self::take_fields(fields);
             h.adt_from(fields.into_iter(), Some(variant))
         })
     }
-    fn assign_aggregate_union(dest: PlaceRef, active_field: FieldIndex, value: OperandRef) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_union(
+        id: AssignmentId,
+        dest: PlaceRef,
+        active_field: FieldIndex,
+        value: OperandRef,
+    ) {
+        assign_to(id, dest, |h| {
             let field = Self::take_fields(&[value]).pop().unwrap();
             h.union_from(active_field, field)
         })
     }
-    fn assign_aggregate_closure(dest: PlaceRef, upvars: &[OperandRef]) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_closure(id: AssignmentId, dest: PlaceRef, upvars: &[OperandRef]) {
+        assign_to(id, dest, |h| {
             let upvars = Self::take_fields(upvars);
             h.closure_from(upvars.into_iter())
         })
     }
-    fn assign_aggregate_coroutine(dest: PlaceRef, upvars: &[OperandRef]) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_coroutine(id: AssignmentId, dest: PlaceRef, upvars: &[OperandRef]) {
+        assign_to(id, dest, |h| {
             let upvars = Self::take_fields(upvars);
             h.coroutine_from(upvars.into_iter())
         })
     }
-    fn assign_aggregate_coroutine_closure(dest: PlaceRef, upvars: &[OperandRef]) {
-        assign_to(dest, |h| {
+    fn assign_aggregate_coroutine_closure(id: AssignmentId, dest: PlaceRef, upvars: &[OperandRef]) {
+        assign_to(id, dest, |h| {
             let upvars = Self::take_fields(upvars);
             h.coroutine_closure_from(upvars.into_iter())
         })
     }
     fn assign_aggregate_raw_ptr(
+        id: AssignmentId,
         dest: PlaceRef,
         data_ptr: OperandRef,
         metadata: OperandRef,
         is_mutable: bool,
     ) {
-        assign_to(dest, |h| {
+        assign_to(id, dest, |h| {
             h.raw_ptr_from(
                 take_back_operand(data_ptr),
                 take_back_operand(metadata),
@@ -421,8 +465,13 @@ impl ProgramRuntimeInterface for BasicPri {
         })
     }
 
-    fn assign_shallow_init_box(dest: PlaceRef, operand: OperandRef, _boxed_type_id: Self::TypeId) {
-        assign_to(dest, |h| {
+    fn assign_shallow_init_box(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        _boxed_type_id: Self::TypeId,
+    ) {
+        assign_to(id, dest, |h| {
             h.shallow_init_box_from(take_back_operand(operand))
         })
     }
@@ -583,52 +632,78 @@ impl ProgramRuntimeInterface for BasicPri {
         func_control(|h| h.after_call(dest_place))
     }
 
-    fn intrinsic_assign_rotate_left(dest: PlaceRef, x: OperandRef, shift: OperandRef) {
-        Self::assign_binary_op(dest, Self::BinaryOp::RotateL, x, shift)
+    fn intrinsic_assign_rotate_left(
+        id: AssignmentId,
+        dest: PlaceRef,
+        x: OperandRef,
+        shift: OperandRef,
+    ) {
+        Self::assign_binary_op(id, dest, Self::BinaryOp::RotateL, x, shift)
     }
 
-    fn intrinsic_assign_rotate_right(dest: PlaceRef, x: OperandRef, shift: OperandRef) {
-        Self::assign_binary_op(dest, Self::BinaryOp::RotateR, x, shift)
+    fn intrinsic_assign_rotate_right(
+        id: AssignmentId,
+        dest: PlaceRef,
+        x: OperandRef,
+        shift: OperandRef,
+    ) {
+        Self::assign_binary_op(id, dest, Self::BinaryOp::RotateR, x, shift)
     }
 
-    fn intrinsic_assign_saturating_add(dest: PlaceRef, first: OperandRef, second: OperandRef) {
-        Self::assign_binary_op(dest, Self::BinaryOp::AddSaturating, first, second)
+    fn intrinsic_assign_saturating_add(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+    ) {
+        Self::assign_binary_op(id, dest, Self::BinaryOp::AddSaturating, first, second)
     }
 
-    fn intrinsic_assign_saturating_sub(dest: PlaceRef, first: OperandRef, second: OperandRef) {
-        Self::assign_binary_op(dest, Self::BinaryOp::SubSaturating, first, second)
+    fn intrinsic_assign_saturating_sub(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+    ) {
+        Self::assign_binary_op(id, dest, Self::BinaryOp::SubSaturating, first, second)
     }
 
-    fn intrinsic_assign_exact_div(dest: PlaceRef, first: OperandRef, second: OperandRef) {
-        Self::assign_binary_op(dest, Self::BinaryOp::DivExact, first, second);
+    fn intrinsic_assign_exact_div(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+    ) {
+        Self::assign_binary_op(id, dest, Self::BinaryOp::DivExact, first, second);
     }
 
-    fn intrinsic_assign_bitreverse(dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(dest, Self::UnaryOp::BitReverse, x);
+    fn intrinsic_assign_bitreverse(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::BitReverse, x);
     }
 
-    fn intrinsic_assign_cttz_nonzero(dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(dest, Self::UnaryOp::NonZeroTrailingZeros, x);
+    fn intrinsic_assign_cttz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::NonZeroTrailingZeros, x);
     }
 
-    fn intrinsic_assign_cttz(dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(dest, Self::UnaryOp::TrailingZeros, x);
+    fn intrinsic_assign_cttz(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::TrailingZeros, x);
     }
 
-    fn intrinsic_assign_ctlz_nonzero(dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(dest, Self::UnaryOp::NonZeroLeadingZeros, x);
+    fn intrinsic_assign_ctlz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::NonZeroLeadingZeros, x);
     }
 
-    fn intrinsic_assign_ctlz(dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(dest, Self::UnaryOp::LeadingZeros, x);
+    fn intrinsic_assign_ctlz(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::LeadingZeros, x);
     }
 
-    fn intrinsic_assign_ctpop(dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(dest, Self::UnaryOp::CountOnes, x);
+    fn intrinsic_assign_ctpop(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::CountOnes, x);
     }
 
     fn intrinsic_atomic_load(
         _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: Self::TypeId,
         dest: PlaceRef,
@@ -638,11 +713,12 @@ impl ProgramRuntimeInterface for BasicPri {
             h.from_ptr(src_ptr.clone(), ptr_type_id)
         });
         let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
-        assign_to(dest, |h| h.use_of(src_pointee_value))
+        assign_to(id, dest, |h| h.use_of(src_pointee_value))
     }
 
     fn intrinsic_atomic_store(
         _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: Self::TypeId,
         src: OperandRef,
@@ -652,23 +728,25 @@ impl ProgramRuntimeInterface for BasicPri {
             h.from_ptr(dst_ptr.clone(), ptr_type_id)
         });
         let src_value = take_back_operand(src);
-        assign_to_place(dst_place, |h| h.use_of(src_value))
+        assign_to_place(id, dst_place, |h| h.use_of(src_value))
     }
 
     fn intrinsic_atomic_xchg(
         _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: Self::TypeId,
         val: OperandRef,
         prev_dest: PlaceRef,
     ) {
-        Self::update_by_ptr_return_old(ptr, ptr_type_id, val, prev_dest, |h, _current, val| {
+        Self::update_by_ptr_return_old(id, ptr, ptr_type_id, val, prev_dest, |h, _current, val| {
             h.use_of(val)
         })
     }
 
     fn intrinsic_atomic_cxchg(
         _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: Self::TypeId,
         failure_ordering: Self::AtomicOrdering,
@@ -680,6 +758,7 @@ impl ProgramRuntimeInterface for BasicPri {
         let old = take_back_operand(old);
 
         Self::update_by_ptr(
+            id,
             ptr,
             ptr_type_id,
             src,
@@ -691,6 +770,7 @@ impl ProgramRuntimeInterface for BasicPri {
 
     fn intrinsic_atomic_binary_op(
         _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: Self::TypeId,
         operator: Self::AtomicBinaryOp,
@@ -709,7 +789,7 @@ impl ProgramRuntimeInterface for BasicPri {
             abs::AtomicBinaryOp::Max => todo!(),
         };
 
-        Self::update_by_ptr_return_old(ptr, ptr_type_id, src, prev_dest, |h, current, src| {
+        Self::update_by_ptr_return_old(id, ptr, ptr_type_id, src, prev_dest, |h, current, src| {
             h.binary_op_between(binary_op, current, src)
         });
     }
@@ -733,8 +813,13 @@ impl BasicPri {
         fields.map(Into::<FieldImpl>::into).collect()
     }
 
-    fn assign_cast_pointer(dest: PlaceRef, operand: OperandRef, dst_type_id: TypeId) {
-        assign_to(dest, |h| {
+    fn assign_cast_pointer(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        dst_type_id: TypeId,
+    ) {
+        assign_to(id, dest, |h| {
             h.cast_of(take_back_operand(operand), CastKind::ToPointer(dst_type_id))
         })
     }
@@ -751,6 +836,7 @@ impl BasicPri {
 
     #[inline]
     fn update_by_ptr_return_old(
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: TypeId,
         src: OperandRef,
@@ -762,6 +848,7 @@ impl BasicPri {
         ),
     ) {
         Self::update_by_ptr(
+            id,
             ptr,
             ptr_type_id,
             src,
@@ -772,6 +859,7 @@ impl BasicPri {
     }
 
     fn update_by_ptr(
+        id: AssignmentId,
         ptr: OperandRef,
         ptr_type_id: TypeId,
         src: OperandRef,
@@ -796,10 +884,10 @@ impl BasicPri {
             h.from_ptr(ptr.clone(), ptr_type_id)
         });
         let src = take_back_operand(src);
-        assign_to_place(ptr_place.clone(), |h| {
+        assign_to_place(id, ptr_place.clone(), |h| {
             ptr_update_action(h, current.clone(), src)
         });
 
-        assign_to(prev_dest, |h| dest_assign_action(h, current.clone()));
+        assign_to(id, prev_dest, |h| dest_assign_action(h, current.clone()));
     }
 }

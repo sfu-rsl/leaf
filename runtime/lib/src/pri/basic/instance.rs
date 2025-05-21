@@ -1,5 +1,5 @@
 use super::utils::{DefaultRefManager, RefManager};
-use super::{OperandRef, PlaceHandler, PlaceRef, SwitchInfo};
+use super::{AssignmentId, OperandRef, PlaceHandler, PlaceRef, SwitchInfo};
 use crate::abs::{
     BasicBlockLocation, PlaceUsage,
     backend::{
@@ -134,18 +134,20 @@ pub(super) fn get_backend_place<T>(
 }
 
 pub(super) fn assign_to<T>(
+    id: AssignmentId,
     dest_ref: PlaceRef,
     assign_action: impl FnOnce(<BackendImpl as RuntimeBackend>::AssignmentHandler<'_>) -> T,
 ) -> T {
     let dest = take_place_info_to_write(dest_ref);
-    assign_to_place(dest, assign_action)
+    assign_to_place(id, dest, assign_action)
 }
 
 pub(super) fn assign_to_place<T>(
+    id: AssignmentId,
     dest: PlaceImpl,
     assign_action: impl FnOnce(<BackendImpl as RuntimeBackend>::AssignmentHandler<'_>) -> T,
 ) -> T {
-    perform_on_backend(|r| assign_action(r.assign_to(dest)))
+    perform_on_backend(|r| assign_action(r.assign_to(id, dest)))
 }
 
 pub(super) fn push_operand(

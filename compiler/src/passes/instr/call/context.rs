@@ -16,7 +16,7 @@ use crate::{
     passes::Storage,
 };
 
-use super::{AtomicOrdering, InsertionLocation, OperandRef, PlaceRef, SwitchInfo};
+use super::{AssignmentId, AtomicOrdering, InsertionLocation, OperandRef, PlaceRef, SwitchInfo};
 use crate::pri_utils::{FunctionInfo, PriHelperFunctions, PriTypes, sym::LeafSymbol};
 
 pub(crate) trait TyContextProvider<'tcx> {
@@ -56,7 +56,8 @@ pub(crate) trait SourceInfoProvider {
     fn source_info(&self) -> SourceInfo;
 }
 
-pub(crate) trait DestinationProvider<'tcx> {
+pub(crate) trait AssignmentInfoProvider<'tcx> {
+    fn assignment_id(&self) -> AssignmentId;
     fn dest_ref(&self) -> PlaceRef;
     fn dest_ty(&self) -> Ty<'tcx>;
 }
@@ -289,11 +290,16 @@ impl<B> SourceInfoProvider for SourceInfoContext<'_, B> {
 
 pub(crate) struct AssignmentContext<'b, 'tcx, B> {
     pub(super) base: &'b mut B,
+    pub(super) id: AssignmentId,
     pub(super) dest_ref: PlaceRef,
     pub(super) dest_ty: Ty<'tcx>,
 }
 
-impl<'tcx, B> DestinationProvider<'tcx> for AssignmentContext<'_, 'tcx, B> {
+impl<'tcx, B> AssignmentInfoProvider<'tcx> for AssignmentContext<'_, 'tcx, B> {
+    fn assignment_id(&self) -> AssignmentId {
+        self.id
+    }
+
     fn dest_ref(&self) -> PlaceRef {
         self.dest_ref
     }
@@ -497,8 +503,9 @@ make_impl_macro! {
 
 make_impl_macro! {
     impl_dest_ref_provider,
-    DestinationProvider<'tcx>,
+    AssignmentInfoProvider<'tcx>,
     self,
+    fn assignment_id(&self) -> AssignmentId;
     fn dest_ref(&self) -> PlaceRef;
     fn dest_ty(&self) -> Ty<'tcx>;
 }

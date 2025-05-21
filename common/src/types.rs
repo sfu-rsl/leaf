@@ -12,6 +12,8 @@ pub type Alignment = TypeSize;
 
 pub type TypeId = NonZero<u128>;
 
+pub type AssignmentId = u16;
+
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(C)]

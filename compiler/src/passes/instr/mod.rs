@@ -15,18 +15,20 @@ use rustc_middle::{
 use rustc_span::{Span, def_id::DefId, source_map::Spanned};
 use rustc_target::abi::{FieldIdx, VariantIdx};
 
-use common::{log_debug, log_info, log_warn};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     num::NonZeroUsize,
+    rc::Rc,
     sync::atomic,
 };
+
+use common::{log_debug, log_info, log_warn, pri::AssignmentId};
 
 use crate::{
     config::InstrumentationRules,
     mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
     passes::{StorageExt, instr::call::context::PriItems},
-    utils::mir::TyCtxtExt,
+    utils::mir::{BodyExt, TyCtxtExt},
     visit::*,
 };
 
@@ -159,8 +161,6 @@ fn transform<'tcx>(tcx: TyCtxt<'tcx>, body: &mut Body<'tcx>, storage: &mut dyn S
         handle_entry_function_pre(&mut call_adder, body);
     }
 
-    // TODO: determine if body will ever be a promoted block
-    let _is_promoted_block = body.source.promoted.is_some();
     call_adder
         .at(Before(body.basic_blocks.indices().next().unwrap()))
         .with_source_info(*body.source_info(Location::START))
@@ -232,6 +232,27 @@ fn make_orig_index_map(body: &Body, storage: &mut dyn Storage) -> HashMap<BasicB
         .into_iter()
         .zip(orig_indices.into_iter())
         .collect::<HashMap<_, _>>()
+}
+
+pub(crate) fn assignment_ids_split_agnostic<'tcx>(
+    body: &Body<'tcx>,
+) -> impl Iterator<Item = (Location, AssignmentId)> {
+    // Basically, the order index of which we see an assignment is used as its id.
+    body.collect_ordered(
+        |stmt| match stmt.kind {
+            mir::StatementKind::Assign(_) => true,
+            mir::StatementKind::SetDiscriminant { .. } => true,
+            _ => false,
+        },
+        |terminator| match terminator.kind {
+            TerminatorKind::Call { .. } => true,
+            TerminatorKind::TailCall { .. } => true,
+            _ => false,
+        },
+    )
+    .into_iter()
+    .enumerate()
+    .map(|(i, loc)| (loc, i.try_into().expect("Too many assignments")))
 }
 
 pub(crate) fn clear_existing_instrumentation<'tcx>(
@@ -329,51 +350,59 @@ impl VisitorFactory {
     where
         C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
+        let assignment_ids = assignment_ids_split_agnostic(call_adder.body()).collect();
         LeafBodyVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
+            assignment_ids: Rc::new(assignment_ids),
         }
     }
 
     fn make_basic_block_visitor<'tcx, 'c, C>(
         call_adder: &'c mut RuntimeCallAdder<C>,
         block: BasicBlock,
+        assignment_ids: Rc<AssignmentIdMap>,
     ) -> impl Visitor<'tcx> + 'c
     where
         C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
         LeafBasicBlockVisitor {
             call_adder: call_adder.at(Before(block)),
+            assignment_ids,
         }
     }
 
     fn make_statement_kind_visitor<'tcx, 'b, C>(
         call_adder: &'b mut RuntimeCallAdder<C>,
+        assignment_id: Option<AssignmentId>,
     ) -> impl StatementKindVisitor<'tcx, ()> + 'b
     where
         C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx>,
     {
         LeafStatementKindVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
+            assignment_id,
         }
     }
 
     fn make_terminator_kind_visitor<'tcx, 'b, C>(
         call_adder: &'b mut RuntimeCallAdder<C>,
+        assignment_id: Option<AssignmentId>,
     ) -> impl TerminatorKindVisitor<'tcx, ()> + 'b
     where
         C: ctxtreqs::ForPlaceRef<'tcx>
             + ctxtreqs::ForOperandRef<'tcx>
             + ctxtreqs::ForBranching<'tcx>
-            + ctxtreqs::ForFunctionCalling<'tcx>
             + ctxtreqs::ForReturning<'tcx>,
     {
         LeafTerminatorKindVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
+            assignment_id,
         }
     }
 
     fn make_assignment_visitor<'tcx, 'b, C>(
         call_adder: &'b mut RuntimeCallAdder<C>,
+        id: AssignmentId,
         destination: &Place<'tcx>,
     ) -> impl RvalueVisitor<'tcx, ()> + 'b
     where
@@ -383,13 +412,13 @@ impl VisitorFactory {
         let dest_ref = call_adder.reference_place(destination);
         let dest_ty = destination.ty(call_adder, call_adder.tcx()).ty;
         LeafAssignmentVisitor {
-            call_adder: call_adder.assign(dest_ref, dest_ty),
+            call_adder: call_adder.assign(id, dest_ref, dest_ty),
         }
     }
 }
 
 macro_rules! make_general_visitor {
-    ($vis:vis $name:ident $({ $($field_name: ident : $field_ty: ty),* })?) => {
+    ($vis:vis $name:ident $({ $($field_name: ident : $field_ty: ty),* $(,)? })?) => {
         $vis struct $name<C> {
             call_adder: RuntimeCallAdder<C>,
             $($($field_name: $field_ty),*)?
@@ -397,7 +426,11 @@ macro_rules! make_general_visitor {
     };
 }
 
-make_general_visitor!(LeafBodyVisitor);
+type AssignmentIdMap = BTreeMap<Location, AssignmentId>;
+
+make_general_visitor!(LeafBodyVisitor {
+    assignment_ids: Rc<AssignmentIdMap>,
+});
 
 impl<'tcx, C> Visitor<'tcx> for LeafBodyVisitor<C>
 where
@@ -410,12 +443,18 @@ where
             return;
         }
 
-        VisitorFactory::make_basic_block_visitor(&mut self.call_adder, block)
-            .visit_basic_block_data(block, data);
+        VisitorFactory::make_basic_block_visitor(
+            &mut self.call_adder,
+            block,
+            self.assignment_ids.clone(),
+        )
+        .visit_basic_block_data(block, data);
     }
 }
 
-make_general_visitor!(LeafBasicBlockVisitor);
+make_general_visitor!(LeafBasicBlockVisitor {
+    assignment_ids: Rc<AssignmentIdMap>,
+});
 
 impl<'tcx, C> Visitor<'tcx> for LeafBasicBlockVisitor<C>
 where
@@ -437,35 +476,45 @@ where
                 .call_adder
                 .with_source_info(statement.source_info)
                 .before(),
+            self.assignment_ids.get(&location).copied(),
         )
         .visit_statement_kind(&statement.kind);
     }
 
-    fn visit_terminator(&mut self, terminator: &mir::Terminator<'tcx>, _location: Location) {
+    fn visit_terminator(&mut self, terminator: &mir::Terminator<'tcx>, location: Location) {
         VisitorFactory::make_terminator_kind_visitor(
             &mut self
                 .call_adder
                 .with_source_info(terminator.source_info)
                 .before(),
+            self.assignment_ids.get(&location).copied(),
         )
         .visit_terminator_kind(&terminator.kind);
     }
 }
 
-make_general_visitor!(LeafStatementKindVisitor);
+make_general_visitor!(LeafStatementKindVisitor {
+    assignment_id: Option<AssignmentId>,
+});
 
 impl<'tcx, C> StatementKindVisitor<'tcx, ()> for LeafStatementKindVisitor<C>
 where
     C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx>,
 {
     fn visit_assign(&mut self, place: &Place<'tcx>, rvalue: &Rvalue<'tcx>) {
-        VisitorFactory::make_assignment_visitor(&mut self.call_adder, place).visit_rvalue(rvalue)
+        VisitorFactory::make_assignment_visitor(
+            &mut self.call_adder,
+            self.assignment_id.unwrap(),
+            place,
+        )
+        .visit_rvalue(rvalue)
     }
 
     fn visit_set_discriminant(&mut self, place: &Place<'tcx>, variant_index: &VariantIdx) {
         let destination = self.call_adder.reference_place(place);
         self.call_adder
             .assign(
+                self.assignment_id.unwrap(),
                 destination,
                 place.ty(&self.call_adder, self.call_adder.tcx()).ty,
             )
@@ -487,14 +536,15 @@ where
     }
 }
 
-make_general_visitor!(pub(crate) LeafTerminatorKindVisitor);
+make_general_visitor!(pub(crate) LeafTerminatorKindVisitor {
+    assignment_id: Option<AssignmentId>,
+});
 
 impl<'tcx, C> TerminatorKindVisitor<'tcx, ()> for LeafTerminatorKindVisitor<C>
 where
     C: ctxtreqs::ForOperandRef<'tcx>
         + ctxtreqs::ForPlaceRef<'tcx>
         + ctxtreqs::ForBranching<'tcx>
-        + ctxtreqs::ForFunctionCalling<'tcx>
         + ctxtreqs::ForReturning<'tcx>,
 {
     fn visit_switch_int(&mut self, discr: &Operand<'tcx>, targets: &mir::SwitchTargets) {
@@ -659,7 +709,7 @@ where
                 let args = Self::ref_args(&mut call_adder, params.args);
                 call_adder
                     .before()
-                    .assign(dest_ref, dest_ty)
+                    .assign(self.assignment_id.unwrap(), dest_ref, dest_ty)
                     .intrinsic_one_to_one_by(def_id, func_name, args.into_iter());
             }
             Atomic(ordering, kind) => {
@@ -718,12 +768,17 @@ where
         let mut call_adder = call_adder.perform_atomic_op(ordering, ptr_ref.zip(ptr_ty));
         use decision::AtomicIntrinsicKind::*;
         match kind {
-            Load | Exchange | CompareExchange { .. } | BinOp(..) => {
+            Load | Store | Exchange | CompareExchange { .. } | BinOp(..) => {
                 let dest_ref = call_adder.reference_place(params.destination);
                 let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
-                let mut call_adder = call_adder.assign(dest_ref, dest_ty);
+                let mut call_adder =
+                    call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
                 match kind {
                     Load => call_adder.load(),
+                    Store => {
+                        let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
+                        call_adder.store(val_ref)
+                    }
                     BinOp(binop) => {
                         let src = call_adder.reference_operand_spanned(&params.args[1]);
                         call_adder.binary_op(binop, src);
@@ -742,10 +797,6 @@ where
                     }
                     _ => unreachable!(),
                 }
-            }
-            Store => {
-                let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
-                call_adder.store(val_ref)
             }
             Fence { single_thread } => call_adder.fence(single_thread),
         };

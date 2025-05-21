@@ -26,10 +26,11 @@ macro_rules! chain {
 pub(crate) use chain;
 
 pub(crate) mod mir {
+    use common::types::InstanceKindDiscr;
     use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
     use rustc_middle::{
-        mir::Body,
-        ty::{TyCtxt, TypingMode},
+        mir::{Body, Location, Statement, Terminator},
+        ty::{InstanceKind, TyCtxt, TypingMode},
     };
     use rustc_span::def_id::{DefId, LocalDefId};
 
@@ -116,6 +117,69 @@ pub(crate) mod mir {
             )
             .unwrap();
             String::from_utf8(buffer).unwrap()
+        }
+    }
+
+    pub(crate) trait BodyExt<'tcx> {
+        fn collect_ordered(
+            &self,
+            stmt_pred: impl Fn(&Statement<'tcx>) -> bool,
+            term_pred: impl Fn(&Terminator<'tcx>) -> bool,
+        ) -> Vec<Location>;
+    }
+
+    impl<'tcx> BodyExt<'tcx> for Body<'tcx> {
+        fn collect_ordered(
+            &self,
+            stmt_pred: impl Fn(&Statement<'tcx>) -> bool,
+            term_pred: impl Fn(&Terminator<'tcx>) -> bool,
+        ) -> Vec<Location> {
+            self.basic_blocks
+                .iter_enumerated()
+                .flat_map(|(index, block)| {
+                    block
+                        .statements
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, stmt)| stmt_pred(stmt))
+                        .map(move |(s_index, _)| Location {
+                            block: index,
+                            statement_index: s_index,
+                        })
+                        .chain(
+                            block
+                                .terminator
+                                .as_ref()
+                                .filter(|t| term_pred(t))
+                                .map(move |_| self.terminator_loc(index)),
+                        )
+                })
+                .collect()
+        }
+    }
+
+    pub(crate) trait InstanceKindExt<'tcx> {
+        /// Returns a unique identifier for the variant of this kind.
+        fn discriminant(&self) -> InstanceKindDiscr;
+    }
+
+    impl<'tcx> InstanceKindExt<'tcx> for InstanceKind<'tcx> {
+        fn discriminant(&self) -> InstanceKindDiscr {
+            match self {
+                InstanceKind::Item(..) => 0,
+                InstanceKind::Intrinsic(..) => 1,
+                InstanceKind::VTableShim(..) => 2,
+                InstanceKind::ReifyShim(..) => 3,
+                InstanceKind::FnPtrShim(..) => 4,
+                InstanceKind::Virtual(..) => 5,
+                InstanceKind::ClosureOnceShim { .. } => 6,
+                InstanceKind::ConstructCoroutineInClosureShim { .. } => 7,
+                InstanceKind::ThreadLocalShim(..) => 8,
+                InstanceKind::DropGlue(..) => 9,
+                InstanceKind::CloneShim(..) => 10,
+                InstanceKind::FnPtrAddrShim(..) => 11,
+                InstanceKind::AsyncDropGlueCtorShim(..) => 12,
+            }
         }
     }
 }
