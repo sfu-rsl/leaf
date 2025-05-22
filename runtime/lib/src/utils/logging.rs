@@ -1,5 +1,5 @@
-use std::fmt::Display;
 pub(crate) use common::utils::comma_separated;
+use std::fmt::Display;
 
 pub(crate) fn init_logging() {
     use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};

@@ -97,6 +97,32 @@ pub(crate) mod z3 {
         }
     }
 
+    impl<'ctx, 'a> FnOnce<(&'a SymValueRef,)> for Z3ValueTranslator<'ctx> {
+        type Output = TranslatedValue<'ctx>;
+        extern "rust-call" fn call_once(mut self, (value,): (&'a SymValueRef,)) -> Self::Output {
+            self.translate(value.as_ref())
+        }
+    }
+
+    impl<'ctx, 'a> FnMut<(&'a SymValueRef,)> for Z3ValueTranslator<'ctx> {
+        extern "rust-call" fn call_mut(&mut self, (value,): (&'a SymValueRef,)) -> Self::Output {
+            self.translate(value.as_ref())
+        }
+    }
+
+    impl<'ctx> FnOnce<(SymValueRef,)> for Z3ValueTranslator<'ctx> {
+        type Output = TranslatedValue<'ctx>;
+        extern "rust-call" fn call_once(mut self, (value,): (SymValueRef,)) -> Self::Output {
+            self.translate(&value.into())
+        }
+    }
+
+    impl<'ctx> FnMut<(SymValueRef,)> for Z3ValueTranslator<'ctx> {
+        extern "rust-call" fn call_mut(&mut self, (value,): (SymValueRef,)) -> Self::Output {
+            self.translate(&value.into())
+        }
+    }
+
     impl<'ctx> Z3ValueTranslator<'ctx> {
         pub(crate) fn translate(&mut self, value: &ValueRef) -> AstAndVars<'ctx, SymVarId> {
             log_debug!(target: TAG, "Translating value: {}", value);

@@ -10,6 +10,7 @@ use crate::abs::{
         LoggerExprBuilder, TernaryExprBuilder, UnaryExprBuilder, macros::*,
     },
 };
+use crate::backends::basic::alias::ImpliedValueRefUnaryExprBuilder;
 use crate::utils::alias::RRef;
 
 type Composite<Binary, Unary, Ternary, Cast> = CompositeExprBuilder<Binary, Unary, Ternary, Cast>;
@@ -22,6 +23,8 @@ type CastMetadata = LazyTypeInfo;
 pub(crate) type DefaultExprBuilder = toplevel::TopLevelBuilder;
 pub(crate) type DefaultSymExprBuilder =
     adapters::SymValueRefExprBuilderAdapter<toplevel::TopLevelBuilder>;
+pub(crate) type DefaultImpliedExprBuilder =
+    adapters::ImpliedValueRefExprBuilderAdapter<toplevel::TopLevelBuilder>;
 
 pub(crate) fn new_expr_builder(type_manager: Rc<dyn TypeDatabase>) -> DefaultExprBuilder {
     DefaultExprBuilder::new(type_manager)
@@ -31,11 +34,150 @@ pub(crate) fn to_sym_expr_builder(expr_builder: RRef<DefaultExprBuilder>) -> Def
     adapters::SymValueRefExprBuilderAdapter(expr_builder)
 }
 
+pub(crate) fn to_implied_expr_builder(
+    expr_builder: RRef<DefaultExprBuilder>,
+) -> DefaultImpliedExprBuilder {
+    adapters::ImpliedValueRefExprBuilderAdapter(expr_builder)
+}
+
 impl ValueRefExprBuilder for DefaultExprBuilder {}
 
 impl ValueRefBinaryExprBuilder for DefaultExprBuilder {}
 
 impl ValueRefUnaryExprBuilder for DefaultExprBuilder {}
+
+impl ImpliedValueRefUnaryExprBuilder for DefaultImpliedExprBuilder {}
+
+mod implied {
+    use super::{concrete::ConcreteBuilder, symbolic::SymbolicBuilder, *};
+
+    /// An expression builder that separates the path for expressions that involve symbolic values,
+    /// or the ones that are fully based on concrete values.
+    /// NOTE: In an ideal case, fully concrete expressions should not be asked to created. So in
+    /// the future, this top-level builder will be reduced to the symbolic builder.
+    pub(crate) struct TopLevelBuilder {
+        sym_builder: SymbolicBuilder,
+        conc_builder: ConcreteBuilder,
+    }
+
+    impl TopLevelBuilder {
+        pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
+            Self {
+                sym_builder: SymbolicBuilder::new(type_manager.clone()),
+                conc_builder: ConcreteBuilder::default(),
+            }
+        }
+    }
+
+    impl BinaryExprBuilder for TopLevelBuilder {
+        type ExprRefPair<'a> = (ValueRef, ValueRef);
+        type Expr<'a> = ValueRef;
+
+        fn binary_op<'a>(
+            &mut self,
+            (first, second): Self::ExprRefPair<'a>,
+            op: AbsBinaryOp,
+        ) -> Self::Expr<'a> {
+            if first.is_symbolic() {
+                self.sym_builder.binary_op(
+                    BinaryOperands::Orig {
+                        first: SymValueRef::new(first),
+                        second,
+                    },
+                    op,
+                )
+            } else if second.is_symbolic() {
+                self.sym_builder.binary_op(
+                    BinaryOperands::Rev {
+                        first,
+                        second: SymValueRef::new(second),
+                    },
+                    op,
+                )
+            } else {
+                self.conc_builder.binary_op(
+                    (ConcreteValueRef::new(first), ConcreteValueRef::new(second)),
+                    op,
+                )
+            }
+        }
+
+        impl_singular_binary_ops_through_general!();
+    }
+
+    impl UnaryExprBuilder for TopLevelBuilder {
+        type ExprRef<'a> = ValueRef;
+        type Expr<'a> = ValueRef;
+
+        fn unary_op<'a>(&mut self, operand: Self::ExprRef<'a>, op: AbsUnaryOp) -> Self::Expr<'a> {
+            if operand.is_symbolic() {
+                self.sym_builder
+                    .unary_op(SymValueRef::new(operand).into(), op)
+                    .into()
+            } else {
+                self.conc_builder
+                    .unary_op(ConcreteValueRef::new(operand).into(), op)
+            }
+        }
+
+        impl_singular_unary_ops_through_general!();
+    }
+
+    impl TernaryExprBuilder for TopLevelBuilder {
+        type ExprRefTriple<'a> = (ValueRef, ValueRef, ValueRef);
+        type Expr<'a> = ValueRef;
+
+        fn ternary_op<'a>(
+            &mut self,
+            operands: Self::ExprRefTriple<'a>,
+            op: AbsTernaryOp,
+        ) -> Self::Expr<'a> {
+            if operands.0.is_symbolic() || operands.1.is_symbolic() || operands.2.is_symbolic() {
+                self.sym_builder
+                    .ternary_op(
+                        SymTernaryOperands::new(operands.0, operands.1, operands.2),
+                        op,
+                    )
+                    .into()
+            } else {
+                self.conc_builder.ternary_op(
+                    (
+                        ConcreteValueRef::new(operands.0),
+                        ConcreteValueRef::new(operands.1),
+                        ConcreteValueRef::new(operands.2),
+                    ),
+                    op,
+                )
+            }
+        }
+
+        impl_singular_ternary_ops_through_general!();
+    }
+
+    impl CastExprBuilder for TopLevelBuilder {
+        type ExprRef<'a> = ValueRef;
+        type Expr<'a> = ValueRef;
+        type Metadata<'a> = CastMetadata;
+
+        fn cast<'a, 'b>(
+            &mut self,
+            operand: Self::ExprRef<'a>,
+            target: CastKind<Self::IntType, Self::FloatType, Self::PtrType, Self::GenericType>,
+            metadata: Self::Metadata<'b>,
+        ) -> Self::Expr<'a> {
+            if operand.is_symbolic() {
+                self.sym_builder
+                    .cast(SymValueRef::new(operand).into(), target, metadata)
+                    .into()
+            } else {
+                self.conc_builder
+                    .cast(ConcreteValueRef::new(operand).into(), target, metadata)
+            }
+        }
+
+        impl_singular_casts_through_general!();
+    }
+}
 
 mod toplevel {
     use super::{concrete::ConcreteBuilder, symbolic::SymbolicBuilder, *};
@@ -594,6 +736,105 @@ mod adapters {
     }
 
     impl<T: ValueRefExprBuilder> SymValueRefExprBuilder for SymValueRefExprBuilderAdapter<T> {}
+
+    mod implied {
+        use crate::backends::basic::{
+            Implied, Precondition,
+            alias::{ImpliedValueRefExprBuilder, ValueRefExprBuilderWrapper},
+        };
+
+        use super::*;
+
+        #[derive(Default, Clone, Deref, DerefMut)]
+        pub(crate) struct ImpliedValueRefExprBuilderAdapter<T: ValueRefExprBuilder>(
+            pub(in super::super) RRef<T>,
+        );
+
+        impl<T: ValueRefExprBuilder> BinaryExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {
+            type ExprRefPair<'a> = (Implied<ValueRef>, Implied<ValueRef>);
+            type Expr<'a> = Implied<<T as BinaryExprBuilder>::Expr<'a>>;
+
+            fn binary_op<'a>(
+                &mut self,
+                (first, second): Self::ExprRefPair<'a>,
+                op: AbsBinaryOp,
+            ) -> Self::Expr<'a> {
+                Implied {
+                    by: Precondition::merge(vec![first.by, second.by]),
+                    value: self
+                        .0
+                        .borrow_mut()
+                        .binary_op((first.value, second.value), op),
+                }
+            }
+
+            impl_singular_binary_ops_through_general!();
+        }
+
+        impl<T: ValueRefExprBuilder> UnaryExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {
+            type ExprRef<'a> = Implied<<T as UnaryExprBuilder>::ExprRef<'a>>;
+            type Expr<'a> = Implied<<T as UnaryExprBuilder>::Expr<'a>>;
+
+            #[inline]
+            fn unary_op<'a>(
+                &mut self,
+                operand: Self::ExprRef<'a>,
+                op: AbsUnaryOp,
+            ) -> Self::Expr<'a> {
+                operand.map_value(|value| self.0.borrow_mut().unary_op(value, op))
+            }
+
+            impl_singular_unary_ops_through_general!();
+        }
+
+        impl<T: ValueRefExprBuilder> TernaryExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {
+            type ExprRefTriple<'a> = (Implied<ValueRef>, Implied<ValueRef>, Implied<ValueRef>);
+            type Expr<'a> = Implied<<T as TernaryExprBuilder>::Expr<'a>>;
+
+            #[inline]
+            fn ternary_op<'a>(
+                &mut self,
+                (first, second, third): Self::ExprRefTriple<'a>,
+                op: AbsTernaryOp,
+            ) -> Self::Expr<'a> {
+                Implied {
+                    by: Precondition::merge(vec![first.by, second.by, third.by]),
+                    value: self
+                        .0
+                        .borrow_mut()
+                        .ternary_op((first.value, second.value, third.value), op),
+                }
+            }
+
+            impl_singular_ternary_ops_through_general!();
+        }
+
+        impl<T: ValueRefExprBuilder> CastExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {
+            type ExprRef<'a> = Implied<<T as CastExprBuilder>::ExprRef<'a>>;
+            type Expr<'a> = Implied<<T as CastExprBuilder>::Expr<'a>>;
+            type Metadata<'a> = CastMetadata;
+
+            fn cast<'a, 'b>(
+                &mut self,
+                operand: Self::ExprRef<'a>,
+                target: CastKind<Self::IntType, Self::FloatType, Self::PtrType, Self::GenericType>,
+                metadata: Self::Metadata<'b>,
+            ) -> Self::Expr<'a> {
+                operand.map_value(|value| (self.0.borrow_mut().cast(value, target, metadata)))
+            }
+
+            impl_singular_casts_through_general!();
+        }
+
+        impl<T: ValueRefExprBuilder> ValueRefExprBuilderWrapper for ImpliedValueRefExprBuilderAdapter<T> {
+            fn inner(&mut self) -> impl DerefMut<Target = impl ValueRefExprBuilder> {
+                self.0.borrow_mut()
+            }
+        }
+
+        impl<T: ValueRefExprBuilder> ImpliedValueRefExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {}
+    }
+    pub(super) use implied::ImpliedValueRefExprBuilderAdapter;
 }
 
 mod core {

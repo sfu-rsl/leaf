@@ -210,6 +210,17 @@ impl ValueType {
         }
     }
 
+    pub(crate) fn size(&self) -> NonZeroU64 {
+        use core::mem::size_of;
+        let size = match self {
+            ValueType::Bool => size_of::<bool>() as u64,
+            ValueType::Char => size_of::<char>() as u64,
+            ValueType::Int(IntType { bit_size, .. }) => bit_size / 8,
+            Self::Float(FloatType { e_bits, s_bits }) => (e_bits + s_bits) / 8,
+        };
+        NonZeroU64::new(size as u64).unwrap()
+    }
+
     pub(crate) fn bit_size(&self) -> Option<NonZeroU64> {
         match self {
             Self::Bool => None,

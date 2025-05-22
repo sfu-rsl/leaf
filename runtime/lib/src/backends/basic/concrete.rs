@@ -1,4 +1,4 @@
-use crate::abs::ConstraintKind;
+use crate::{abs::ConstraintKind, backends::basic::Implied};
 
 use super::{
     BasicTraceManager, ConcreteValueRef, Constraint, SymValueRef,
@@ -33,7 +33,7 @@ impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
             .eq((value.0, concrete_value.0).into());
         // NOTE: We do not use equality constraint here because that is meant for switch cases.
         let constraint = Constraint {
-            discr: eq_expr,
+            discr: Implied::by_unknown(eq_expr), // TODO
             kind: ConstraintKind::True,
         };
         self.trace_manager.borrow_mut().notify_step(

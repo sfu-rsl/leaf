@@ -1,14 +1,13 @@
 use core::iter;
 
 use crate::{
-    abs::{self, LocalIndex},
-    backends::basic::UnevalValue,
+    abs::{Constant, LocalIndex},
     utils::InPlaceSelfHierarchical,
 };
 
 use super::{
-    CallFlowSanity, CalleeDef, ConcreteValue, FuncDef, GenericCallStackManager, UntupleHelper,
-    ValueRef, VariablesState,
+    CallFlowSanity, CalleeDef, ConcreteValue, FuncDef, GenericCallStackManager, Implied,
+    UntupleHelper, ValueRef, VariablesState,
     config::{CallConfig, ExternalCallStrategy},
     expr::place::DeterPlaceValueRef,
 };
@@ -95,23 +94,22 @@ use self::logging::TAG;
 pub(super) struct BasicCallStackManager<VS: VariablesState> {
     /// The call stack. Each frame consists of the data that is held for the
     /// current function call and is preserved through calls and returns.
-    stack: Vec<CallStackFrame>,
+    stack: Vec<CallStackFrame<VS::Value>>,
     vars_state_factory: VariablesStateFactory<VS>,
     /// The data passed between from the call point (in the caller)
     /// to the entrance point (in the callee).
-    latest_call: Option<CallInfo>,
+    latest_call: Option<CallInfo<VS::Value>>,
     arg_places: Vec<DeterPlaceValueRef>,
     return_val_place: Option<DeterPlaceValueRef>,
     /// The data (return value) passed between the exit point (in the callee)
     /// to the return point (in the caller).
-    latest_returned_val: Option<ValueRef>,
+    latest_returned_val: Option<VS::Value>,
     vars_state: VS,
     config: CallConfig,
     log_span: tracing::span::EnteredSpan,
 }
 
-#[derive(Default)]
-pub(super) struct CallStackFrame {
+pub(super) struct CallStackFrame<V> {
     /* this doesn't refer to the current stack frame,
      * but the function that is about to be / was just called by this function.
      */
@@ -122,17 +120,26 @@ pub(super) struct CallStackFrame {
     /// If it is set in an external call, it will be consumed as the returned
     /// value from the external call when storing the returned value in the
     /// destination variable.
-    overridden_return_val: Option<ValueRef>,
+    overridden_return_val: Option<V>,
     return_val_place: Option<DeterPlaceValueRef>,
     def: Option<FuncDef>,
 }
 
+impl<V> Default for CallStackFrame<V> {
+    fn default() -> Self {
+        Self {
+            is_callee_external: Default::default(),
+            overridden_return_val: Default::default(),
+            return_val_place: Default::default(),
+            def: Default::default(),
+        }
+    }
 }
 
 #[derive(Debug)]
-pub(super) struct CallInfo {
+pub(super) struct CallInfo<V> {
     expected_func: CalleeDef,
-    args: Vec<ValueRef>,
+    args: Vec<V>,
     are_args_tupled: bool,
 }
 
@@ -156,8 +163,8 @@ impl<VS: VariablesState> BasicCallStackManager<VS> {
 impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
     fn push_new_stack_frame(
         &mut self,
-        args: impl Iterator<Item = (DeterPlaceValueRef, ValueRef)>,
-        frame: CallStackFrame,
+        args: impl Iterator<Item = (DeterPlaceValueRef, VS::Value)>,
+        frame: CallStackFrame<VS::Value>,
     ) {
         self.vars_state.add_layer();
         for (local, value) in args {
@@ -168,7 +175,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         self.log_span_reset();
     }
 
-    fn top_frame(&mut self) -> &mut CallStackFrame {
+    fn top_frame(&mut self) -> &mut CallStackFrame<VS::Value> {
         self.stack
             .last_mut()
             .expect("Call stack should not be empty")
@@ -179,7 +186,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             returned_val
         } else {
             // The unit return type
-            UnevalValue::Some.to_value_ref()
+            Implied::always(ConcreteValue::from(Constant::Zst).to_value_ref())
         };
         self.top().set_place(&result_dest, returned_val)
     }
@@ -206,8 +213,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             return;
         }
 
-        self.top()
-            .set_place(result_dest, UnevalValue::Some.to_value_ref());
+        self.top().set_place(result_dest, unknown_value());
 
         enum Action {
             Concretize,
@@ -233,10 +239,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             }
         };
         match action {
-            Concretize => self.top().set_place(
-                &result_dest,
-                ConcreteValue::from(abs::Constant::Some).to_value_ref(),
-            ),
+            Concretize => self.top().set_place(&result_dest, unknown_value()),
             OverApproximate => {
                 todo!("#306: Over-approximated symbolic values are not supported.")
             }
@@ -244,11 +247,11 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
     }
 
     fn untuple(
-        tupled_value: ValueRef,
+        tupled_value: VS::Value,
         tupled_arg_addr: Option<RawAddress>,
         untuple_helper: &mut dyn UntupleHelper,
         isolated_vars_state: VS,
-    ) -> Vec<ValueRef> {
+    ) -> Vec<VS::Value> {
         let tupled_pseudo_place = untuple_helper.make_tupled_arg_pseudo_place(
             /* NOTE: The address should not really matter, but let's keep it realistic. */
             tupled_arg_addr.unwrap_or(core::ptr::null() as RawAddress),
@@ -266,7 +269,10 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             .collect()
     }
 
-    fn inspect_external_call_info<'a>(&self, info: &'a CallInfo) -> Vec<(usize, &'a ValueRef)> {
+    fn inspect_external_call_info<'a>(
+        &self,
+        info: &'a CallInfo<VS::Value>,
+    ) -> Vec<(usize, &'a VS::Value)> {
         let symbolic_args: Vec<_> = info
             .args
             .iter()
@@ -287,7 +293,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         symbolic_args
     }
 
-    fn inspect_returned_value<'a>(&self, returned_value: &ValueRef) {
+    fn inspect_returned_value<'a>(&self, returned_value: &VS::Value) {
         if returned_value.is_symbolic() {
             log_warn!(
                 target: TAG,
@@ -311,8 +317,8 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     fn prepare_for_call(
         &mut self,
         def: CalleeDef,
-        func: ValueRef,
-        args: Vec<ValueRef>,
+        func: Self::Value,
+        args: Vec<Self::Value>,
         are_args_tupled: bool,
     ) {
         self.log_span_start_trans(logging::TransitionDirection::Call);
@@ -334,7 +340,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         );
 
         if func.is_symbolic() {
-            log_warn!("Calling a symbolic function {}", func);
+            log_warn!("Calling a symbolic function {:?}", func);
         }
 
         self.latest_call = Some(CallInfo {
@@ -424,7 +430,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
                 call_info.inspect(|info| {
                     self.inspect_external_call_info(info);
                 });
-                iter::repeat_n(UnevalValue::Some.to_value_ref(), arg_places.len()).collect()
+                iter::repeat_n(unknown_value(), arg_places.len()).collect()
             }
         };
         self.push_new_stack_frame(arg_places.into_iter().zip(arg_values), call_stack_frame);
@@ -503,7 +509,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         }
     }
 
-    fn override_return_value(&mut self, value: ValueRef) {
+    fn override_return_value(&mut self, value: Self::Value) {
         log_debug!(target: TAG, "Overriding the return value with {:?}", value);
         self.top_frame().overridden_return_val = Some(value);
     }
@@ -519,6 +525,9 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
             .expect("Current function is not set")
     }
 }
+
+fn unknown_value() -> Implied<ValueRef> {
+    Implied::by_unknown(ConcreteValue::from(Constant::Some).to_value_ref())
 }
 
 impl PartialEq<CalleeDef> for FuncDef {

@@ -150,7 +150,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         sym_place_handler: &mut SymPlaceHandlerDyn,
     ) -> Option<SymPlaceValueRef> {
         let host_place = DeterministicPlaceValue::new(host_metadata);
-        let host = self.copy_deterministic_place(&host_place);
+        let host = self.copy_deterministic_place(&host_place).value;
         if host.is_symbolic() {
             let host = sym_place_handler.handle(
                 SymValueRef::new(host),
@@ -198,16 +198,18 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         sym_place_handler: &mut SymPlaceHandlerDyn,
     ) -> Option<SymPlaceValueRef> {
         let opt_sym_index_val = match proj {
-            Projection::Index(index_place) => Some(self.copy_deterministic_place(index_place))
-                .take_if(|index| index.is_symbolic())
-                .map(|index| {
-                    sym_place_handler.handle(
-                        SymValueRef::new(index),
-                        Self::conc_value_obtainer(index_place.as_ref()),
-                    )
-                })
-                .take_if(|index| index.is_symbolic())
-                .map(|index_val| SymValueRef::new(index_val)),
+            Projection::Index(index_place) => {
+                Some(self.copy_deterministic_place(index_place).value)
+                    .take_if(|index| index.is_symbolic())
+                    .map(|index| {
+                        sym_place_handler.handle(
+                            SymValueRef::new(index),
+                            Self::conc_value_obtainer(index_place.as_ref()),
+                        )
+                    })
+                    .take_if(|index| index.is_symbolic())
+                    .map(|index_val| SymValueRef::new(index_val))
+            }
             Projection::ConstantIndex {
                 offset,
                 min_length: _,
@@ -291,11 +293,11 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     pub(super) fn resolve_and_retrieve_symbolic_place(
         &self,
         place_val: &SymbolicPlaceValue,
-    ) -> SymValueRef {
+    ) -> Implied<SymValueRef> {
         let resolved = self.resolve_symbolic_place(place_val);
         let mut copied = self.get_select_sym_place_result(&resolved);
-        self.retrieve_multi_value(&mut copied, place_val.type_id());
-        Expr::Multi(copied).to_value_ref()
+        self.retrieve_multi_value(&mut copied.value, place_val.type_id());
+        Implied::map_value(copied, |v| Expr::Multi(v).to_value_ref())
     }
 
     fn resolve_symbolic_place(&self, place_val: &SymbolicPlaceValue) -> PlaceSelect {
@@ -303,18 +305,28 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         resolver.resolve(place_val)
     }
 
-    fn get_select_sym_place_result(&self, select: &PlaceSelect) -> ValueSelect {
-        select.map_leaves(
+    fn get_select_sym_place_result(&self, select: &PlaceSelect) -> Implied<ValueSelect> {
+        let mut preconditions = Vec::new();
+        let value = select.map_leaves(
             |index| SliceIndex {
                 index: index.clone(),
                 from_end: false,
             },
-            |place| self.get_single_sym_place_result(place),
-        )
+            |place| {
+                let Implied { by, value } = self.get_single_sym_place_result(place);
+                preconditions.push(by);
+                value
+            },
+        );
+
+        Implied {
+            by: Precondition::merge(preconditions),
+            value,
+        }
     }
 
     #[inline]
-    fn get_single_sym_place_result(&self, single: &SinglePlaceResult) -> ValueRef {
+    fn get_single_sym_place_result(&self, single: &SinglePlaceResult) -> Implied<ValueRef> {
         self.copy_deterministic_place(single.0.as_ref())
     }
 }

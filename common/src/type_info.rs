@@ -30,6 +30,10 @@ impl TypeInfo {
         self.size != Self::SIZE_UNSIZED
     }
 
+    pub fn size(&self) -> Option<TypeSize> {
+        self.is_sized().then_some(self.size)
+    }
+
     pub fn get_variant(&self, index: VariantIndex) -> Option<&VariantInfo> {
         // There is no guarantee that the index field is as same as the item's index in the array.
         self.variants.iter().find(|v| v.index == index)

@@ -2,6 +2,7 @@ mod alias;
 mod call;
 mod concrete;
 mod config;
+mod dependence;
 pub(crate) mod expr;
 mod outgen;
 mod place;
@@ -19,7 +20,8 @@ use std::{
 
 use common::{
     log_debug, log_info,
-    pri::AssignmentId,
+    pri::{AssignmentId, BasicBlockIndex},
+    types::InstanceKindId,
 };
 use sym_vars::SymVariablesManager;
 
@@ -27,27 +29,32 @@ use crate::{
     abs::{
         self, AssertKind, BasicBlockLocation, CalleeDef, CastKind, ConstraintKind, FieldIndex,
         FuncDef, IntType, Local, LocalIndex, PlaceUsage, SymVariable, Tag, TypeId, UnaryOp,
-        VariantIndex, backend::*, place::HasMetadata,
+        VariantIndex,
+        backend::*,
+        expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
+        place::HasMetadata,
+        utils::InstanceKindIdExt,
     },
     type_info::{
         FieldsShapeInfo, FieldsShapeInfoExt, StructShape, TagEncodingInfo, TagInfo, TypeInfo,
         TypeInfoExt,
     },
-    utils::alias::RRef,
+    utils::{RefView, alias::RRef},
 };
 
 use self::{
     alias::{
-        BasicExprBuilder, BasicSymExprBuilder, TraceManager, TypeDatabase,
-        ValueRefExprBuilder as OperationalExprBuilder,
-        ValueRefUnaryExprBuilder as UnaryExprBuilder,
+        BasicImpliedExprBuilder, BasicSymExprBuilder, ImpliedValueRefExprBuilder,
+        ImpliedValueRefUnaryExprBuilder, TraceManager, TypeDatabase, ValueRefExprBuilderWrapper,
     },
     concrete::BasicConcretizer,
     config::BasicBackendConfig,
+    dependence::{BasicProgramDependenceMap, Implied, Precondition},
     expr::{SymVarId, prelude::*},
     place::PlaceMetadata,
     state::{RawPointerVariableState, make_sym_place_handler},
-    trace::BasicExeTraceRecorder,
+    sym_vars::SymVariablesManager,
+    trace::{BasicExeTraceRecorder, BasicTraceQuerier},
     type_info::BasicTypeManager,
 };
 
@@ -69,7 +76,7 @@ pub struct BasicBackend {
     call_stack_manager: BasicCallStackManager,
     trace_manager: RRef<BasicTraceManager>,
     trace_recorder: BasicExeTraceRecorder,
-    expr_builder: RRef<BasicExprBuilder>,
+    expr_builder: RRef<BasicImpliedExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeDatabase>,
     tags: RRef<Vec<Tag>>,
@@ -128,7 +135,9 @@ impl BasicBackend {
             ),
             trace_manager,
             trace_recorder,
+            expr_builder: Rc::new(RefCell::new(expr::builders::to_implied_expr_builder(
             expr_builder,
+            ))),
             sym_values: sym_var_manager.clone(),
             type_manager,
             tags: tags_ref.clone(),
@@ -148,13 +157,17 @@ impl RuntimeBackend for BasicBackend {
         Self: 'a;
 
     type AssignmentHandler<'a>
+        = BasicAssignmentHandler<'a, BasicImpliedExprBuilder>
+    where
+        Self: 'a;
+
     type MemoryHandler<'a>
         = BasicMemoryHandler<'a>
     where
         Self: 'a;
 
     type ConstraintHandler<'a>
-        = BasicConstraintHandler<'a, BasicExprBuilder>
+        = BasicConstraintHandler<'a, BasicImpliedExprBuilder>
     where
         Self: 'a;
 
@@ -170,7 +183,7 @@ impl RuntimeBackend for BasicBackend {
 
     type PlaceInfo = Place;
     type Place = PlaceValueRef;
-    type Operand = ValueRef;
+    type Operand = Implied<ValueRef>;
 
     fn place(&mut self, usage: PlaceUsage) -> Self::PlaceHandler<'_> {
         BasicPlaceHandler {
@@ -222,7 +235,7 @@ impl PlaceHandler for BasicPlaceHandler<'_> {
     type PlaceInfo<'a> = Place;
     type Place = PlaceValueRef;
     type DiscriminablePlace = DiscriminantPossiblePlace;
-    type Operand = ValueRef;
+    type Operand = Implied<ValueRef>;
 
     fn from_info<'a>(self, info: Self::PlaceInfo<'a>) -> Self::Place {
         self.vars_state.ref_place(&info, self.usage)
@@ -274,7 +287,7 @@ pub(crate) struct BasicOperandHandler<'a> {
 
 impl OperandHandler for BasicOperandHandler<'_> {
     type Place = PlaceValueRef;
-    type Operand = ValueRef;
+    type Operand = Implied<ValueRef>;
 
     fn copy_of(self, place: Self::Place) -> Self::Operand {
         self.vars_state.copy_place(&place)
@@ -285,14 +298,16 @@ impl OperandHandler for BasicOperandHandler<'_> {
     }
 
     fn const_from(self, info: Self::Constant) -> Self::Operand {
-        ConcreteValue::from(info).to_value_ref()
+        Implied::always(ConcreteValue::from(info).to_value_ref())
     }
 
     fn new_symbolic(self, var: SymVariable<Self::Operand>) -> Self::Operand {
-        self.sym_values.borrow_mut().add_variable(var).into()
+        let value = self.sym_values.borrow_mut().add_variable(var).into();
+        Implied::by_unknown(value)
     }
 }
 
+pub(crate) struct BasicAssignmentHandler<'s, EB: ImpliedValueRefExprBuilder> {
     id: AssignmentId,
     dest: PlaceValueRef,
     vars_state: &'s mut dyn VariablesState,
@@ -312,25 +327,26 @@ impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
     }
 }
 
-impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_, EB> {
+impl<EB: ImpliedValueRefExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_, EB> {
     type Place = PlaceValueRef;
     type DiscriminablePlace = DiscriminantPossiblePlace;
-    type Operand = ValueRef;
+    type Operand = Implied<ValueRef>;
 
     fn use_of(mut self, operand: Self::Operand) {
         self.set(operand)
     }
 
     fn repeat_of(mut self, operand: Self::Operand, count: usize) {
-        let value = if operand.is_symbolic() {
+        self.set_value(operand.map_value(|value| {
+            if value.is_symbolic() {
             ConcreteValue::Array(ArrayValue {
-                elements: vec![operand; count],
+                elements: vec![value; count],
             })
             .into()
         } else {
             UnevalValue::Some.into()
-        };
-        self.set_value(value)
+            }
+        }))
     }
 
     fn ref_to(mut self, place: Self::Place, _is_mutable: bool) {
@@ -339,12 +355,12 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
         } else {
             UnevalValue::Some.into()
         };
-        self.set_value(value)
+        self.set_value(Implied::by_unknown(value))
     }
 
     fn thread_local_ref_to(mut self) {
         // Thread local references cannot refer to symbolic places, so the reference is concrete.
-        self.set_value(UnevalValue::Some.into())
+        self.set_value(Implied::by_unknown(UnevalValue::Some.into()))
     }
 
     fn address_of(self, place: Self::Place, is_mutable: bool) {
@@ -358,14 +374,13 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
         } else {
             UnevalValue::Some.into()
         };
-        self.set_value(value)
+        self.set_value(Implied::by_unknown(value))
     }
 
     fn cast_of(mut self, operand: Self::Operand, target: CastKind) {
-        let cast_value: ValueRef = self
+        let cast_value = self
             .expr_builder()
-            .cast(operand.into(), target, self.dest.type_info().clone())
-            .into();
+            .cast(operand, target, self.dest.type_info().clone());
 
         self.set(cast_value)
     }
@@ -376,37 +391,40 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
         first: Self::Operand,
         second: Self::Operand,
     ) {
-        let result_value = self
-            .expr_builder()
-            .binary_op((first, second).into(), operator);
-        self.set(result_value.into())
+        let result_value = self.expr_builder().binary_op((first, second), operator);
+        self.set(result_value)
     }
 
     fn unary_op_on(mut self, operator: UnaryOp, operand: Self::Operand) {
-        let result_value = self.expr_builder().unary_op(operand.into(), operator);
-        self.set(result_value.into())
+        let result_value = self.expr_builder().unary_op(operand, operator);
+        self.set(result_value)
     }
 
     fn discriminant_from(mut self, place: Self::DiscriminablePlace) {
         let discr_value = match place {
             DiscriminantPossiblePlace::None => {
                 // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Rvalue.html#variant.Discriminant
-                ConstValue::new_int(0_u128, self.get_int_type(self.dest.type_info())).to_value_ref()
+                Implied::always(
+                    ConstValue::new_int(0_u128, self.get_int_type(self.dest.type_info()))
+                        .to_value_ref(),
+                )
             }
-            DiscriminantPossiblePlace::SingleVariant { discr_bit_rep } => {
+            DiscriminantPossiblePlace::SingleVariant { discr_bit_rep } => Implied::always(
                 ConstValue::new_int(discr_bit_rep, self.get_int_type(self.dest.type_info()))
-                    .to_value_ref()
-            }
+                    .to_value_ref(),
+            ),
             DiscriminantPossiblePlace::TagPlaceWithInfo(tag_place, tag_encoding) => {
                 let tag_value = self.vars_state.copy_place(&tag_place);
                 if tag_value.is_symbolic() {
+                    tag_value.map_value(|value| {
                     self.build_discriminant_expr(
-                        SymValueRef::new(tag_value),
+                            SymValueRef::new(value),
                         tag_encoding,
                         self.dest.type_info(),
                         tag_place.type_info(),
                     )
                     .into()
+                    })
                 } else {
                     tag_value
                 }
@@ -417,10 +435,14 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
     }
 
     fn array_from(mut self, elements: impl Iterator<Item = Self::Operand>) {
+        let (preconditions, values) = elements
+            .map(Implied::into_tuple)
+            .unzip::<_, _, Vec<_>, Vec<_>>();
         let mut has_symbolic = false;
         let value = ConcreteValue::Array(ArrayValue {
-            elements: elements
-                .inspect(|e| has_symbolic |= e.is_symbolic())
+            elements: values
+                .into_iter()
+                .inspect(|e| has_symbolic = has_symbolic || e.is_symbolic())
                 .collect(),
         });
         let value = if has_symbolic {
@@ -428,7 +450,10 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
         } else {
             UnevalValue::Some.into()
         };
-        self.set_value(value)
+        self.set_value(Implied {
+            by: Precondition::merge(preconditions.iter()),
+            value,
+        })
     }
 
     fn adt_from(
@@ -457,13 +482,14 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
     // TODO: Need to add support for the Deinit MIR instruction to have this working properly.
     // This solution works for now to avoid crashes when samples are run.
     fn variant_index(mut self, variant_index: VariantIndex) {
+        // FIXME: This implementation relies on internals of the VariablesState.
         let value = Value::Concrete(ConcreteValue::Adt(AdtValue {
             kind: AdtKind::Enum {
                 variant: variant_index,
             },
             fields: vec![],
         }));
-        self.set_value(value)
+        self.set_value(Implied::always(value))
     }
 
     fn shallow_init_box_from(self, value: Self::Operand) {
@@ -476,21 +502,22 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
     }
 
     fn use_if_eq(mut self, val: Self::Operand, current: Self::Operand, expected: Self::Operand) {
-        let are_eq = self
-            .expr_builder()
-            .eq((current.clone(), expected.clone()).into());
+        let are_eq = self.expr_builder().eq((current.clone(), expected.clone()));
         let are_eq = if !are_eq.is_symbolic() {
+            are_eq.map_value(|value| {
             // As it will be abstracted to Some, we need to resolve them explicitly here.
-            let current =
-                ConcreteValueRef::new(current.clone()).try_resolve_as_const(self.type_manager);
-            let expected = ConcreteValueRef::new(expected).try_resolve_as_const(self.type_manager);
+                let current = ConcreteValueRef::new(current.value.clone())
+                    .try_resolve_as_const(self.type_manager);
+                let expected =
+                    ConcreteValueRef::new(expected.value).try_resolve_as_const(self.type_manager);
             match (current, expected) {
                 (Some(current), Some(expected)) => {
                     let are_eq = current == expected;
                     ConstValue::Bool(are_eq).to_value_ref()
                 }
-                _ => are_eq,
+                    _ => value,
             }
+            })
         } else {
             are_eq
         };
@@ -499,20 +526,23 @@ impl<EB: OperationalExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_
     }
 
     fn use_and_check_eq(mut self, val: Self::Operand, expected: Self::Operand) {
-        let are_eq = self.expr_builder().eq((val.clone(), expected).into());
-        self.set_adt_value(AdtKind::Struct, [Some(val), Some(are_eq)].into_iter())
+        let are_eq = self.expr_builder().eq((val.clone(), expected));
+        self.set_adt_value(
+            AdtKind::Struct,
+            [Some(val.clone()), Some(are_eq)].into_iter(),
+        )
     }
 }
 
-impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
+impl<EB: ImpliedValueRefExprBuilder> BasicAssignmentHandler<'_, EB> {
     #[inline]
-    fn set(&mut self, value: ValueRef) {
+    fn set(&mut self, mut value: Implied<ValueRef>) {
         self.vars_state.set_place(&self.dest, value);
     }
 
     #[inline]
-    fn set_value(&mut self, value: Value) {
-        self.set(value.to_value_ref());
+    fn set_value(&mut self, value: Implied<Value>) {
+        self.set(Implied::map_value(value, Value::to_value_ref));
     }
 
     fn expr_builder(&self) -> impl DerefMut<Target = EB> + '_ {
@@ -524,10 +554,17 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
         kind: AdtKind,
         fields: impl Iterator<Item = Option<<Self as AssignmentHandler>::Field>>,
     ) {
+        let (preconditions, values) = fields
+            .map(|f| -> (Option<Precondition>, Option<ValueRef>) {
+                f.map(Implied::into_tuple).unzip()
+            })
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
         let mut has_symbolic = false;
-        let fields = fields
+        let fields = values
+            .into_iter()
             .map(|f| AdtField {
-                value: f.inspect(|f| has_symbolic |= f.is_symbolic()),
+                value: f.inspect(|f| has_symbolic = has_symbolic || f.is_symbolic()),
             })
             .collect();
         let value = if has_symbolic {
@@ -535,7 +572,10 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
         } else {
             UnevalValue::Some.into()
         };
-        self.set_value(value)
+        self.set_value(Implied {
+            by: Precondition::merge(preconditions.into_iter().flatten()),
+            value,
+        })
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -567,6 +607,7 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
                 let (is_niche, tagged_discr) = if relative_max == 0 {
                     let is_niche = SymValueRef::new(
                         self.expr_builder()
+                            .inner()
                             .eq((tag_value.clone(), into_tag_value(*tag_value_start)).into())
                             .into(),
                     );
@@ -575,29 +616,35 @@ impl<EB: OperationalExprBuilder> BasicAssignmentHandler<'_, EB> {
                 } else {
                     let relative_tag_value: ValueRef = self
                         .expr_builder()
+                        .inner()
                         .sub((tag_value.clone(), into_tag_value(*tag_value_start)).into())
                         .into();
                     let is_niche = SymValueRef::new(
                         self.expr_builder()
+                            .inner()
                             .le((relative_tag_value.clone(), into_tag_value(relative_max)).into())
                             .into(),
                     );
                     let relative_discr_value = self
                         .expr_builder()
+                        .inner()
                         .to_int(relative_tag_value.into(), discr_ty, discr_ty_info.clone())
                         .into();
                     let tagged_discr = self
                         .expr_builder()
+                        .inner()
                         .add((relative_discr_value, into_discr_value(niche_start)).into())
                         .into();
-                    let tagged_discr =
-                        self.expr_builder()
-                            .to_int(tagged_discr, discr_ty, discr_ty_info.clone());
+                    let tagged_discr = self.expr_builder().inner().to_int(
+                        tagged_discr,
+                        discr_ty,
+                        discr_ty_info.clone(),
+                    );
                     debug_assert!(tagged_discr.is_symbolic());
                     (is_niche, tagged_discr)
                 };
 
-                let discr_value = self.expr_builder().if_then_else((
+                let discr_value = self.expr_builder().inner().if_then_else((
                     is_niche.into(),
                     tagged_discr.into(),
                     into_discr_value(*non_niche_value),
@@ -658,7 +705,7 @@ pub(crate) struct BasicConstraintHandler<'a, EB> {
     expr_builder: RRef<EB>,
 }
 
-impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
+impl<'a> BasicConstraintHandler<'a, BasicImpliedExprBuilder> {
     fn new(backend: &'a mut BasicBackend, location: BasicBlockIndex) -> Self {
         Self {
             trace_manager: backend.trace_manager.borrow_mut(),
@@ -673,8 +720,8 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
     }
 }
 
-impl<'a, EB: UnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
-    type Operand = ValueRef;
+impl<'a, EB: ImpliedValueRefUnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
+    type Operand = Implied<ValueRef>;
     type SwitchHandler = BasicSwitchHandler<'a, EB>;
 
     fn switch(self, discriminant: Self::Operand) -> Self::SwitchHandler {
@@ -696,9 +743,9 @@ impl<'a, EB: UnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, 
         if cond.is_symbolic() {
             // NOTE: This is a trick to pass the value through the expression builder
             // to ensure value resolving and simplifications.
-            let expr = self.expr_builder.borrow_mut().no_op(cond);
+            let cond = self.expr_builder.borrow_mut().no_op(cond);
             let mut constraint = Constraint {
-                discr: expr,
+                discr: cond,
                 kind: ConstraintKind::True,
             };
             if !expected {
@@ -720,7 +767,7 @@ impl<'a, EB> BasicConstraintHandler<'a, EB> {
 }
 
 pub(crate) struct BasicSwitchHandler<'a, EB> {
-    discr: ValueRef,
+    discr: Implied<ValueRef>,
     parent: BasicConstraintHandler<'a, EB>,
 }
 
@@ -772,7 +819,7 @@ impl<'a> BasicFunctionHandler<'a> {
 
 impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
     type Place = PlaceValueRef;
-    type Operand = ValueRef;
+    type Operand = Implied<ValueRef>;
     type MetadataHandler = ();
 
     #[inline]
@@ -960,7 +1007,7 @@ impl Shutdown for BasicBackend {
     }
 }
 
-type Constraint = crate::abs::Constraint<ValueRef, ConstValue>;
+type Constraint = crate::abs::Constraint<Implied<ValueRef>, ConstValue>;
 
 pub(crate) enum DiscriminantPossiblePlace {
     None,
@@ -969,9 +1016,9 @@ pub(crate) enum DiscriminantPossiblePlace {
 }
 
 trait GenericVariablesState {
-    type PlaceInfo = Place;
-    type PlaceValue = PlaceValueRef;
-    type Value = ValueRef;
+    type PlaceInfo;
+    type PlaceValue;
+    type Value;
 
     fn id(&self) -> usize;
 
@@ -1005,11 +1052,15 @@ trait GenericVariablesState {
 }
 
 trait VariablesState:
-    GenericVariablesState<PlaceInfo = Place, PlaceValue = PlaceValueRef, Value = ValueRef>
+    GenericVariablesState<PlaceInfo = Place, PlaceValue = PlaceValueRef, Value = Implied<ValueRef>>
 {
 }
 impl<T> VariablesState for T where
-    T: GenericVariablesState<PlaceInfo = Place, PlaceValue = PlaceValueRef, Value = ValueRef>
+    T: GenericVariablesState<
+            PlaceInfo = Place,
+            PlaceValue = PlaceValueRef,
+            Value = Implied<ValueRef>,
+        >
 {
 }
 
@@ -1081,7 +1132,7 @@ trait CallStackManager:
     GenericCallStackManager<
         VariablesState = BasicVariablesState,
         Place = DeterPlaceValueRef,
-        Value = ValueRef,
+        Value = <BasicVariablesState as GenericVariablesState>::Value,
     >
 {
 }
@@ -1089,7 +1140,9 @@ impl<T> CallStackManager for T where
     T: GenericCallStackManager<
             VariablesState = BasicVariablesState,
             Place = DeterPlaceValueRef,
-            Value = ValueRef,
+            Value = <BasicVariablesState as GenericVariablesState>::Value,
         >
 {
+}
+
 }

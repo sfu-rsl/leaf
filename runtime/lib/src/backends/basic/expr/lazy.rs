@@ -114,6 +114,21 @@ mod retrieval {
                 LazyTypeInfo::None => None,
             }
         }
+
+        #[inline]
+        pub(crate) fn get_size(&self, type_manager: &dyn TypeDatabase) -> Option<TypeSize> {
+            match self {
+                LazyTypeInfo::None => None,
+                LazyTypeInfo::IdPrimitive(_, ty) => Some(ty.size().into()),
+                _ => match self {
+                    LazyTypeInfo::Id(ty_id) => type_manager.get_type(&ty_id),
+                    LazyTypeInfo::Fetched(ty) => *ty,
+                    LazyTypeInfo::Forced(ty) => ty.as_ref(),
+                    _ => unreachable!(),
+                }
+                .size(),
+            }
+        }
     }
 
     #[derive(Debug, Clone, Copy, derive_more::From)]

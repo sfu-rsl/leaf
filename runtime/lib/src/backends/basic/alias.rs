@@ -1,5 +1,7 @@
+use core::ops::DerefMut;
+
 use super::{
-    ConstValue, LazyTypeInfo,
+    ConstValue, Implied, LazyTypeInfo,
     expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
 };
 use crate::abs::{
@@ -59,11 +61,45 @@ where
 {
 }
 
+pub(crate) trait ValueRefExprBuilderWrapper {
+    fn inner<'a>(&'a mut self) -> impl DerefMut<Target = impl ValueRefExprBuilder + 'a>;
+}
+
+pub(crate) trait ImpliedValueRefExprBuilder
+where
+    Self: for<'a> BinaryExprBuilder<
+            ExprRefPair<'a> = (Implied<ValueRef>, Implied<ValueRef>),
+            Expr<'a> = Implied<ValueRef>,
+        > + for<'a> UnaryExprBuilder<ExprRef<'a> = Implied<ValueRef>, Expr<'a> = Implied<ValueRef>>
+        + for<'a> TernaryExprBuilder<
+            ExprRefTriple<'a> = (Implied<ValueRef>, Implied<ValueRef>, Implied<ValueRef>),
+            Expr<'a> = Implied<ValueRef>,
+        > + for<'a> CastExprBuilder<
+            ExprRef<'a> = Implied<ValueRef>,
+            Expr<'a> = Implied<ValueRef>,
+            Metadata<'a> = LazyTypeInfo,
+            IntType = IntType,
+            FloatType = FloatType,
+            PtrType = TypeId,
+            GenericType = TypeId,
+        > + ValueRefExprBuilderWrapper,
+{
+}
+
+pub(crate) trait ImpliedValueRefUnaryExprBuilder
+where
+    Self: for<'a> UnaryExprBuilder<ExprRef<'a> = Implied<ValueRef>, Expr<'a> = Implied<ValueRef>>,
+{
+}
+
 pub(crate) use super::expr::builders::DefaultExprBuilder as BasicExprBuilder;
+pub(crate) use super::expr::builders::DefaultImpliedExprBuilder as BasicImpliedExprBuilder;
 pub(crate) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
 
 pub(crate) trait TypeDatabase:
-    abs::backend::TypeDatabase<'static> + CoreTypeProvider<&'static TypeInfo> + CoreTypeProvider<LazyTypeInfo>
+    abs::backend::TypeDatabase<'static>
+    + CoreTypeProvider<&'static TypeInfo>
+    + CoreTypeProvider<LazyTypeInfo>
 {
 }
 impl<'t, T> TypeDatabase for T where
@@ -74,10 +110,10 @@ impl<'t, T> TypeDatabase for T where
 }
 
 pub(crate) trait TraceManager:
-    abs::backend::TraceManager<super::trace::Step, ValueRef, ConstValue> + Shutdown
+    abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
 {
 }
 impl<T> TraceManager for T where
-    T: abs::backend::TraceManager<super::trace::Step, ValueRef, ConstValue> + Shutdown
+    T: abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
 {
 }
