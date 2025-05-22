@@ -199,7 +199,7 @@ impl RuntimeBackend for BasicBackend {
         BasicMemoryHandler::new(self)
     }
 
-    fn constraint_at(&mut self, location: BasicBlockLocation) -> Self::ConstraintHandler<'_> {
+    fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_> {
         BasicConstraintHandler::new(self, location)
     }
 
@@ -659,12 +659,16 @@ pub(crate) struct BasicConstraintHandler<'a, EB> {
 }
 
 impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
-    fn new(backend: &'a mut BasicBackend, location: BasicBlockLocation) -> Self {
+    fn new(backend: &'a mut BasicBackend, location: BasicBlockIndex) -> Self {
         Self {
             trace_manager: backend.trace_manager.borrow_mut(),
             trace_recorder: &mut backend.trace_recorder,
             expr_builder: backend.expr_builder.clone(),
-            location,
+            location: backend
+                .call_stack_manager
+                .current_func()
+                .body_id
+                .at_basic_block(location),
         }
     }
 }
@@ -775,12 +779,17 @@ impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
     fn before_call(
         self,
         def: CalleeDef,
-        call_site: BasicBlockLocation,
+        call_site: BasicBlockIndex,
         func: Self::Operand,
         args: impl Iterator<Item = Self::Arg>,
         are_args_tupled: bool,
     ) {
-        self.trace_recorder.start_call(call_site);
+        self.trace_recorder.start_call(
+            self.call_stack_manager
+                .current_func()
+                .body_id
+                .at_basic_block(call_site),
+        );
         self.call_stack_manager
             .prepare_for_call(def, func, args.collect(), are_args_tupled);
     }
@@ -821,8 +830,13 @@ impl<'a> FunctionHandler for BasicFunctionHandler<'a> {
     }
 
     #[inline]
-    fn ret(self, ret_point: BasicBlockLocation) {
-        self.trace_recorder.start_return(ret_point);
+    fn ret(self, ret_point: BasicBlockIndex) {
+        self.trace_recorder.start_return(
+            self.call_stack_manager
+                .current_func()
+                .body_id
+                .at_basic_block(ret_point),
+        );
         self.call_stack_manager.pop_stack_frame();
     }
 
@@ -1040,6 +1054,8 @@ trait GenericCallStackManager {
     fn finalize_call(&mut self, result_dest: Self::Place) -> CallFlowSanity;
 
     fn top(&mut self) -> &mut Self::VariablesState;
+
+    fn current_func(&self) -> FuncDef;
 }
 
 trait GenericUntupleHelper {

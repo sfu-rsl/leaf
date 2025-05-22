@@ -1,4 +1,4 @@
-.type Node = unsigned
+.type Node = symbol
 
 .decl Edge(u: Node, v: Node)
 .input Edge(IO=file, delimiter=",")

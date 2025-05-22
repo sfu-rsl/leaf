@@ -130,7 +130,6 @@ impl Display for UnaryOp {
     }
 }
 
-
 impl Display for ValueType {
     fn fmt(&self, f: &mut Formatter) -> Result {
         match self {

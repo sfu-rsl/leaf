@@ -78,12 +78,12 @@ where
         log_debug!(
             "target: {} Visiting MIR body before transformation {:#?}",
             target!(),
-            body.source.def_id(),
+            body.source.instance,
         );
         log_debug!(
             target: TAG_OBJECTS,
             "MIR body of {:?} (before):\n{}",
-            body.source.def_id(),
+            body.source.instance,
             tcx.pretty_mir(body),
         );
         T::visit_mir_body_before(tcx, body, storage)
@@ -97,12 +97,12 @@ where
         log_debug!(
             "target: {} Visiting MIR body after transformation {:#?}",
             target!(),
-            body.source.def_id(),
+            body.source.instance,
         );
         log_debug!(
             target: TAG_OBJECTS,
             "MIR body {:?} (after):\n{}",
-            body.source.def_id(),
+            body.source.instance,
             tcx.pretty_mir(body),
         );
         T::visit_mir_body_after(tcx, body, storage)

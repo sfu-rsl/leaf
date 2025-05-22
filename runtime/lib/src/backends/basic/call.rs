@@ -124,6 +124,9 @@ pub(super) struct CallStackFrame {
     /// destination variable.
     overridden_return_val: Option<ValueRef>,
     return_val_place: Option<DeterPlaceValueRef>,
+    def: Option<FuncDef>,
+}
+
 }
 
 #[derive(Debug)]
@@ -380,6 +383,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity {
         let arg_places = core::mem::replace(&mut self.arg_places, Default::default());
         let call_stack_frame = CallStackFrame {
+            def: Some(current_func),
             return_val_place: self.return_val_place.take(),
             ..Default::default()
         };
@@ -507,6 +511,14 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     fn top(&mut self) -> &mut VS {
         &mut self.vars_state
     }
+
+    fn current_func(&self) -> FuncDef {
+        self.stack
+            .last()
+            .and_then(|f| f.def.clone())
+            .expect("Current function is not set")
+    }
+}
 }
 
 impl PartialEq<CalleeDef> for FuncDef {

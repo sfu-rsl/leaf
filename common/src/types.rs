@@ -14,6 +14,9 @@ pub type TypeId = NonZero<u128>;
 
 pub type AssignmentId = u16;
 
+// FIXME: Convert to enum
+pub type InstanceKindDiscr = u8;
+
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(C)]
@@ -23,6 +26,7 @@ pub type AssignmentId = u16;
     derive(Debug, Hash, PartialEq, Eq),
     compare(PartialEq),
 ))]
+// FIXME: a u32 for the crate number seems to be unnecessarily large.
 pub struct DefId(pub u32, pub u32);
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 impl core::fmt::Display for DefId {
@@ -31,11 +35,31 @@ impl core::fmt::Display for DefId {
     }
 }
 
+/// An identifier for a possibly generic MIR body.
+/// While this discriminates shims from their original bodies, still different
+/// (monomorphized) instances of them are indistinguishable
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[repr(C)]
+#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize))]
+#[cfg_attr(feature = "rkyv",rkyv(
+    // Derives can be passed through to the generated type:
+    derive(Debug, Hash, PartialEq, Eq),
+    compare(PartialEq),
+))]
+pub struct InstanceKindId(pub InstanceKindDiscr, pub DefId);
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+impl core::fmt::Display for InstanceKindId {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "Instance({}-{})", self.0, self.1)
+    }
+}
+
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 #[repr(C)]
 pub struct BasicBlockLocation {
-    pub body: DefId,
+    pub body: InstanceKindId,
     pub index: BasicBlockIndex,
 }
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
@@ -73,7 +97,7 @@ pub struct CalleeDef {
 pub struct FuncDef {
     pub static_addr: RawAddress,
     pub as_dyn_method: Option<(DynRawMetadata, u64)>,
-    pub def_id: DefId,
+    pub body_id: InstanceKindId,
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
@@ -81,7 +105,7 @@ pub struct FuncDef {
 pub mod trace {
     use std::{vec, vec::Vec};
 
-    use super::{BasicBlockLocation, DefId};
+    use super::{BasicBlockLocation, InstanceKindId};
 
     #[derive(Debug, Clone)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -248,12 +272,12 @@ pub mod trace {
     pub enum ExeTraceRecord<C> {
         Call {
             from: BasicBlockLocation,
-            to: DefId,
+            to: InstanceKindId,
             broken: bool,
         },
         Return {
             from: BasicBlockLocation,
-            to: DefId,
+            to: InstanceKindId,
             broken: bool,
         },
         Branch {
@@ -327,3 +351,6 @@ pub mod trace {
         }
     }
 }
+
+#[cfg(feature = "std")]
+pub type AdjListGraph<V, E> = std::collections::HashMap<V, std::vec::Vec<E>>;

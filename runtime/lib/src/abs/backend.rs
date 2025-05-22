@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use super::{
-    AssertKind, AssignmentId, BasicBlockLocation, BinaryOp, CalleeDef, CastKind, Constraint,
-    ConstraintKind, FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection, SymVariable, Tag,
-    TypeId, UnaryOp, ValueType, VariantIndex,
+    AssertKind, AssignmentId, BasicBlockIndex, BasicBlockLocation, BinaryOp, CalleeDef, CastKind,
+    Constraint, ConstraintKind, FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection,
+    SymVariable, Tag, TypeId, UnaryOp, ValueType, VariantIndex,
 };
 
 pub(crate) trait RuntimeBackend: Shutdown {
@@ -47,7 +47,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a>;
 
-    fn constraint_at(&mut self, location: BasicBlockLocation) -> Self::ConstraintHandler<'_>;
+    fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_>;
 
     fn func_control(&mut self) -> Self::FunctionHandler<'_>;
 
@@ -237,7 +237,7 @@ pub(crate) trait FunctionHandler {
     fn before_call(
         self,
         def: CalleeDef,
-        call_site: BasicBlockLocation,
+        call_site: BasicBlockIndex,
         func: Self::Operand,
         args: impl Iterator<Item = Self::Arg>,
         are_args_tupled: bool,
@@ -253,7 +253,7 @@ pub(crate) trait FunctionHandler {
 
     fn override_return_value(self, value: Self::Operand);
 
-    fn ret(self, ret_point: BasicBlockLocation);
+    fn ret(self, ret_point: BasicBlockIndex);
 
     fn after_call(self, result_dest: Self::Place);
 

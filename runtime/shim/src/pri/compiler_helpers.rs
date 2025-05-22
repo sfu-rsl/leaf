@@ -4,6 +4,8 @@ use core::{
     ops::{CoerceUnsized, Deref},
 };
 
+use common::types::{InstanceKindDiscr, InstanceKindId};
+
 use super::common::{
     self,
     pri::*,
@@ -53,11 +55,15 @@ static _TYPE_ID_OF_REFERENCER: fn() -> TypeId = type_id_of::<u32>;
 static _SIZE_OF_REFERENCER: fn() -> TypeSize = size_of::<u32>;
 
 #[used]
-static _BASIC_BLOCK_LOCATION_REFERENCER: fn(u32, u32, BasicBlockIndex) -> BasicBlockLocation =
-    basic_block_location;
+static _BASIC_BLOCK_LOCATION_REFERENCER: fn(
+    InstanceKindDiscr,
+    u32,
+    u32,
+    BasicBlockIndex,
+) -> BasicBlockLocation = basic_block_location;
 
 #[used]
-static _SWITCH_INFO_REFERENCER: fn(BasicBlockLocation, OperandRef) -> SwitchInfo = switch_info;
+static _SWITCH_INFO_REFERENCER: fn(BasicBlockIndex, OperandRef) -> SwitchInfo = switch_info;
 
 #[used]
 static _CONST_BINARY_OP_OF_REFERENCER: fn(u8) -> BinaryOp = const_binary_op_of;
@@ -109,12 +115,13 @@ pub const fn size_of<T>() -> TypeSize {
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
 pub const fn basic_block_location(
+    instance_kind_discr: InstanceKindDiscr,
     crate_id: u32,
     body_id: u32,
     index: BasicBlockIndex,
 ) -> BasicBlockLocation {
     BasicBlockLocation {
-        body: DefId(crate_id, body_id),
+        body: InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
         index,
     }
 }
@@ -122,10 +129,7 @@ pub const fn basic_block_location(
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
-pub const fn switch_info(
-    node_location: BasicBlockLocation,
-    discriminant: OperandRef,
-) -> SwitchInfo {
+pub const fn switch_info(node_location: BasicBlockIndex, discriminant: OperandRef) -> SwitchInfo {
     SwitchInfo {
         node_location,
         discriminant,
@@ -136,7 +140,7 @@ pub const fn switch_info(
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
 pub const fn assertion_info(
-    location: BasicBlockLocation,
+    location: BasicBlockIndex,
     condition: OperandRef,
     expected: bool,
 ) -> AssertionInfo {
@@ -178,11 +182,16 @@ pub fn callee_def_maybe_virtual<F: FnPtr, R: ?Sized>(
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-pub fn func_def_static<F: FnPtr>(addr: F, crate_id: u32, body_id: u32) -> FuncDef {
+pub fn func_def_static<F: FnPtr>(
+    addr: F,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+) -> FuncDef {
     FuncDef {
         static_addr: addr.addr(),
         as_dyn_method: None,
-        def_id: DefId(crate_id, body_id),
+        body_id: InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
     }
 }
 
@@ -191,6 +200,7 @@ pub fn func_def_dyn_method<F: FnPtr, T: ?Sized, Dyn: ?Sized>(
     static_addr: F,
     receiver_ptr: *const T,
     identifier: u64,
+    instance_kind_discr: InstanceKindDiscr,
     crate_id: u32,
     body_id: u32,
 ) -> FuncDef
@@ -210,7 +220,7 @@ where
             },
             identifier,
         )),
-        def_id: DefId(crate_id, body_id),
+        body_id: InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
     }
 }
 

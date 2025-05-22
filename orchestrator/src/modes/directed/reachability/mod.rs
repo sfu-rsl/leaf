@@ -5,7 +5,7 @@ use derive_more as dm;
 
 use common::{
     log_debug, log_trace,
-    pri::{BasicBlockIndex, DefId},
+    types::{BasicBlockIndex, InstanceKindId as BodyId},
 };
 
 pub(crate) trait QSet<T> {
@@ -34,11 +34,11 @@ pub(crate) trait ReachabilityBiMap<S, D = S> {
 }
 
 pub(crate) trait ProgramReachability {
-    fn fn_call(&self) -> &impl ReachabilityBiMap<DefId, DefId>;
+    fn fn_call(&self) -> &impl ReachabilityBiMap<BodyId, BodyId>;
 
     fn cfg<'a>(
         &'a self,
-        id: DefId,
+        id: BodyId,
     ) -> Option<&'a impl ReachabilityBiMap<BasicBlockIndex, BasicBlockIndex>>;
 }
 

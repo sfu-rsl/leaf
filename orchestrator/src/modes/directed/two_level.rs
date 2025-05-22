@@ -6,12 +6,12 @@ use common::{
     directed::{CallGraph, ControlFlowGraph, ProgramMap},
     log_trace,
     pri::{BasicBlockIndex, BasicBlockLocation},
-    types::DefId,
+    types::InstanceKindId,
 };
 
 use crate::{ProgramReachability, SwitchStep, utils::from_pinned_coroutine};
 
-type Function = DefId;
+type Function = InstanceKindId;
 type BasicBlock = BasicBlockIndex;
 
 #[derive(Debug, dm::From)]
@@ -341,7 +341,7 @@ mod next {
     pub(super) fn make_next_bb_finder<'a, 'b>(
         p_map: &'a ProgramMap,
         reachability: &'b impl ProgramReachability,
-        current_fn: DefId,
+        current_fn: Function,
     ) -> impl NextStepFinder<Node = BasicBlock> {
         let Some(graph) = p_map.cfgs.get(&current_fn) else {
             log_warn!("Missing CFG in program map: {current_fn}");

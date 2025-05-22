@@ -1,7 +1,7 @@
 use super::utils::{DefaultRefManager, RefManager};
 use super::{AssignmentId, OperandRef, PlaceHandler, PlaceRef, SwitchInfo};
 use crate::abs::{
-    BasicBlockLocation, PlaceUsage,
+    BasicBlockIndex, PlaceUsage,
     backend::{
         AssignmentHandler, ConstraintHandler, OperandHandler, PlaceBuilder, RuntimeBackend,
         Shutdown,
@@ -170,7 +170,7 @@ pub(super) fn memory<T>(
 }
 
 pub(super) fn constraint_at<T>(
-    location: BasicBlockLocation,
+    location: BasicBlockIndex,
     constraint_action: impl FnOnce(<BackendImpl as RuntimeBackend>::ConstraintHandler<'_>) -> T,
 ) -> T {
     perform_on_backend(|r| {

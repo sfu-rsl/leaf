@@ -26,17 +26,19 @@ macro_rules! chain {
 pub(crate) use chain;
 
 pub(crate) mod mir {
-    use common::types::InstanceKindDiscr;
     use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
     use rustc_middle::{
         mir::{Body, Location, Statement, Terminator},
-        ty::{InstanceKind, TyCtxt, TypingMode},
+        ty::{InstanceKind, TyCtxt, TypingEnv, TypingMode},
     };
     use rustc_span::def_id::{DefId, LocalDefId};
+
+    use common::types::{InstanceKindDiscr, InstanceKindId};
 
     pub(crate) trait TyCtxtExt<'tcx> {
         fn is_llvm_intrinsic(self, def_id: DefId) -> bool;
         fn module_of(self, def_id: DefId) -> impl Iterator<Item = DisambiguatedDefPathData>;
+        fn typing_env_in_body(self, def_id: DefId) -> TypingEnv<'tcx>;
         fn typing_mode_for_body(self, def_id: LocalDefId) -> TypingMode<'tcx>;
         fn pretty_mir(self, body: &Body<'tcx>) -> String;
     }
@@ -57,6 +59,19 @@ pub(crate) mod mir {
                 .data
                 .into_iter()
                 .take_while(|p| matches!(p.data, DefPathData::TypeNs(_)))
+        }
+
+        fn typing_env_in_body(self, def_id: DefId) -> TypingEnv<'tcx> {
+            TypingEnv {
+                typing_mode: if let Some(def_id) = def_id.as_local() {
+                    self.typing_mode_for_body(def_id)
+                } else {
+                    // It looks like that the type will be resolved at the crate level,
+                    // so for external bodies they should be already resolved.
+                    TypingMode::non_body_analysis()
+                },
+                param_env: self.param_env(def_id),
+            }
         }
 
         // A safe wrapper around `opaque_types_defined_by`
@@ -161,6 +176,8 @@ pub(crate) mod mir {
     pub(crate) trait InstanceKindExt<'tcx> {
         /// Returns a unique identifier for the variant of this kind.
         fn discriminant(&self) -> InstanceKindDiscr;
+
+        fn to_plain_id(self) -> InstanceKindId;
     }
 
     impl<'tcx> InstanceKindExt<'tcx> for InstanceKind<'tcx> {
@@ -180,6 +197,14 @@ pub(crate) mod mir {
                 InstanceKind::FnPtrAddrShim(..) => 11,
                 InstanceKind::AsyncDropGlueCtorShim(..) => 12,
             }
+        }
+
+        fn to_plain_id(self) -> InstanceKindId {
+            let def_id = self.def_id();
+            InstanceKindId(
+                self.discriminant(),
+                common::types::DefId(def_id.krate.as_u32(), def_id.index.as_u32()),
+            )
         }
     }
 }

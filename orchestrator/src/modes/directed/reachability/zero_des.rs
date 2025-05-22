@@ -109,18 +109,18 @@ where
 
 #[derive(Archive, Serialize)]
 pub(crate) struct ProgramReachabilityPlainImpl {
-    pub call: PlainBiMap<DefId, DefId>,
-    pub cfgs: MapImpl<DefId, PlainBiMap<BasicBlockIndex, BasicBlockIndex>>,
+    pub call: PlainBiMap<BodyId, BodyId>,
+    pub cfgs: MapImpl<BodyId, PlainBiMap<BasicBlockIndex, BasicBlockIndex>>,
 }
 
 impl ProgramReachability for ProgramReachabilityPlainImpl {
-    fn fn_call(&self) -> &impl ReachabilityBiMap<DefId, DefId> {
+    fn fn_call(&self) -> &impl ReachabilityBiMap<BodyId, BodyId> {
         &self.call
     }
 
     fn cfg<'a>(
         &'a self,
-        id: DefId,
+        id: BodyId,
     ) -> Option<&'a impl ReachabilityBiMap<BasicBlockIndex, BasicBlockIndex>> {
         self.cfgs.get(&id)
     }
@@ -137,26 +137,26 @@ impl Deref for OwnedArchivedProgramReachabilityPlainImpl {
 }
 
 impl ProgramReachability for OwnedArchivedProgramReachabilityPlainImpl {
-    fn fn_call(&self) -> &impl ReachabilityBiMap<DefId, DefId> {
+    fn fn_call(&self) -> &impl ReachabilityBiMap<BodyId, BodyId> {
         self.deref().fn_call()
     }
 
     fn cfg<'a>(
         &'a self,
-        id: DefId,
+        id: BodyId,
     ) -> Option<&'a impl ReachabilityBiMap<BasicBlockIndex, BasicBlockIndex>> {
         self.deref().cfg(id)
     }
 }
 
 impl ProgramReachability for ArchivedProgramReachabilityPlainImpl {
-    fn fn_call(&self) -> &impl ReachabilityBiMap<DefId, DefId> {
+    fn fn_call(&self) -> &impl ReachabilityBiMap<BodyId, BodyId> {
         &self.call
     }
 
     fn cfg<'a>(
         &'a self,
-        id: DefId,
+        id: BodyId,
     ) -> Option<&'a impl ReachabilityBiMap<BasicBlockIndex, BasicBlockIndex>> {
         self.cfgs.get(&id.into())
     }

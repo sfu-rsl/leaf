@@ -5,6 +5,7 @@ pub(crate) mod backend;
 pub(crate) mod expr;
 pub(crate) mod fmt;
 pub(crate) mod place;
+pub(crate) mod utils;
 
 pub(crate) use common::pri::Tag;
 pub(crate) use common::types::trace::*;

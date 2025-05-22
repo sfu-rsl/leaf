@@ -3,10 +3,8 @@ use std::{collections::HashMap, path::Path, string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
-pub use super::types::{BasicBlockIndex, DefId};
+pub use super::types::{AdjListGraph, BasicBlockIndex, InstanceKindId};
 use super::utils::MessagedError;
-
-type AdjListGraph<V, E> = HashMap<V, Vec<E>>;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum CfgConstraint {
@@ -17,7 +15,7 @@ pub enum CfgConstraint {
 pub type CfgEdgeDestination = (BasicBlockIndex, Option<CfgConstraint>); // Target, Possible constraint
 pub type ControlFlowGraph = AdjListGraph<BasicBlockIndex, CfgEdgeDestination>;
 pub type CallGraphEdgeDestination<I> = (BasicBlockIndex, I);
-pub type CallGraph<I = DefId> = AdjListGraph<I, CallGraphEdgeDestination<I>>;
+pub type CallGraph<I = InstanceKindId> = AdjListGraph<I, CallGraphEdgeDestination<I>>;
 
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct DebugInfo<I: Eq + Hash> {
@@ -25,7 +23,7 @@ pub struct DebugInfo<I: Eq + Hash> {
 }
 
 #[derive(Default, Clone, Serialize, Deserialize)]
-pub struct ProgramMap<I: Eq + Hash = DefId> {
+pub struct ProgramMap<I: Eq + Hash = InstanceKindId> {
     pub cfgs: HashMap<I, ControlFlowGraph>,
     pub ret_points: HashMap<I, Vec<BasicBlockIndex>>,
     pub call_graph: CallGraph<I>,

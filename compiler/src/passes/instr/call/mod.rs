@@ -495,71 +495,8 @@ mod implementation {
     where
         C: context::BodyProvider<'tcx> + context::TyContextProvider<'tcx> + HasLocalDecls<'tcx>,
     {
-        fn current_func_ty(&self) -> Ty<'tcx> {
-            let source = self.context.body().source;
-            log_debug!(
-                "Creating operand of current function: {}",
-                source.to_log_str(),
-            );
-
-            let tcx = self.tcx();
-
-            use mir_ty::InstanceKind::*;
-            let fn_def_ty = match source.instance {
-                Item(def_id) => {
-                    let ty = tcx.type_of(def_id).instantiate_identity();
-                    match ty.kind() {
-                        TyKind::FnDef(..) => ty,
-                        TyKind::Closure(..) => ty::fn_def_of_closure_call(tcx, ty),
-                        TyKind::Coroutine(def_id, ..) => {
-                            use rustc_hir::{CoroutineDesugaring::*, CoroutineKind::*};
-                            match tcx.coroutine_kind(*def_id).unwrap() {
-                                Coroutine(..) => ty::fn_def_of_coroutine_resume(tcx, ty),
-                                Desugared(Async, ..) => ty::fn_def_of_coroutine_await(tcx, ty),
-                                Desugared(des, ..) => unimplemented!(
-                                    "This type of coroutine is unstable and currently out of scope: {:?}, source: {:?}",
-                                    des,
-                                    ty,
-                                ),
-                            }
-                        }
-                        _ => unreachable!("Unexpected type for body instance: {:?}", ty),
-                    }
-                }
-                ReifyShim(def_id, _) => tcx.type_of(def_id).instantiate_identity(),
-                FnPtrShim(fn_trait_fn_id, fn_ptr_ty) => {
-                    ty::fn_def_of_fn_ptr_shim(tcx, fn_trait_fn_id, fn_ptr_ty)
-                }
-                ClosureOnceShim { call_once, .. } => {
-                    let arg_tys = self
-                        .body()
-                        .args_iter()
-                        .map(|local| self.local_decls()[local].ty)
-                        .collect::<Vec<_>>();
-                    ty::fn_def_of_closure_once_shim(tcx, call_once, &arg_tys)
-                }
-                CloneShim(clone_fn_id, self_ty) => {
-                    ty::fn_def_of_clone_shim(tcx, clone_fn_id, self_ty)
-                }
-                instance @ _ => unreachable!("Unsupported instance: {:?}", instance),
-            };
-
-            debug_assert_matches!(fn_def_ty.kind(), TyKind::FnDef(..));
-            fn_def_ty
-        }
-
         fn current_typing_env(&self) -> mir_ty::TypingEnv<'tcx> {
-            let body_def_id = self.current_func_id();
-            mir_ty::TypingEnv {
-                typing_mode: if let Some(body_def_id) = body_def_id.as_local() {
-                    self.tcx().typing_mode_for_body(body_def_id)
-                } else {
-                    // It looks like that the type will be resolved at the crate level,
-                    // so for external bodies they should be already resolved.
-                    mir_ty::TypingMode::non_body_analysis()
-                },
-                param_env: self.context.tcx().param_env(self.current_func_id()),
-            }
+            self.tcx().typing_env_in_body(self.current_func_id())
         }
     }
 
@@ -680,6 +617,7 @@ mod implementation {
             args: Vec<Operand<'tcx>>,
             target: Option<BasicBlock>,
         ) -> (BasicBlockData<'tcx>, Local) {
+            assert_eq!(func_info.num_inputs(self.tcx()), args.len());
             let generic_args = generic_args.into_iter().collect::<Vec<_>>();
             let result_local = self.context.add_local((
                 func_info.ret_ty(self.tcx(), &generic_args),
@@ -1717,14 +1655,13 @@ mod implementation {
         C: ForBranching<'tcx>,
     {
         fn store_branching_info(&mut self, discr: &Operand<'tcx>) -> SwitchInfo<'tcx> {
-            let loc_local = self.add_bb_for_basic_block_orig_location();
             let discr_ref = self.reference_operand(discr);
 
             let (info_block, info_local) = self.make_bb_for_helper_call_with_all(
                 self.context.pri_helper_funcs().switch_info,
                 [],
                 vec![
-                    operand::move_for_local(loc_local.into()),
+                    self.original_bb_index_as_arg(),
                     operand::move_for_local(discr_ref.into()),
                 ],
                 Default::default(),
@@ -1740,12 +1677,11 @@ mod implementation {
 
     impl<'tcx, C> RuntimeCallAdder<C>
     where
-        Self: MirCallAdder<'tcx> + BlockInserter<'tcx> + BodyProvider<'tcx>,
+        Self: BodyProvider<'tcx>,
         C: BaseContext<'tcx> + BlockIndexProvider + BlockOriginalIndexProvider,
     {
-        fn add_bb_for_basic_block_orig_location(&mut self) -> Local {
+        fn original_bb_index_as_arg(&self) -> Operand<'tcx> {
             let tcx = self.tcx();
-            let def_id = self.body().source.def_id();
             let current = self.context.block_index();
             let bb_index = self
                 .context
@@ -1757,18 +1693,7 @@ mod implementation {
                         self.body().basic_blocks.get(current),
                     )
                 });
-            let (block, local) = self.make_bb_for_helper_call_with_all(
-                self.context.pri_helper_funcs().basic_block_location,
-                [],
-                vec![
-                    operand::const_from_uint(tcx, def_id.krate.as_u32()),
-                    operand::const_from_uint(tcx, def_id.index.as_u32()),
-                    operand::const_from_uint(tcx, bb_index.as_u32()),
-                ],
-                Default::default(),
-            );
-            self.insert_blocks([block]);
-            local
+            operand::const_from_uint(tcx, bb_index.as_u32())
         }
     }
 
@@ -1943,8 +1868,6 @@ mod implementation {
                 def_local
             };
 
-            let loc_local = self.add_bb_for_basic_block_orig_location();
-
             let func_ref = self.reference_operand(func);
 
             let arg_refs = args
@@ -1966,7 +1889,7 @@ mod implementation {
 
             let mut block = self.make_bb_for_call(sym::before_call_func, vec![
                 operand::move_for_local(def_local),
-                operand::move_for_local(loc_local),
+                self.original_bb_index_as_arg(),
                 operand::move_for_local(func_ref.into()),
                 operand::move_for_local(arguments_local),
                 operand::const_from_bool(tcx, are_args_tupled),
@@ -1985,13 +1908,12 @@ mod implementation {
         fn enter_func(&mut self) {
             let tcx = self.tcx();
             let mut blocks = vec![];
-            let fn_def_ty = self.current_func_ty();
 
-            self.debug_info(&format!("{}", fn_def_ty));
+            self.debug_info(&format!("{}", func::body_func_ty(tcx, self.body())));
 
             let def_local = {
                 let BlocksAndResult(def_blocks, def_local) =
-                    func::definition_of_func(tcx, self, fn_def_ty, self.current_typing_env());
+                    func::definition_of_func(tcx, self, self.current_typing_env());
                 blocks.extend(def_blocks);
                 def_local
             };
@@ -2046,11 +1968,8 @@ mod implementation {
         }
 
         fn return_from_func(&mut self) {
-            let loc_local = self.add_bb_for_basic_block_orig_location();
             let block =
-                self.make_bb_for_call(sym::return_from_func, vec![operand::move_for_local(
-                    loc_local,
-                )]);
+                self.make_bb_for_call(sym::return_from_func, vec![self.original_bb_index_as_arg()]);
             self.insert_blocks([block]);
         }
 
@@ -2365,12 +2284,11 @@ mod implementation {
             };
 
             let (info_block, info_local) = {
-                let loc_local = self.add_bb_for_basic_block_orig_location();
                 self.make_bb_for_helper_call_with_all(
                     self.context.pri_helper_funcs().assertion_info,
                     [],
                     vec![
-                        operand::move_for_local(loc_local.into()),
+                        self.original_bb_index_as_arg(),
                         operand::move_for_local(cond.into()),
                         operand::const_from_bool(self.context.tcx(), expected),
                     ],
@@ -3071,11 +2989,61 @@ mod implementation {
         pub(super) mod func {
             use common::log_info;
             use mir_ty::{AssocItem, ExistentialTraitRef, TraitRef, TypingEnv};
+            use rustc_middle::ty::InstanceKind;
             use rustc_trait_selection::traits::is_vtable_safe_method;
 
-            use crate::passes::instr::decision::get_baked_dyn_def_rules;
+            use crate::{
+                passes::instr::decision::get_baked_dyn_def_rules, utils::mir::InstanceKindExt,
+            };
 
             use super::*;
+
+            pub fn body_func_ty<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Ty<'tcx> {
+                let source = body.source;
+                log_debug!("Creating type of current function: {}", source.to_log_str());
+
+                use mir_ty::InstanceKind::*;
+                let fn_def_ty = match source.instance {
+                    Item(def_id) => {
+                        let ty = tcx.type_of(def_id).instantiate_identity();
+                        match ty.kind() {
+                            TyKind::FnDef(..) => ty,
+                            TyKind::Closure(..) => ty::fn_def_of_closure_call(tcx, ty),
+                            TyKind::Coroutine(def_id, ..) => {
+                                use rustc_hir::{CoroutineDesugaring::*, CoroutineKind::*};
+                                match tcx.coroutine_kind(*def_id).unwrap() {
+                                    Coroutine(..) => ty::fn_def_of_coroutine_resume(tcx, ty),
+                                    Desugared(Async, ..) => ty::fn_def_of_coroutine_await(tcx, ty),
+                                    Desugared(des, ..) => unimplemented!(
+                                        "This type of coroutine is unstable and currently out of scope: {:?}, source: {:?}",
+                                        des,
+                                        ty,
+                                    ),
+                                }
+                            }
+                            _ => unreachable!("Unexpected type for body instance: {:?}", ty),
+                        }
+                    }
+                    ReifyShim(def_id, _) => tcx.type_of(def_id).instantiate_identity(),
+                    FnPtrShim(fn_trait_fn_id, fn_ptr_ty) => {
+                        ty::fn_def_of_fn_ptr_shim(tcx, fn_trait_fn_id, fn_ptr_ty)
+                    }
+                    ClosureOnceShim { call_once, .. } => {
+                        let arg_tys = body
+                            .args_iter()
+                            .map(|local| body.local_decls()[local].ty)
+                            .collect::<Vec<_>>();
+                        ty::fn_def_of_closure_once_shim(tcx, call_once, &arg_tys)
+                    }
+                    CloneShim(clone_fn_id, self_ty) => {
+                        ty::fn_def_of_clone_shim(tcx, clone_fn_id, self_ty)
+                    }
+                    instance @ _ => unreachable!("Unsupported instance: {:?}", instance),
+                };
+
+                debug_assert_matches!(fn_def_ty.kind(), TyKind::FnDef(..));
+                fn_def_ty
+            }
 
             pub fn definition_of_func<'tcx>(
                 tcx: TyCtxt<'tcx>,
@@ -3086,9 +3054,10 @@ mod implementation {
                          + PriItemsProvider<'tcx>
                          + StorageProvider
                      ),
-                fn_def_ty: Ty<'tcx>,
                 typing_env: mir_ty::TypingEnv<'tcx>,
             ) -> BlocksAndResult<'tcx> {
+                let instance_kind = call_adder.body().source.instance;
+                let fn_def_ty = body_func_ty(tcx, call_adder.body());
                 let TyKind::FnDef(def_id, generic_args) = *fn_def_ty.kind() else {
                     unreachable!(
                         "Expected function definition type but received: {}",
@@ -3109,19 +3078,20 @@ mod implementation {
                             "Dyn-compatible method will be defined as static: {:?}",
                             def_id
                         );
-                        def_of_static_func(tcx, call_adder, fn_value)
+                        def_of_static_func(tcx, call_adder, instance_kind, fn_value)
                     } else {
                         def_of_dyn_compatible_method(
                             tcx,
                             call_adder,
                             typing_env,
+                            instance_kind,
                             fn_value,
                             trait_ref,
                             trait_item.def_id,
                         )
                     }
                 } else {
-                    def_of_static_func(tcx, call_adder, fn_value)
+                    def_of_static_func(tcx, call_adder, instance_kind, fn_value)
                 }
             }
 
@@ -3130,6 +3100,7 @@ mod implementation {
                 call_adder: &mut (
                          impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>
                      ),
+                instance_kind: InstanceKind<'tcx>,
                 fn_value: Operand<'tcx>,
             ) -> BlocksAndResult<'tcx> {
                 let (fn_ptr_ty, fn_ptr_local, ptr_assignment) =
@@ -3140,7 +3111,7 @@ mod implementation {
                     vec![fn_ptr_ty.into()],
                     [
                         vec![operand::move_for_local(fn_ptr_local)],
-                        fn_def_id_operand_pair(tcx, &fn_value, call_adder).into(),
+                        instance_kind_id_operand_triple(tcx, instance_kind).into(),
                     ]
                     .concat(),
                     None,
@@ -3158,6 +3129,7 @@ mod implementation {
                          + PriItemsProvider<'tcx>
                      ),
                 typing_env: TypingEnv<'tcx>,
+                instance_kind: InstanceKind<'tcx>,
                 fn_value: Operand<'tcx>,
                 trait_ref: TraitRef<'tcx>,
                 method_id: DefId,
@@ -3201,7 +3173,7 @@ mod implementation {
                             operand::move_for_local(raw_ptr_of_receiver_local),
                             operand::const_from_uint(tcx, identifier),
                         ],
-                        fn_def_id_operand_pair(tcx, &fn_value, call_adder).into(),
+                        instance_kind_id_operand_triple(tcx, instance_kind).into(),
                     ]
                     .concat(),
                     None,
@@ -3522,23 +3494,26 @@ mod implementation {
                 true
             }
 
-            fn fn_def_id_operand_pair<'tcx>(
+            pub fn instance_kind_id_operand_triple<'tcx>(
                 tcx: TyCtxt<'tcx>,
-                fn_value: &Operand<'tcx>,
-                local_manager: &impl HasLocalDecls<'tcx>,
-            ) -> [Operand<'tcx>; 2] {
-                let fn_ty = fn_value.ty(local_manager, tcx);
-                let TyKind::FnDef(def_id, ..) = fn_ty.kind() else {
-                    unreachable!()
-                };
-                def_id_operand_pair(tcx, *def_id)
+                instance_kind: InstanceKind<'tcx>,
+            ) -> [Operand<'tcx>; 3] {
+                let def_id = def_id_operand_pair(tcx, instance_kind.def_id());
+                [
+                    operand::const_from_uint(tcx, instance_kind.discriminant()),
+                    def_id.0,
+                    def_id.1,
+                ]
             }
 
-            fn def_id_operand_pair<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> [Operand<'tcx>; 2] {
-                [
+            fn def_id_operand_pair<'tcx>(
+                tcx: TyCtxt<'tcx>,
+                def_id: DefId,
+            ) -> (Operand<'tcx>, Operand<'tcx>) {
+                (
                     operand::const_from_uint(tcx, def_id.krate.as_u32()),
                     operand::const_from_uint(tcx, def_id.index.as_u32()),
-                ]
+                )
             }
         }
 
@@ -3710,18 +3685,27 @@ mod implementation {
         }
 
         impl FunctionInfo {
+            pub(super) fn num_inputs<'tcx>(&self, tcx: TyCtxt<'tcx>) -> usize {
+                tcx.fn_sig(self.def_id)
+                    .skip_binder()
+                    .inputs()
+                    .skip_binder()
+                    .len()
+            }
+
             pub(super) fn ret_ty<'tcx>(
                 &self,
                 tcx: TyCtxt<'tcx>,
                 generic_args: &[GenericArg<'tcx>],
             ) -> Ty<'tcx> {
                 // FIXME: Check if additional caching can be beneficial
-                tcx.fn_sig(self.def_id).instantiate(tcx,    generic_args)
-            .output()
-            .no_bound_vars()
-            .expect(
-                "PRI functions are not expected to have bound vars (generics) for the return type.",
-            )
+                tcx.fn_sig(self.def_id)
+                    .instantiate(tcx, generic_args)
+                    .output()
+                    .no_bound_vars()
+                    .expect(
+                        "PRI functions are not expected to have bound vars (generics) for the return type.",
+                    )
             }
         }
     }

@@ -213,18 +213,18 @@ pub(crate) type ReachabilityImpl<S, D = S> = LazySrcDstReachabilityBiMap<DstSrcM
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub(crate) struct LazyConsProgramReachability {
-    call: ReachabilityImpl<DefId, DefId>,
-    cfgs: HashMap<DefId, ReachabilityImpl<BasicBlockIndex, BasicBlockIndex>>,
+    call: ReachabilityImpl<BodyId, BodyId>,
+    cfgs: HashMap<BodyId, ReachabilityImpl<BasicBlockIndex, BasicBlockIndex>>,
 }
 
 impl ProgramReachability for LazyConsProgramReachability {
-    fn fn_call(&self) -> &impl ReachabilityBiMap<DefId, DefId> {
+    fn fn_call(&self) -> &impl ReachabilityBiMap<BodyId, BodyId> {
         &self.call
     }
 
     fn cfg<'a>(
         &'a self,
-        id: DefId,
+        id: BodyId,
     ) -> Option<&'a impl ReachabilityBiMap<BasicBlockIndex, BasicBlockIndex>> {
         self.cfgs.get(&id)
     }

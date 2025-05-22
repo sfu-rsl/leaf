@@ -2,7 +2,10 @@ use futures::StreamExt;
 use tokio::{io::AsyncWriteExt, process::Command};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 
-use common::directed::ProgramMap;
+use common::{
+    directed::ProgramMap,
+    types::{DefId, InstanceKindDiscr, InstanceKindId},
+};
 
 use super::*;
 
@@ -12,10 +15,29 @@ pub(crate) async fn calc_program_reachability(p_map: &ProgramMap) -> ProgramReac
         .iter()
         .flat_map(|(caller, callees)| callees.iter().map(|(_, callee)| (*caller, *callee)));
 
+    fn encode_body_id(discr: InstanceKindDiscr, crate_num: u32, item_id: u32) -> u128 {
+        ((discr as u128) << (u32::BITS + u32::BITS))
+            | ((crate_num as u128) << u32::BITS)
+            | (item_id as u128)
+    }
+
+    fn decode_body_id(encoded: u128) -> (InstanceKindDiscr, (u32, u32)) {
+        (
+            ((encoded >> (u32::BITS + u32::BITS)) & (u8::MAX) as u128) as InstanceKindDiscr,
+            (
+                ((encoded >> u32::BITS) & (u32::MAX) as u128) as u32,
+                (encoded & (u32::MAX) as u128) as u32,
+            ),
+        )
+    }
+
     let call_reachability = calc_reachability(
         call_edges,
-        |def_id| ((def_id.0 as u64) << u32::BITS) + (def_id.1 as u64),
-        |id| DefId((id >> u32::BITS) as u32, (id & (u32::MAX) as u64) as u32),
+        |body_id| encode_body_id(body_id.0, body_id.1.0, body_id.1.1),
+        |id| {
+            let (discr, (crate_num, item_id)) = decode_body_id(id);
+            InstanceKindId(discr, DefId(crate_num, item_id))
+        },
     )
     .await;
 
@@ -37,7 +59,7 @@ pub(crate) async fn calc_program_reachability(p_map: &ProgramMap) -> ProgramReac
             let edges = cfg
                 .iter()
                 .flat_map(|(from, targets)| targets.iter().map(|(target, _)| (*from, *target)));
-            let reachability = calc_reachability(edges, |bb| *bb as u64, |bb| bb as u32).await;
+            let reachability = calc_reachability(edges, |bb| *bb as u128, |bb| bb as u32).await;
             (*def_id, reachability)
         })
         .buffer_unordered(std::thread::available_parallelism().unwrap().into())
@@ -58,8 +80,8 @@ pub(crate) async fn calc_program_reachability(p_map: &ProgramMap) -> ProgramReac
 #[tracing::instrument(level = "debug", skip_all)]
 fn executable_funcs(
     p_map: &ProgramMap,
-    call_reachability: &ReachabilityImpl<DefId, DefId>,
-) -> HashSet<DefId> {
+    call_reachability: &ReachabilityImpl<BodyId, BodyId>,
+) -> HashSet<BodyId> {
     let mut result = HashSet::with_capacity(p_map.call_graph.len());
     result.extend(p_map.entry_points.iter());
     /* NOTE: Because of inaccurate static information,
@@ -83,8 +105,8 @@ fn executable_funcs(
 
 async fn calc_reachability<N: Hash + Eq + Clone + 'static>(
     edges: impl Iterator<Item = (N, N)> + Send,
-    encode: impl Fn(&N) -> u64 + Send,
-    decode: impl Fn(u64) -> N,
+    encode: impl Fn(&N) -> u128 + Send,
+    decode: impl Fn(u128) -> N,
 ) -> ReachabilityImpl<N> {
     let relations = run_reachability_tool(edges.map(move |(u, v)| (encode(&u), encode(&v))))
         .await
@@ -94,8 +116,8 @@ async fn calc_reachability<N: Hash + Eq + Clone + 'static>(
 }
 
 async fn run_reachability_tool(
-    pairs: impl Iterator<Item = (u64, u64)>,
-) -> Result<Vec<(u64, u64)>, csv::Error> {
+    pairs: impl Iterator<Item = (u128, u128)>,
+) -> Result<Vec<(u128, u128)>, csv::Error> {
     use std::process::Stdio;
 
     const PATH_REACHABILITY_ANALYZER: &str = env!("LEAFO_TOOL_REACHABILITY"); // Provided by the build script

@@ -569,7 +569,7 @@ impl ProgramRuntimeInterface for BasicPri {
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn before_call_func(
         def: CalleeDef,
-        call_site: BasicBlockLocation,
+        call_site: BasicBlockIndex,
         func: OperandRef,
         args: &[OperandRef],
         are_args_tupled: bool,
@@ -616,7 +616,7 @@ impl ProgramRuntimeInterface for BasicPri {
         })
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
-    fn return_from_func(ret_point: BasicBlockLocation) {
+    fn return_from_func(ret_point: BasicBlockIndex) {
         func_control(|h| h.ret(ret_point))
     }
     /// Overrides (forces) the return value of a function.
