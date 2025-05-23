@@ -25,7 +25,7 @@ use common::{
 use trace::default_trace_querier;
 
 use crate::{
-    abs::{FuncDef, PlaceUsage, Tag, TypeId, backend::*},
+    abs::{FuncDef, PlaceUsage, SymVariable, Tag, TypeId, backend::*},
     utils::{RefView, alias::RRef},
 };
 
@@ -42,17 +42,11 @@ use self::{
     operand::BasicOperandHandler,
     place::BasicPlaceHandler,
     state::{BasicMemoryHandler, RawPointerVariableState, make_sym_place_handler},
-    sym_vars::SymVariablesManager,
+    sym_vars::BasicSymVariablesManager,
     trace::BasicExeTraceRecorder,
 };
 
 type BasicTraceManager = dyn alias::TraceManager;
-
-type BasicVariablesState = RawPointerVariableState<BasicSymExprBuilder>;
-
-type BasicCallStackManager = call::BasicCallStackManager<BasicVariablesState>;
-
-type BasicSymVariablesManager = sym_vars::BasicSymVariablesManager;
 
 pub(crate) use place::BasicPlaceBuilder;
 
@@ -220,6 +214,18 @@ impl Shutdown for BasicBackend {
 }
 
 use constraint::Constraint;
+
+trait SymVariablesManager {
+    fn add_variable(&mut self, var: SymVariable<Implied<ValueRef>>) -> SymValueRef;
+
+    fn iter_variables(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (&SymVarId, &SymValueRef, &ConcreteValueRef)>;
+
+    fn iter_concretization_constraints(
+        &self,
+    ) -> impl ExactSizeIterator<Item = (&SymVarId, &crate::abs::Constraint<SymValueRef, ConstValue>)>;
+}
 
 trait GenericVariablesState {
     type PlaceInfo;

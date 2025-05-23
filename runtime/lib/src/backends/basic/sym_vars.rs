@@ -6,22 +6,11 @@ use common::{log_info, types::trace::Constraint};
 
 use crate::abs::SymVariable;
 
-use super::{
-    ConcreteValue, ConcreteValueRef, Implied, SymValue, SymValueRef, SymVarId, SymbolicVar, Value,
-    ValueRef, expr::ConstValue,
+use crate::backends::basic as backend;
+use backend::{
+    ConcreteValue, ConcreteValueRef, Implied, SymValue, SymValueRef, SymVarId, SymVariablesManager,
+    SymbolicVar, Value, ValueRef, expr::ConstValue,
 };
-
-pub(super) trait SymVariablesManager {
-    fn add_variable(&mut self, var: SymVariable<Implied<ValueRef>>) -> SymValueRef;
-
-    fn iter_variables(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (&SymVarId, &SymValueRef, &ConcreteValueRef)>;
-
-    fn iter_concretization_constraints(
-        &self,
-    ) -> impl ExactSizeIterator<Item = (&SymVarId, &Constraint<SymValueRef, ConstValue>)>;
-}
 
 pub(super) struct BasicSymVariablesManager {
     variables: HashMap<SymVarId, (SymValueRef, ConcreteValueRef)>,

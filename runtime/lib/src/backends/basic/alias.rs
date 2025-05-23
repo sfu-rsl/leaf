@@ -139,3 +139,7 @@ pub(super) use super::constraint::Constraint as BasicConstraint;
 pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;
 pub(super) type BasicDecisionTraceRecorder =
     dyn DecisionTraceRecorder<Case = BasicConstraintDecisionCase>;
+
+pub(super) type BasicVariablesState = super::state::RawPointerVariableState<BasicSymExprBuilder>;
+
+pub(super) type BasicCallStackManager = super::call::BasicCallStackManager<BasicVariablesState>;

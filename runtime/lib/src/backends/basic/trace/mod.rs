@@ -24,10 +24,10 @@ use crate::{
 };
 
 use super::{
-    ConstValue, Implied, Solver, SymVarId, TraceManager, TraceQuerier, ValueRef,
+    ConstValue, Implied, Solver, SymVarId, SymVariablesManager, TraceManager, TraceQuerier,
+    ValueRef,
     config::{self, ExecutionTraceConfig, OutputConfig, SolverImpl, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
-    sym_vars::SymVariablesManager,
 };
 
 use dumping::*;
@@ -139,6 +139,14 @@ pub(super) fn create_trace_components(
         move |c: ConstValue| Translation::of(c, &mut case_translator),
     );
     let manager = core_manager;
+
+    let all_constraints_inspectors = trace_config
+        .preconditions_dump
+        .as_ref()
+        .map(|cfg| dumper::create_preconditions_dumper(cfg))
+        .map(|inspector| Box::new(inspector) as Box<dyn StepInspector<_, _, _>>)
+        .into_iter()
+        .collect::<Vec<_>>();
 
     let outer_agg_inspector = AggregatorStepInspector::default();
 
@@ -553,7 +561,11 @@ mod shutdown {
 use shutdown::TraceManagerExt as ShutdownTraceManagerExt;
 
 mod dumper {
-    use crate::{trace::StreamDumperStepInspector, utils::file::FileFormat};
+    use std::ops::Deref;
+
+    use crate::{
+        backends::basic::Precondition, trace::StreamDumperStepInspector, utils::file::FileFormat,
+    };
 
     use super::*;
 
@@ -593,6 +605,68 @@ mod dumper {
             let constraint =
                 constraint.map(|v| v.borrow().serializable(), |c| c.borrow().serializable());
             dumper_inspector.inspect(&step, constraint.as_ref());
+        };
+        inspector
+    }
+
+    pub(super) fn create_preconditions_dumper<'ctx, S, V, C>(
+        config: &OutputConfig,
+    ) -> impl StepInspector<S, V, C>
+    where
+        S: Borrow<Step> + HasIndex,
+        V: Borrow<Precondition>,
+    {
+        impl Serialize for Precondition {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                match self {
+                    Precondition::None | Precondition::Unknown => serializer.serialize_none(),
+                    Precondition::Constraints(constraints) => {
+                        constraints.deref().serialize(serializer)
+                    }
+                }
+            }
+        }
+
+        let mut serializer = match config {
+            OutputConfig::File(cfg) => {
+                assert!(
+                    cfg.format.is_streamable(),
+                    "Only streamable formats are expected for symbolic constraints dumping"
+                );
+                match cfg.format {
+                    FileFormat::JsonLines => {
+                        const FILENAME_DEFAULT: &str = "discr_preconditions";
+                        let file = cfg
+                            .open_or_create_single(FILENAME_DEFAULT, true)
+                            .unwrap_or_else(|e| {
+                                panic!(
+                                    "Could not create file for symbolic constraints dumping: {e}"
+                                )
+                            });
+                        serde_json::Serializer::with_formatter(
+                            file,
+                            crate::utils::file::JsonLinesFormatter::default(),
+                        )
+                    }
+                    FileFormat::Binary | FileFormat::Json => unreachable!(),
+                }
+            }
+        };
+
+        let inspector = move |step: &S, constraint: Constraint<&V, &C>| {
+            let step: Indexed<Step> = (step.borrow().clone(), step.index()).into();
+            use serde::{Serializer, ser::SerializeStruct};
+            serializer
+                .serialize_struct("Record", 2)
+                .and_then(|mut rec_ser| {
+                    rec_ser.serialize_field(stringify!(step), &step)?;
+                    rec_ser.serialize_field("preconditions", constraint.discr.borrow())?;
+                    rec_ser.end()
+                })
+                .unwrap_or_else(|e| panic!("Could not dump step: {e}"));
         };
         inspector
     }
