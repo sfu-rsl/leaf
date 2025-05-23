@@ -6,14 +6,12 @@
 #![feature(result_flattening)]
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
-#![feature(const_float_bits_conv)]
 #![feature(btree_cursors)]
-#![feature(strict_provenance)]
 #![feature(core_intrinsics)]
-#![feature(exposed_provenance)]
 #![feature(iter_map_windows)]
 #![feature(path_add_extension)]
 #![feature(seek_stream_len)]
+#![feature(try_trait_v2)]
 
 pub mod abs;
 mod backends;

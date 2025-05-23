@@ -286,6 +286,17 @@ pub mod trace {
         },
     }
 
+    impl<C> ExeTraceRecord<C> {
+        #[inline]
+        pub fn location(&self) -> &BasicBlockLocation {
+            match self {
+                ExeTraceRecord::Call { from, .. } => from,
+                ExeTraceRecord::Return { from, .. } => from,
+                ExeTraceRecord::Branch { location, .. } => location,
+            }
+        }
+    }
+
     mod fmt {
         use core::fmt::{Display, Formatter, Result};
 

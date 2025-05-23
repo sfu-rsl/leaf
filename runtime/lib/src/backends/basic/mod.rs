@@ -2,8 +2,8 @@ mod alias;
 mod call;
 mod concrete;
 mod config;
-mod dependence;
 pub(crate) mod expr;
+mod implication;
 mod outgen;
 mod place;
 mod state;
@@ -23,7 +23,7 @@ use common::{
     pri::{AssignmentId, BasicBlockIndex},
     types::InstanceKindId,
 };
-use sym_vars::SymVariablesManager;
+use trace::default_trace_querier;
 
 use crate::{
     abs::{
@@ -45,17 +45,16 @@ use crate::{
 use self::{
     alias::{
         BasicImpliedExprBuilder, BasicSymExprBuilder, ImpliedValueRefExprBuilder,
-        ImpliedValueRefUnaryExprBuilder, TraceManager, TypeDatabase, ValueRefExprBuilderWrapper,
+        ImpliedValueRefUnaryExprBuilder, TraceManager, TypeDatabase,
     },
     concrete::BasicConcretizer,
     config::BasicBackendConfig,
-    dependence::{BasicProgramDependenceMap, Implied, Precondition},
     expr::{SymVarId, prelude::*},
+    implication::{Implied, Precondition, default_implication_investigator},
     place::PlaceMetadata,
     state::{RawPointerVariableState, make_sym_place_handler},
     sym_vars::SymVariablesManager,
-    trace::{BasicExeTraceRecorder, BasicTraceQuerier},
-    type_info::BasicTypeManager,
+    trace::BasicExeTraceRecorder,
 };
 
 type BasicTraceManager = dyn TraceManager;
@@ -79,6 +78,7 @@ pub struct BasicBackend {
     expr_builder: RRef<BasicImpliedExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeDatabase>,
+    implication_investigator: Rc<dyn ImplicationInvestigator>,
     tags: RRef<Vec<Tag>>,
 }
 
@@ -96,14 +96,15 @@ impl BasicBackend {
         let trace_recorder =
             BasicExeTraceRecorder::new(config.exe_trace.control_flow_dump.as_ref());
         let type_manager = type_manager_ref.clone();
-        let trace_manager_ref = Rc::new(RefCell::new(trace::new_trace_manager(
+        let (trace_manager, steps_view, constraints_view) = trace::create_trace_components(
             trace_recorder.counter.clone(),
             tags_ref.clone(),
             sym_var_manager.clone(),
             &config.exe_trace,
             &config.outputs,
             &config.solver,
-        )));
+        );
+        let trace_manager_ref = Rc::new(RefCell::new(trace_manager));
         let trace_manager = trace_manager_ref.clone();
 
         let sym_place_handler_factory = |s| {
@@ -116,6 +117,13 @@ impl BasicBackend {
         };
         let sym_read_handler_ref = sym_place_handler_factory(config.sym_place.read);
         let sym_write_handler_ref = sym_place_handler_factory(config.sym_place.write);
+
+        let trace_querier = Rc::new(default_trace_querier(
+            trace_recorder.records(),
+            steps_view,
+            constraints_view,
+        ));
+        let implication_investigator = Rc::new(default_implication_investigator(trace_querier));
 
         Self {
             call_stack_manager: BasicCallStackManager::new(
@@ -136,10 +144,11 @@ impl BasicBackend {
             trace_manager,
             trace_recorder,
             expr_builder: Rc::new(RefCell::new(expr::builders::to_implied_expr_builder(
-            expr_builder,
+                expr_builder,
             ))),
             sym_values: sym_var_manager.clone(),
             type_manager,
+            implication_investigator,
             tags: tags_ref.clone(),
         }
     }
@@ -309,20 +318,24 @@ impl OperandHandler for BasicOperandHandler<'_> {
 
 pub(crate) struct BasicAssignmentHandler<'s, EB: ImpliedValueRefExprBuilder> {
     id: AssignmentId,
+    current_func: InstanceKindId,
     dest: PlaceValueRef,
     vars_state: &'s mut dyn VariablesState,
     expr_builder: RRef<EB>,
     type_manager: &'s dyn TypeDatabase,
+    implication_investigator: &'s dyn ImplicationInvestigator,
 }
 
-impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
+impl<'s> BasicAssignmentHandler<'s, BasicImpliedExprBuilder> {
     fn new(id: AssignmentId, dest: PlaceValueRef, backend: &'s mut BasicBackend) -> Self {
         Self {
             id,
+            current_func: backend.call_stack_manager.current_func().body_id,
             dest,
             vars_state: backend.call_stack_manager.top(),
             expr_builder: backend.expr_builder.clone(),
             type_manager: backend.type_manager.as_ref(),
+            implication_investigator: backend.implication_investigator.as_ref(),
         }
     }
 }
@@ -339,12 +352,12 @@ impl<EB: ImpliedValueRefExprBuilder> AssignmentHandler for BasicAssignmentHandle
     fn repeat_of(mut self, operand: Self::Operand, count: usize) {
         self.set_value(operand.map_value(|value| {
             if value.is_symbolic() {
-            ConcreteValue::Array(ArrayValue {
-                elements: vec![value; count],
-            })
-            .into()
-        } else {
-            UnevalValue::Some.into()
+                ConcreteValue::Array(ArrayValue {
+                    elements: vec![value; count],
+                })
+                .into()
+            } else {
+                UnevalValue::Some.into()
             }
         }))
     }
@@ -417,13 +430,13 @@ impl<EB: ImpliedValueRefExprBuilder> AssignmentHandler for BasicAssignmentHandle
                 let tag_value = self.vars_state.copy_place(&tag_place);
                 if tag_value.is_symbolic() {
                     tag_value.map_value(|value| {
-                    self.build_discriminant_expr(
+                        self.build_discriminant_expr(
                             SymValueRef::new(value),
-                        tag_encoding,
-                        self.dest.type_info(),
-                        tag_place.type_info(),
-                    )
-                    .into()
+                            tag_encoding,
+                            self.dest.type_info(),
+                            tag_place.type_info(),
+                        )
+                        .into()
                     })
                 } else {
                     tag_value
@@ -505,18 +518,18 @@ impl<EB: ImpliedValueRefExprBuilder> AssignmentHandler for BasicAssignmentHandle
         let are_eq = self.expr_builder().eq((current.clone(), expected.clone()));
         let are_eq = if !are_eq.is_symbolic() {
             are_eq.map_value(|value| {
-            // As it will be abstracted to Some, we need to resolve them explicitly here.
+                // As it will be abstracted to Some, we need to resolve them explicitly here.
                 let current = ConcreteValueRef::new(current.value.clone())
                     .try_resolve_as_const(self.type_manager);
                 let expected =
                     ConcreteValueRef::new(expected.value).try_resolve_as_const(self.type_manager);
-            match (current, expected) {
-                (Some(current), Some(expected)) => {
-                    let are_eq = current == expected;
-                    ConstValue::Bool(are_eq).to_value_ref()
-                }
+                match (current, expected) {
+                    (Some(current), Some(expected)) => {
+                        let are_eq = current == expected;
+                        ConstValue::Bool(are_eq).to_value_ref()
+                    }
                     _ => value,
-            }
+                }
             })
         } else {
             are_eq
@@ -537,6 +550,10 @@ impl<EB: ImpliedValueRefExprBuilder> AssignmentHandler for BasicAssignmentHandle
 impl<EB: ImpliedValueRefExprBuilder> BasicAssignmentHandler<'_, EB> {
     #[inline]
     fn set(&mut self, mut value: Implied<ValueRef>) {
+        let antecedent = self
+            .implication_investigator
+            .antecedent_of_latest_assignment((self.current_func, self.id));
+        value.by.add_info(&antecedent);
         self.vars_state.set_place(&self.dest, value);
     }
 
@@ -1145,4 +1162,30 @@ impl<T> CallStackManager for T where
 {
 }
 
+trait ExeTraceStorage {
+    type Record;
+
+    fn records(&self) -> RefView<Vec<Self::Record>>;
+}
+
+trait TraceQuerier {
+    type Record;
+    type Constraint;
+
+    fn find_in_latest_call_of<'a>(
+        &'a self,
+        body_id: InstanceKindId,
+        predicate: impl FnMut(&Self::Record, &Self::Constraint) -> bool,
+    ) -> Option<impl AsRef<Self::Record> + AsRef<Self::Constraint>>;
+}
+
+trait TraceViewProvider<T> {
+    fn view(&self) -> RefView<Vec<T>>;
+}
+
+trait ImplicationInvestigator {
+    fn antecedent_of_latest_assignment(
+        &self,
+        assignment_id: (InstanceKindId, AssignmentId),
+    ) -> Precondition;
 }

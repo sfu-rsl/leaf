@@ -185,7 +185,7 @@ mod implementation {
                     }
                     index.index.clone()
                 },
-                |value| match value.as_ref() {
+                |value: &ValueRef| match value.as_ref() {
                     Value::Concrete(host) => SymbolicPlaceResult::Single(
                         DeterPlaceValueRef::new(
                             self.deref_concrete(host, pointee_type_id).to_value_ref(),

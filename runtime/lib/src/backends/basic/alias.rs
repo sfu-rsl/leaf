@@ -1,8 +1,9 @@
 use core::ops::DerefMut;
 
 use super::{
-    ConstValue, Implied, LazyTypeInfo,
+    ConstValue, ExeTraceStorage, Implied, LazyTypeInfo, TraceQuerier,
     expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
+    trace::BasicExeTraceRecorder,
 };
 use crate::abs::{
     self, FloatType, IntType, TypeId,
@@ -115,5 +116,20 @@ pub(crate) trait TraceManager:
 }
 impl<T> TraceManager for T where
     T: abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
+{
+}
+
+pub(super) trait BasicTraceQuerier:
+    TraceQuerier<
+        Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
+        Constraint = super::Constraint,
+    >
+{
+}
+impl<T> BasicTraceQuerier for T where
+    T: TraceQuerier<
+            Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
+            Constraint = super::Constraint,
+        >
 {
 }

@@ -20,11 +20,11 @@ use crate::{
         divergence::{DivergenceFilter, ImmediateDivergingAnswerFinder},
         sanity_check::ConstraintSanityChecker,
     },
-    utils::alias::RRef,
+    utils::{RefView, alias::RRef},
 };
 
 use super::{
-    ConstValue, Solver, SymVarId, TraceManager, ValueRef,
+    ConstValue, Implied, Solver, SymVarId, TraceManager, TraceQuerier, ValueRef,
     config::{self, ExecutionTraceConfig, OutputConfig, SolverImpl, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
     sym_vars::SymVariablesManager,
@@ -47,14 +47,18 @@ type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
 
 type StepCounter = RRef<usize>;
 
-pub(super) fn new_trace_manager(
+pub(super) fn create_trace_components(
     step_counter: StepCounter,
     tags: RRef<Vec<Tag>>,
     sym_var_manager: RRef<impl SymVariablesManager + 'static>,
     trace_config: &ExecutionTraceConfig,
     output_config: &Vec<OutputConfig>,
     solver_config: &SolverImpl,
-) -> impl TraceManager {
+) -> (
+    impl TraceManager,
+    RefView<Vec<Indexed<Step>>>,
+    RefView<Vec<super::Constraint>>,
+) {
     let (solver, translator) = match solver_config {
         SolverImpl::Z3 { config } => {
             crate::solvers::z3::set_global_params(
@@ -70,7 +74,7 @@ pub(super) fn new_trace_manager(
     let mut dumpers: Vec<Box<dyn Dumper>> = vec![];
 
     let mut cov_inspector = None;
-    let inspectors = trace_config
+    let sym_discr_inspectors = trace_config
         .inspectors
         .iter()
         .filter(|t| !is_inner_inspector(t))
@@ -138,17 +142,22 @@ pub(super) fn new_trace_manager(
 
     let outer_agg_inspector = AggregatorStepInspector::default();
 
+    let steps_view = outer_agg_inspector.steps();
+    let constraints_view = outer_agg_inspector.constraints();
+
     let dumpers_ref = Rc::new(RefCell::new(dumpers));
 
-    manager
+    let manager = manager
         .logged()
         .adapt_step(move |s| Tagged {
             value: s,
             tags: RefCell::borrow(&tags).clone(),
         })
-        .inspected_by(inspectors)
+        .inspected_by(sym_discr_inspectors)
         .filtered_by(|_, c| c.discr.is_symbolic())
+        .adapt_value(|discr: Implied<ValueRef>| discr.value)
         .inspected_by(outer_agg_inspector)
+        .inspected_by(all_constraints_inspectors)
         .adapt_step(move |s: Step| Indexed {
             index: *step_counter.as_ref().borrow(),
             value: s,
@@ -159,7 +168,9 @@ pub(super) fn new_trace_manager(
                 .dump_interval
                 .map(|i| Duration::from_secs(i.into())),
         ))
-        .on_shutdown(move || dump(&dumpers_ref))
+        .on_shutdown(move || dump(&dumpers_ref));
+
+    (manager, steps_view, constraints_view)
 }
 
 fn is_inner_inspector(t: &TraceInspectorType) -> bool {
@@ -807,12 +818,12 @@ mod helpers {
         }
     }
 
-    pub(super) trait HasIndex {
+    pub(crate) trait HasIndex {
         fn index(&self) -> usize;
     }
 
     #[derive(Clone, Copy, Debug, dm::Deref, dm::From, Serialize)]
-    pub(super) struct Indexed<T> {
+    pub(crate) struct Indexed<T> {
         #[deref]
         pub value: T,
         pub index: usize,
@@ -893,8 +904,8 @@ mod record {
             BasicBlockLocation, ConstraintKind, FuncDef,
             backend::{CallTraceRecorder, DecisionTraceRecorder, PhasedCallTraceRecorder},
         },
-        backends::basic::expr::ConstValue,
-        utils::file::JsonLinesFormatter,
+        backends::basic::{ExeTraceStorage, expr::ConstValue},
+        utils::{RefView, file::JsonLinesFormatter},
     };
 
     use super::*;
@@ -903,7 +914,7 @@ mod record {
 
     pub(crate) struct BasicExeTraceRecorder {
         pub(in super::super) counter: StepCounter,
-        records: Vec<Indexed<ExeTraceRecord>>,
+        records: RRef<Vec<Indexed<ExeTraceRecord>>>,
         stack: Vec<FuncDef>,
         last_call_site: Option<BasicBlockLocation>,
         last_ret_point: Option<BasicBlockLocation>,
@@ -936,6 +947,14 @@ mod record {
         }
     }
 
+    impl ExeTraceStorage for BasicExeTraceRecorder {
+        type Record = Indexed<ExeTraceRecord>;
+
+        fn records(&self) -> RefView<Vec<Self::Record>> {
+            self.records.clone().into()
+        }
+    }
+
     impl CallTraceRecorder for BasicExeTraceRecorder {
         fn notify_call(
             &mut self,
@@ -945,7 +964,7 @@ mod record {
         ) {
             self.notify_step(ExeTraceRecord::Call {
                 from: call_site,
-                to: entered_func.def_id,
+                to: entered_func.body_id,
                 broken,
             });
         }
@@ -958,7 +977,7 @@ mod record {
         ) {
             self.notify_step(ExeTraceRecord::Return {
                 from: ret_point,
-                to: caller_func.def_id,
+                to: caller_func.body_id,
                 broken,
             });
         }
@@ -1031,7 +1050,7 @@ mod record {
         fn notify_step(&mut self, record: ExeTraceRecord) {
             let counter = RRef::as_ref(&self.counter);
             *counter.borrow_mut() += 1;
-            self.records.push(Indexed {
+            self.records.borrow_mut().push(Indexed {
                 value: record,
                 index: *counter.borrow(),
             });
@@ -1044,6 +1063,8 @@ mod record {
             };
             let _ = self
                 .records
+                .as_ref()
+                .borrow()
                 .last()
                 .unwrap()
                 .serialize(serializer)
@@ -1052,3 +1073,6 @@ mod record {
     }
 }
 pub(crate) use record::BasicExeTraceRecorder;
+
+mod query;
+pub(crate) use query::default_trace_querier;

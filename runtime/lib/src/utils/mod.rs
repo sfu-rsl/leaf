@@ -35,6 +35,7 @@ pub(crate) trait InPlaceSelfHierarchical {
 }
 
 /// Guards a RefCell from mutable borrows.
+#[derive(dm::From)]
 pub(crate) struct RefView<T>(RRef<T>);
 
 impl<T> RefView<T> {
@@ -45,6 +46,15 @@ impl<T> RefView<T> {
     pub(crate) fn borrow(&self) -> impl Deref<Target = T> + '_ {
         self.0.borrow()
     }
+
+    pub(crate) fn borrow_map<'a, U: 'a>(
+        &'a self,
+        f: impl FnOnce(&T) -> &U,
+    ) -> impl Deref<Target = U> + 'a {
+        std::cell::Ref::map(self.0.borrow(), f)
+    }
+}
+
 pub(crate) trait RangeIntersection<T: PartialOrd> {
     fn is_overlapping(&self, other: &impl RangeBounds<T>) -> bool;
 
