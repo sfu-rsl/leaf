@@ -192,11 +192,11 @@ pub(super) fn switch<T>(
 }
 
 pub(super) fn func_control<T>(
-    func_action: impl FnOnce(<BackendImpl as RuntimeBackend>::FunctionHandler<'_>) -> T,
+    call_action: impl FnOnce(<BackendImpl as RuntimeBackend>::CallHandler<'_>) -> T,
 ) -> T {
     perform_on_backend(|r| {
-        let func_control = r.func_control();
-        func_action(func_control)
+        let call_control = r.call_control();
+        call_action(call_control)
     })
 }
 

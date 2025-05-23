@@ -4,9 +4,11 @@ use std::collections::HashMap;
 
 use common::{log_info, types::trace::Constraint};
 
+use crate::abs::SymVariable;
+
 use super::{
-    ConcreteValue, ConcreteValueRef, Implied, SymValue, SymValueRef, SymVarId, SymVariable,
-    SymbolicVar, Value, ValueRef, expr::ConstValue,
+    ConcreteValue, ConcreteValueRef, Implied, SymValue, SymValueRef, SymVarId, SymbolicVar, Value,
+    ValueRef, expr::ConstValue,
 };
 
 pub(super) trait SymVariablesManager {

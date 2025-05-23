@@ -229,6 +229,14 @@ impl ValueType {
             Self::Float(FloatType { e_bits, s_bits }) => NonZeroU64::new(e_bits + s_bits),
         }
     }
+
+    #[inline]
+    pub(crate) fn as_int(&self) -> Option<&IntType> {
+        match self {
+            Self::Int(ref int_type) => Some(int_type),
+            _ => None,
+        }
+    }
 }
 
 /* FIXME: These types will have a limited set of possible values. Thus they can be

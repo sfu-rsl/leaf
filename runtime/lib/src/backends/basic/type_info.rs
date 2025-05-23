@@ -1,13 +1,14 @@
 use delegate::delegate;
 
-use common::type_info::{CoreTypes, pass_core_type_names_to};
+use common::type_info::{CoreTypes, TypeInfo, pass_core_type_names_to};
 
 use crate::{
     abs::{IntType, backend::TypeDatabase},
     type_info,
 };
 
-use super::{CoreTypeProvider, LazyTypeInfo, TypeId, TypeInfo, ValueType};
+use crate::backends::basic as backend;
+use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, ValueType};
 
 pub(crate) struct BasicTypeManager<D: TypeDatabase<'static>> {
     inner: D,

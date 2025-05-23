@@ -93,8 +93,7 @@ where
 {
 }
 
-pub(crate) use super::expr::builders::DefaultExprBuilder as BasicExprBuilder;
-pub(crate) use super::expr::builders::DefaultImpliedExprBuilder as BasicImpliedExprBuilder;
+pub(crate) use super::expr::builders::DefaultImpliedExprBuilder as BasicExprBuilder;
 pub(crate) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
 
 pub(crate) trait TypeDatabase:
@@ -133,3 +132,10 @@ impl<T> BasicTraceQuerier for T where
         >
 {
 }
+
+pub(super) type BasicPlace = super::place::PlaceWithMetadata;
+
+pub(super) use super::constraint::Constraint as BasicConstraint;
+pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;
+pub(super) type BasicDecisionTraceRecorder =
+    dyn DecisionTraceRecorder<Case = BasicConstraintDecisionCase>;

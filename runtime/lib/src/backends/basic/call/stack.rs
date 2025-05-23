@@ -1,16 +1,19 @@
 use core::iter;
 
 use crate::{
-    abs::{Constant, LocalIndex},
+    abs::{CalleeDef, Constant, FuncDef, LocalIndex},
+    backends::basic::CallStackInfo,
     utils::InPlaceSelfHierarchical,
 };
 
-use super::{
-    CallFlowSanity, CalleeDef, ConcreteValue, FuncDef, GenericCallStackManager, Implied,
-    UntupleHelper, ValueRef, VariablesState,
+use crate::backends::basic as backend;
+use backend::{
+    ConcreteValue, Implied, ValueRef, VariablesState,
     config::{CallConfig, ExternalCallStrategy},
-    expr::place::DeterPlaceValueRef,
+    expr::prelude::DeterPlaceValueRef,
 };
+
+use super::{BasicUntupleHelper, CallFlowSanity, GenericCallStackManager};
 
 use common::{log_debug, log_warn, types::RawAddress};
 
@@ -91,7 +94,7 @@ use self::logging::TAG;
  * and thus should be discarded.
  */
 
-pub(super) struct BasicCallStackManager<VS: VariablesState> {
+pub(crate) struct BasicCallStackManager<VS: VariablesState> {
     /// The call stack. Each frame consists of the data that is held for the
     /// current function call and is preserved through calls and returns.
     stack: Vec<CallStackFrame<VS::Value>>,
@@ -144,7 +147,7 @@ pub(super) struct CallInfo<V> {
 }
 
 impl<VS: VariablesState> BasicCallStackManager<VS> {
-    pub(super) fn new(vars_state_factory: VariablesStateFactory<VS>, config: &CallConfig) -> Self {
+    pub(crate) fn new(vars_state_factory: VariablesStateFactory<VS>, config: &CallConfig) -> Self {
         let log_span = tracing::Span::none().entered();
         Self {
             stack: vec![],
@@ -249,7 +252,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
     fn untuple(
         tupled_value: VS::Value,
         tupled_arg_addr: Option<RawAddress>,
-        untuple_helper: &mut dyn UntupleHelper,
+        untuple_helper: &mut dyn BasicUntupleHelper,
         isolated_vars_state: VS,
     ) -> Vec<VS::Value> {
         let tupled_pseudo_place = untuple_helper.make_tupled_arg_pseudo_place(
@@ -308,10 +311,24 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
     }
 }
 
+impl<VS: VariablesState + InPlaceSelfHierarchical> CallStackInfo for BasicCallStackManager<VS> {
+    type VariablesState = VS;
+
+    fn top(&mut self) -> &mut VS {
+        &mut self.vars_state
+    }
+
+    fn current_func(&self) -> FuncDef {
+        self.stack
+            .last()
+            .and_then(|f| f.def.clone())
+            .expect("Current function is not set")
+    }
+}
+
 impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     for BasicCallStackManager<VS>
 {
-    type VariablesState = VS;
     type Place = DeterPlaceValueRef;
 
     fn prepare_for_call(
@@ -358,7 +375,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     fn try_untuple_argument<'a, 'b>(
         &'a mut self,
         arg_index: LocalIndex,
-        untuple_helper: &dyn Fn() -> Box<dyn UntupleHelper + 'b>,
+        untuple_helper: &dyn Fn() -> Box<dyn BasicUntupleHelper + 'b>,
     ) {
         let Some(CallInfo {
             args,
@@ -512,17 +529,6 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     fn override_return_value(&mut self, value: Self::Value) {
         log_debug!(target: TAG, "Overriding the return value with {:?}", value);
         self.top_frame().overridden_return_val = Some(value);
-    }
-
-    fn top(&mut self) -> &mut VS {
-        &mut self.vars_state
-    }
-
-    fn current_func(&self) -> FuncDef {
-        self.stack
-            .last()
-            .and_then(|f| f.def.clone())
-            .expect("Current function is not set")
     }
 }
 

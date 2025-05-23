@@ -24,7 +24,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
     type ConstraintHandler<'a>: ConstraintHandler<Operand = Self::Operand>
     where
         Self: 'a;
-    type FunctionHandler<'a>: FunctionHandler<Place = Self::Place, Operand = Self::Operand>
+    type CallHandler<'a>: CallHandler<Place = Self::Place, Operand = Self::Operand>
     where
         Self: 'a;
     type AnnotationHandler<'a>: AnnotationHandler
@@ -49,7 +49,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
 
     fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_>;
 
-    fn func_control(&mut self) -> Self::FunctionHandler<'_>;
+    fn call_control(&mut self) -> Self::CallHandler<'_>;
 
     fn annotate(&mut self) -> Self::AnnotationHandler<'_>;
 }
@@ -71,17 +71,17 @@ pub(crate) trait PlaceHandler {
 
 pub(crate) trait PlaceBuilder {
     type Place;
-    type ProjectionHandler<'a>;
+    type ProjectionBuilder<'a>;
     type MetadataHandler<'a>;
 
     fn of_local(self, local: Local) -> Self::Place;
 
-    fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionHandler<'a>;
+    fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionBuilder<'a>;
 
     fn metadata<'a>(self, place: &'a mut Self::Place) -> Self::MetadataHandler<'a>;
 }
 
-pub(crate) trait PlaceProjectionHandler: Sized {
+pub(crate) trait PlaceProjectionBuilder: Sized {
     type Result = ();
     type Index;
 
@@ -228,7 +228,7 @@ pub(crate) trait SwitchHandler {
     fn take_otherwise(self, non_values: Vec<Self::Constant>);
 }
 
-pub(crate) trait FunctionHandler {
+pub(crate) trait CallHandler {
     type Place;
     type Operand;
     type Arg = Self::Operand;
@@ -384,7 +384,7 @@ pub(crate) mod implementation {
         for<'a> P: 'a,
     {
         type Place = Place<L, P>;
-        type ProjectionHandler<'a>
+        type ProjectionBuilder<'a>
             = DefaultPlaceProjectionHandler<'a, Self::Place>
         where
             Self::Place: 'a;
@@ -394,7 +394,7 @@ pub(crate) mod implementation {
             Place::new(local.into())
         }
 
-        fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionHandler<'a> {
+        fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionBuilder<'a> {
             DefaultPlaceProjectionHandler { place }
         }
 
@@ -411,7 +411,7 @@ pub(crate) mod implementation {
         }
     }
 
-    impl<L, I> PlaceProjectionHandler for DefaultPlaceProjectionHandler<'_, Place<L, Projection<I>>> {
+    impl<L, I> PlaceProjectionBuilder for DefaultPlaceProjectionHandler<'_, Place<L, Projection<I>>> {
         type Index = I;
 
         fn by(self, projection: Projection<Self::Index>) {
