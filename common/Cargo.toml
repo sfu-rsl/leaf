@@ -39,6 +39,7 @@ rkyv = ["dep:rkyv"]
 unsafe_wrappers = ["dep:derive_more"]
 conc_loop = ["std"]
 building = ["std"]
+program_dep = ["std", "rkyv", "serde", "dep:macros"]
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.
@@ -67,5 +68,5 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(place_addr)',
     'cfg(abs_concrete)',
     'cfg(core_build)',
-    'cfg(types_db_fmt, values("json", "rkyv"))',
+    'cfg(info_db_fmt, values("json", "rkyv"))',
 ] }

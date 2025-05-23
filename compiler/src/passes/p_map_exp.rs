@@ -1,16 +1,20 @@
 use rustc_middle::{
     mir::{BasicBlock, Body, HasLocalDecls, TerminatorEdges, TerminatorKind},
-    ty::TyCtxt,
+    ty::{InstanceKind, TyCtxt},
 };
 
 use common::directed::{
-    BasicBlockIndex, CfgConstraint, CfgEdgeDestination, ControlFlowGraph, DefId, ProgramMap,
+    BasicBlockIndex, CfgConstraint, CfgEdgeDestination, ControlFlowGraph, InstanceKindId,
+    ProgramMap,
 };
 
 use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
-use crate::utils::file::TyCtxtFileExt;
+use crate::utils::{
+    file::TyCtxtFileExt,
+    mir::{InstanceKindExt, TyCtxtExt},
+};
 
-type Calls = Vec<(BasicBlockIndex, DefId)>;
+type Calls = Vec<(BasicBlockIndex, InstanceKindId)>;
 type ReturnPoints = Vec<BasicBlockIndex>;
 
 #[derive(Default)]
@@ -34,7 +38,7 @@ impl CompilationPass for ProgramMapExporter {
         storage: &mut dyn Storage,
     ) {
         let mut p_map = storage.get_or_default::<ProgramMap>(KEY_MAP.to_owned());
-        visit_and_add(&mut p_map, tcx, body.source.def_id(), body);
+        visit_and_add(&mut p_map, tcx, body);
     }
 
     fn visit_tcx_at_codegen_after(&mut self, tcx: TyCtxt, storage: &mut dyn Storage) {
@@ -48,15 +52,14 @@ impl CompilationPass for ProgramMapExporter {
                 rustc_middle::mir::mono::MonoItem::Fn(instance) => Some(instance.def),
                 _ => None,
             })
-            .map(|instance| (instance.def_id(), tcx.instance_mir(instance)))
-            .for_each(|(def_id, body)| {
-                visit_and_add(&mut p_map, tcx, def_id, body);
+            .for_each(|instance| {
+                visit_and_add(&mut p_map, tcx, tcx.instance_mir(instance));
             });
 
         p_map.entry_points.extend(
             tcx.entry_fn(())
                 .iter()
-                .map(|(def_id, _)| map_def_id(*def_id)),
+                .map(|(def_id, _)| InstanceKind::Item(*def_id).to_plain_id()),
         );
 
         p_map
@@ -65,13 +68,8 @@ impl CompilationPass for ProgramMapExporter {
     }
 }
 
-fn visit_and_add<'tcx>(
-    p_map: &mut ProgramMap,
-    tcx: TyCtxt<'tcx>,
-    def_id: rustc_hir::def_id::DefId,
-    body: &Body<'tcx>,
-) {
-    let key = map_def_id(def_id);
+fn visit_and_add<'tcx>(p_map: &mut ProgramMap, tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
+    let key = body.source.instance.to_plain_id();
     if p_map.cfgs.contains_key(&key) {
         return;
     }
@@ -83,7 +81,7 @@ fn visit_and_add<'tcx>(
     p_map
         .debug_info
         .func_names
-        .insert(key, tcx.def_path_str(def_id));
+        .insert(key, tcx.def_path_str(body.source.def_id()));
 }
 
 fn visit_body<'tcx>(
@@ -118,6 +116,15 @@ fn visit_body<'tcx>(
                     .map(|(bb, c)| (first_non_single_edge(bb.into()).as_u32(), c))
                     .collect(),
             );
+        };
+
+        let mut insert_to_calls = |def_id, generic_args| {
+            if let Ok(Some(instance_kind)) = tcx.resolve_instance_raw(
+                tcx.typing_env_in_body(body.source.def_id())
+                    .as_query_input((def_id, generic_args)),
+            ) {
+                calls.push((index.as_u32(), instance_kind.def.to_plain_id()));
+            }
         };
 
         // FIXME: Utilize the `edges` instead.
@@ -160,37 +167,27 @@ fn visit_body<'tcx>(
             }
             Return => ret_points.push(index.as_u32()),
             UnwindResume | UnwindTerminate(_) | Unreachable | CoroutineDrop => {}
-            Call { func, target, .. } => {
+            kind @ (Call { func, .. } | TailCall { func, .. }) => {
                 use rustc_type_ir::TyKind::*;
                 match func.ty(body.local_decls(), tcx).kind() {
-                    FnDef(def_id, ..)
-                    | Closure(def_id, ..)
-                    | Coroutine(def_id, ..)
-                    | CoroutineClosure(def_id, ..) => {
-                        calls.push((index.as_u32(), map_def_id(def_id.clone())));
+                    FnDef(def_id, generic_args)
+                    | Closure(def_id, generic_args)
+                    | Coroutine(def_id, generic_args)
+                    | CoroutineClosure(def_id, generic_args) => {
+                        insert_to_calls(*def_id, generic_args)
                     }
                     FnPtr(..) => {
                         // TODO
                     }
                     _ => {}
                 }
-                if let Some(target) = target {
+
+                if let Call {
+                    target: Some(target),
+                    ..
+                } = kind
+                {
                     insert_to_cfg(vec![(target.as_u32(), None)]);
-                }
-            }
-            TailCall { func, .. } => {
-                use rustc_type_ir::TyKind::*;
-                match func.ty(body.local_decls(), tcx).kind() {
-                    FnDef(def_id, ..)
-                    | Closure(def_id, ..)
-                    | Coroutine(def_id, ..)
-                    | CoroutineClosure(def_id, ..) => {
-                        calls.push((index.as_u32(), map_def_id(def_id.clone())));
-                    }
-                    FnPtr(..) => {
-                        // TODO
-                    }
-                    _ => {}
                 }
             }
             Yield { resume, .. } => {
@@ -206,8 +203,4 @@ fn visit_body<'tcx>(
         }
     }
     (cfg, ret_points, calls)
-}
-
-fn map_def_id(def_id: rustc_hir::def_id::DefId) -> DefId {
-    DefId(def_id.krate.as_u32(), def_id.index.as_u32())
 }

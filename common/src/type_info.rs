@@ -209,7 +209,7 @@ pub mod rw {
 
         pub(super) const FILENAME_DB: &str = "types.json";
 
-        #[cfg(types_db_fmt = "json")]
+        #[cfg(info_db_fmt = "json")]
         pub(super) fn read(db_path: impl AsRef<Path>) -> Result<TypesData, Box<dyn StdError>> {
             use crate::{log_debug, utils::MessagedError};
 
@@ -355,15 +355,15 @@ pub mod rw {
         }
     }
 
-    #[cfg(types_db_fmt = "json")]
+    #[cfg(info_db_fmt = "json")]
     pub type LoadedTypeDatabase = TypesData;
-    #[cfg(types_db_fmt = "rkyv")]
+    #[cfg(info_db_fmt = "rkyv")]
     pub type LoadedTypeDatabase = rkyving::OwnedArchivedTypesData;
 
-    #[cfg(types_db_fmt = "json")]
+    #[cfg(info_db_fmt = "json")]
     pub const FILENAME_DB: &str = serdes::FILENAME_DB;
 
-    #[cfg(types_db_fmt = "rkyv")]
+    #[cfg(info_db_fmt = "rkyv")]
     pub const FILENAME_DB: &str = rkyving::FILENAME_DB;
 
     pub fn read_types_db() -> Result<LoadedTypeDatabase, Box<dyn StdError>> {
@@ -372,9 +372,9 @@ pub mod rw {
         let path = crate::utils::search_current_ancestor_dirs_for(FILENAME_DB)
             .ok_or_else(|| Box::<dyn StdError>::from("Failed to find types db"))?;
 
-        #[cfg(types_db_fmt = "json")]
+        #[cfg(info_db_fmt = "json")]
         let result = serdes::read();
-        #[cfg(types_db_fmt = "rkyv")]
+        #[cfg(info_db_fmt = "rkyv")]
         let result = rkyving::read(path);
         result
     }
@@ -387,9 +387,9 @@ pub mod rw {
         log_info!("Writing type info db in: `{}`", out_dir.as_ref().display());
 
         // Writing in JSON format may be used for debugging purposes, so making it easier to enable.
-        let result = if cfg!(types_db_fmt = "json") {
+        let result = if cfg!(info_db_fmt = "json") {
             serdes::write(types, core_types, out_dir)
-        } else if cfg!(types_db_fmt = "rkyv") {
+        } else if cfg!(info_db_fmt = "rkyv") {
             rkyving::write(types, core_types, out_dir)
         } else {
             unreachable!()

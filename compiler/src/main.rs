@@ -221,6 +221,7 @@ mod driver_callbacks {
             prerequisites_pass,
             <TypeExporter>,
             <ProgramMapExporter>,
+            <ProgramDependenceMapExporter>,
             nctfe_pass,
             Instrumentor::new(true, None /* FIXME */, config.instr_rules.clone()),
         );

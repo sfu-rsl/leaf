@@ -7,7 +7,7 @@ rustflags = [
     "--cfg",
     "abs_concrete",
     "--cfg",
-    "types_db_fmt=\"rkyv\""
+    "info_db_fmt=\"rkyv\""
 ]
 
 [env]

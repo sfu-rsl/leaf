@@ -1,4 +1,5 @@
 mod codegen;
+mod program_dep;
 mod instr;
 pub(crate) mod logger;
 mod noop;
@@ -24,6 +25,7 @@ use crate::config::LeafCompilerConfig;
 use crate::utils::Chain;
 
 pub(crate) use codegen::MonoItemInternalizer;
+pub(crate) use program_dep::ProgramDependenceMapExporter;
 pub(crate) use instr::Instrumentor;
 pub(crate) use logger::CompilationPassLogExt;
 #[allow(unused)]

@@ -24,6 +24,8 @@ pub mod conc_loop;
 pub mod config;
 #[cfg(feature = "directed")]
 pub mod directed;
+#[cfg(feature = "program_dep")]
+pub mod program_dep;
 #[cfg(feature = "logging")]
 pub mod logging;
 #[cfg(feature = "rkyv")]
