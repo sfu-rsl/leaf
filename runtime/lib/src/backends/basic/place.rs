@@ -218,7 +218,8 @@ mod handlers {
 
     use super::*;
     use backend::{
-        BasicBackend, BasicPlace, CallStackInfo, Implied, TypeDatabase, ValueRef, VariablesState,
+        BasicBackend, BasicPlaceInfo, CallStackInfo, Implied, TypeDatabase, ValueRef,
+        VariablesState,
     };
 
     pub(crate) struct BasicPlaceHandler<'a> {
@@ -238,7 +239,7 @@ mod handlers {
     }
 
     impl PlaceHandler for BasicPlaceHandler<'_> {
-        type PlaceInfo<'a> = BasicPlace;
+        type PlaceInfo<'a> = BasicPlaceInfo;
         type Place = PlaceValueRef;
         type DiscriminablePlace = DiscriminantPossiblePlace;
         type Operand = Implied<ValueRef>;

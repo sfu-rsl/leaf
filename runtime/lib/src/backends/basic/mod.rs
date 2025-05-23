@@ -54,7 +54,6 @@ type BasicCallStackManager = call::BasicCallStackManager<BasicVariablesState>;
 
 type BasicSymVariablesManager = sym_vars::BasicSymVariablesManager;
 
-type Place = place::PlaceWithMetadata;
 pub(crate) use place::BasicPlaceBuilder;
 
 pub struct BasicBackend {
@@ -176,7 +175,7 @@ impl RuntimeBackend for BasicBackend {
     where
         Self: 'a;
 
-    type PlaceInfo = Place;
+    type PlaceInfo = BasicPlaceInfo;
     type Place = PlaceValueRef;
     type Operand = Implied<ValueRef>;
 
@@ -259,12 +258,16 @@ trait GenericVariablesState {
 }
 
 trait VariablesState:
-    GenericVariablesState<PlaceInfo = Place, PlaceValue = PlaceValueRef, Value = Implied<ValueRef>>
+    GenericVariablesState<
+        PlaceInfo = BasicPlaceInfo,
+        PlaceValue = PlaceValueRef,
+        Value = Implied<ValueRef>,
+    >
 {
 }
 impl<T> VariablesState for T where
     T: GenericVariablesState<
-            PlaceInfo = Place,
+            PlaceInfo = BasicPlaceInfo,
             PlaceValue = PlaceValueRef,
             Value = Implied<ValueRef>,
         >

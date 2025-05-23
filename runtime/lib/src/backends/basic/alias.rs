@@ -133,7 +133,7 @@ impl<T> BasicTraceQuerier for T where
 {
 }
 
-pub(super) type BasicPlace = super::place::PlaceWithMetadata;
+pub(super) type BasicPlaceInfo = super::place::PlaceWithMetadata;
 
 pub(super) use super::constraint::Constraint as BasicConstraint;
 pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;

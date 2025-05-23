@@ -182,7 +182,7 @@ mod untuple {
     };
 
     use super::{DeterPlaceValueRef, backend};
-    use backend::{BasicPlace, TypeDatabase, expr::prelude::DeterministicPlaceValue};
+    use backend::{BasicPlaceInfo, TypeDatabase, expr::prelude::DeterministicPlaceValue};
 
     pub(super) trait UntupleHelper {
         type PlaceInfo;
@@ -198,11 +198,11 @@ mod untuple {
     }
 
     pub(super) trait BasicUntupleHelper:
-        UntupleHelper<PlaceInfo = BasicPlace, Place = DeterPlaceValueRef>
+        UntupleHelper<PlaceInfo = BasicPlaceInfo, Place = DeterPlaceValueRef>
     {
     }
     impl<T> BasicUntupleHelper for T where
-        T: UntupleHelper<PlaceInfo = BasicPlace, Place = DeterPlaceValueRef>
+        T: UntupleHelper<PlaceInfo = BasicPlaceInfo, Place = DeterPlaceValueRef>
     {
     }
 
@@ -214,7 +214,7 @@ mod untuple {
     }
 
     impl UntupleHelper for UntupleHelperImpl<'_> {
-        type PlaceInfo = BasicPlace;
+        type PlaceInfo = BasicPlaceInfo;
         type Place = DeterPlaceValueRef;
 
         fn make_tupled_arg_pseudo_place(&mut self, addr: RawAddress) -> Self::Place {
