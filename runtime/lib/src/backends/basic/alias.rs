@@ -1,20 +1,22 @@
 use core::ops::DerefMut;
 
 use super::{
-    ConstValue, ExeTraceStorage, Implied, LazyTypeInfo, TraceQuerier,
-    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
+    ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, Implied, LazyTypeInfo,
+    TraceViewProvider,
+    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef, place::PlaceValueRef},
     trace::BasicExeTraceRecorder,
 };
-use crate::abs::{
-    self, FloatType, IntType, TypeId,
-    backend::*,
-    expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder},
+use crate::{
+    abs::{
+        self, FloatType, IntType, TypeId,
+        backend::*,
+        expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder},
+    },
+    utils::Indexed,
 };
 use common::type_info::TypeInfo;
 
-pub(crate) use crate::utils::alias::*;
-
-pub(crate) trait SymValueRefExprBuilder
+pub(super) trait SymValueRefExprBuilder
 where
     Self: for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>
         + for<'a> UnaryExprBuilder<ExprRef<'a> = SymValueRef, Expr<'a> = ValueRef>
@@ -31,7 +33,7 @@ where
 {
 }
 
-pub(crate) trait ValueRefExprBuilder
+pub(super) trait ValueRefExprBuilder
 where
     Self: for<'a> BinaryExprBuilder<ExprRefPair<'a> = (ValueRef, ValueRef), Expr<'a> = ValueRef>
         + for<'a> UnaryExprBuilder<ExprRef<'a> = ValueRef, Expr<'a> = ValueRef>
@@ -50,23 +52,23 @@ where
 {
 }
 
-pub(crate) trait ValueRefBinaryExprBuilder
+pub(super) trait ValueRefBinaryExprBuilder
 where
     Self: for<'a> BinaryExprBuilder<ExprRefPair<'a> = (ValueRef, ValueRef), Expr<'a> = ValueRef>,
 {
 }
 
-pub(crate) trait ValueRefUnaryExprBuilder
+pub(super) trait ValueRefUnaryExprBuilder
 where
     Self: for<'a> UnaryExprBuilder<ExprRef<'a> = ValueRef, Expr<'a> = ValueRef>,
 {
 }
 
-pub(crate) trait ValueRefExprBuilderWrapper {
+pub(super) trait ValueRefExprBuilderWrapper {
     fn inner<'a>(&'a mut self) -> impl DerefMut<Target = impl ValueRefExprBuilder + 'a>;
 }
 
-pub(crate) trait ImpliedValueRefExprBuilder
+pub(super) trait ImpliedValueRefExprBuilder
 where
     Self: for<'a> BinaryExprBuilder<
             ExprRefPair<'a> = (Implied<ValueRef>, Implied<ValueRef>),
@@ -87,16 +89,16 @@ where
 {
 }
 
-pub(crate) trait ImpliedValueRefUnaryExprBuilder
+pub(super) trait ImpliedValueRefUnaryExprBuilder
 where
     Self: for<'a> UnaryExprBuilder<ExprRef<'a> = Implied<ValueRef>, Expr<'a> = Implied<ValueRef>>,
 {
 }
 
-pub(crate) use super::expr::builders::DefaultImpliedExprBuilder as BasicExprBuilder;
-pub(crate) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
+pub(super) use super::expr::builders::DefaultImpliedExprBuilder as BasicExprBuilder;
+pub(super) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
 
-pub(crate) trait TypeDatabase:
+pub(super) trait TypeDatabase:
     abs::backend::TypeDatabase<'static>
     + CoreTypeProvider<&'static TypeInfo>
     + CoreTypeProvider<LazyTypeInfo>
@@ -109,29 +111,24 @@ impl<'t, T> TypeDatabase for T where
 {
 }
 
-pub(crate) trait TraceManager:
-    abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
-{
-}
-impl<T> TraceManager for T where
-    T: abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
-{
-}
-
-pub(super) trait BasicTraceQuerier:
-    TraceQuerier<
-        Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
-        Constraint = super::Constraint,
+pub(super) trait VariablesState:
+    GenericVariablesState<
+        PlaceInfo = BasicPlaceInfo,
+        PlaceValue = PlaceValueRef,
+        Value = Implied<ValueRef>,
     >
 {
 }
-impl<T> BasicTraceQuerier for T where
-    T: TraceQuerier<
-            Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
-            Constraint = super::Constraint,
+impl<T> VariablesState for T where
+    T: GenericVariablesState<
+            PlaceInfo = BasicPlaceInfo,
+            PlaceValue = PlaceValueRef,
+            Value = Implied<ValueRef>,
         >
 {
 }
+
+pub(super) type BasicVariablesState = super::state::RawPointerVariableState<BasicSymExprBuilder>;
 
 pub(super) type BasicPlaceInfo = super::place::PlaceWithMetadata;
 
@@ -140,6 +137,44 @@ pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;
 pub(super) type BasicDecisionTraceRecorder =
     dyn DecisionTraceRecorder<Case = BasicConstraintDecisionCase>;
 
-pub(super) type BasicVariablesState = super::state::RawPointerVariableState<BasicSymExprBuilder>;
-
 pub(super) type BasicCallStackManager = super::call::BasicCallStackManager<BasicVariablesState>;
+
+pub(crate) trait TraceManager:
+    abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
+{
+}
+impl<T> TraceManager for T where
+    T: abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
+{
+}
+pub(super) trait TraceManagerWithViews:
+    TraceManager + TraceViewProvider<Indexed<super::trace::Step>> + TraceViewProvider<BasicConstraint>
+{
+}
+impl<T> TraceManagerWithViews for T where
+    T: TraceManager
+        + TraceViewProvider<Indexed<super::trace::Step>>
+        + TraceViewProvider<BasicConstraint>
+{
+}
+
+pub(super) trait ExeTraceRecorder:
+    CallTraceRecorder + DecisionTraceRecorder + ExeTraceStorage
+{
+}
+impl<T> ExeTraceRecorder for T where T: CallTraceRecorder + DecisionTraceRecorder + ExeTraceStorage {}
+
+pub(super) trait TraceQuerier:
+    GenericTraceQuerier<
+        Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
+        Constraint = BasicConstraint,
+    >
+{
+}
+impl<T> TraceQuerier for T where
+    T: GenericTraceQuerier<
+            Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
+            Constraint = BasicConstraint,
+        >
+{
+}

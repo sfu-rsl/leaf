@@ -8,10 +8,10 @@ use crate::backends::basic as backend;
 use crate::utils::alias::RRef;
 
 mod constraints;
-pub(crate) use constraints::create_trace_components;
+pub(crate) use constraints::create_trace_manager;
 
 mod record;
-pub(crate) use record::BasicExeTraceRecorder;
+pub(crate) use record::{BasicExeTraceRecorder, create_trace_recorder};
 
 mod query;
 pub(crate) use query::default_trace_querier;

@@ -35,15 +35,15 @@ impl<S, V, C> StepInspector<S, V, C> for Box<dyn StepInspector<S, V, C>> {
     }
 }
 
-impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for RRef<I> {
-    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
-        self.borrow_mut().inspect(step, constraint);
-    }
-}
-
 impl<S, V, C> TraceInspector<S, V, C> for Box<dyn TraceInspector<S, V, C>> {
     fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
         self.as_mut().inspect(steps, constraints);
+    }
+}
+
+impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for RRef<I> {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
+        self.borrow_mut().inspect(step, constraint);
     }
 }
 
@@ -59,6 +59,26 @@ impl<S, V, C, I: TraceInspector<S, V, C>> TraceInspector<S, V, C> for Vec<I> {
     fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
         for inspector in self.iter_mut() {
             inspector.inspect(steps, constraints);
+        }
+    }
+}
+
+impl<S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C> for Option<I> {
+    fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
+        if let Some(this) = self {
+            this.inspect(step, constraint);
+        } else {
+            StepInspector::inspect(&mut NoopInspector::default(), step, constraint);
+        }
+    }
+}
+
+impl<S, V, C, I: TraceInspector<S, V, C>> TraceInspector<S, V, C> for Option<I> {
+    fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]) {
+        if let Some(this) = self {
+            this.inspect(steps, constraints);
+        } else {
+            TraceInspector::inspect(&mut NoopInspector::default(), steps, constraints);
         }
     }
 }

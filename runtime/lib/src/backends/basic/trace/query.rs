@@ -2,20 +2,17 @@ use std::{borrow::Borrow, ops::Deref};
 
 use common::types::{InstanceKindId, trace::ExeTraceRecord};
 
-use crate::{
-    backends::basic::{ExeTraceStorage, TraceQuerier},
-    utils::{HasIndex, Indexed, RefView},
-};
+use crate::utils::{HasIndex, Indexed, RefView};
+
+use super::{Step, backend};
+use backend::{BasicConstraint, BasicExeTraceRecorder, ExeTraceStorage, GenericTraceQuerier};
 
 type TraceView<T> = RefView<Vec<T>>;
 
-use super::*;
-
 // Let's avoid complexity by introducing generics, but rely on type aliases for the actual types.
 
-type BasicExeTraceRecord = <record::BasicExeTraceRecorder as ExeTraceStorage>::Record;
+type BasicExeTraceRecord = <BasicExeTraceRecorder as ExeTraceStorage>::Record;
 type BasicConstraintTraceStep = Indexed<Step>;
-type BasicConstraint = super::super::Constraint;
 
 struct BasicTraceQuerier
 where
@@ -31,7 +28,7 @@ pub(crate) fn default_trace_querier(
     exe_records: TraceView<BasicExeTraceRecord>,
     constraint_steps: TraceView<BasicConstraintTraceStep>,
     constraints: TraceView<BasicConstraint>,
-) -> impl super::super::alias::BasicTraceQuerier {
+) -> impl super::super::alias::TraceQuerier {
     BasicTraceQuerier {
         exe_records,
         constraint_steps,
@@ -46,7 +43,7 @@ trait ExeRecord {
     fn is_in(&self, body_id: InstanceKindId) -> bool;
 }
 
-impl TraceQuerier for BasicTraceQuerier {
+impl GenericTraceQuerier for BasicTraceQuerier {
     type Record = BasicExeTraceRecord;
     type Constraint = BasicConstraint;
 
@@ -128,7 +125,7 @@ mod helpers {
         }
     }
 
-    impl ExeRecord for <record::BasicExeTraceRecorder as ExeTraceStorage>::Record {
+    impl ExeRecord for BasicExeTraceRecord {
         fn is_call(&self, callee: InstanceKindId) -> bool {
             match self.borrow() {
                 ExeTraceRecord::Call { to, .. } if to.eq(&callee) => true,

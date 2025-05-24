@@ -107,6 +107,9 @@ pub(crate) struct ExecutionTraceConfig {
     #[serde(default)]
     pub constraints_dump: Option<OutputConfig>,
 
+    #[serde(default)]
+    pub preconditions_dump: Option<OutputConfig>,
+
     /// The time interval between dumping inspectors' data (e.g., snapshots) during the execution
     /// and not merely in the end.
     /// # Remarks

@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{StepCounter, backend};
-use backend::{ConstValue, ExeTraceStorage, config::OutputConfig};
+use backend::{ConstValue, ExeTraceStorage, config::OutputConfig, ExeTraceRecorder};
 
 type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 
@@ -26,7 +26,7 @@ pub(crate) struct BasicExeTraceRecorder {
 }
 
 impl BasicExeTraceRecorder {
-    pub fn new(config: Option<&OutputConfig>) -> Self {
+    fn new(config: Option<&OutputConfig>) -> Self {
         let file = config
             .and_then(|c| match c {
                 OutputConfig::File(file) => Some(file),
@@ -49,12 +49,11 @@ impl BasicExeTraceRecorder {
     }
 }
 
-impl ExeTraceStorage for BasicExeTraceRecorder {
-    type Record = Indexed<ExeTraceRecord>;
-
-    fn records(&self) -> RefView<Vec<Self::Record>> {
-        self.records.clone().into()
-    }
+pub(crate) fn create_trace_recorder(config: Option<&OutputConfig>) -> BasicExeTraceRecorder
+where
+    BasicExeTraceRecorder: ExeTraceRecorder,
+{
+    BasicExeTraceRecorder::new(config)
 }
 
 impl CallTraceRecorder for BasicExeTraceRecorder {
@@ -134,6 +133,14 @@ impl DecisionTraceRecorder for BasicExeTraceRecorder {
             location: node_location,
             kind: kind.clone(),
         });
+    }
+}
+
+impl ExeTraceStorage for BasicExeTraceRecorder {
+    type Record = Indexed<ExeTraceRecord>;
+
+    fn records(&self) -> RefView<Vec<Self::Record>> {
+        self.records.clone().into()
     }
 }
 

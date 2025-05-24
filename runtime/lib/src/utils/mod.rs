@@ -42,7 +42,7 @@ pub(crate) trait InPlaceSelfHierarchical {
 }
 
 /// Guards a RefCell from mutable borrows.
-#[derive(dm::From)]
+#[derive(Clone, dm::From)]
 pub(crate) struct RefView<T>(RRef<T>);
 
 impl<T> RefView<T> {

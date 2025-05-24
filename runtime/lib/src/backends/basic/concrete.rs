@@ -1,10 +1,12 @@
-use crate::{abs::ConstraintKind, backends::basic::Implied};
-
-use super::{
-    BasicTraceManager, ConcreteValueRef, Constraint, SymValueRef,
-    alias::{RRef, ValueRefBinaryExprBuilder},
-};
 use common::log_debug;
+
+use crate::{abs::ConstraintKind, utils::alias::RRef};
+
+use crate::backends::basic as backend;
+use backend::{
+    BasicConstraint, BasicTraceManager, ConcreteValueRef, Implied, SymValueRef,
+    alias::ValueRefBinaryExprBuilder,
+};
 
 pub(super) trait Concretizer {
     fn stamp(&mut self, value: SymValueRef, concrete_value: ConcreteValueRef);
@@ -32,7 +34,7 @@ impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
             .borrow_mut()
             .eq((value.0, concrete_value.0).into());
         // NOTE: We do not use equality constraint here because that is meant for switch cases.
-        let constraint = Constraint {
+        let constraint = BasicConstraint {
             discr: Implied::by_unknown(eq_expr), // TODO
             kind: ConstraintKind::True,
         };

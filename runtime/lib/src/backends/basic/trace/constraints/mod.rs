@@ -4,12 +4,15 @@ mod dumpers;
 mod sanity_check;
 mod utils;
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
+
+use delegate::delegate;
 
 use crate::{
-    abs::{Tag, backend::Solver},
-    backends::basic::config::SolverImpl,
+    abs::{
+        Tag,
+        backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
+    },
     solvers::z3::Z3Solver,
     trace::{
         AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
@@ -20,7 +23,9 @@ use crate::{
 
 use super::backend;
 use backend::{
-    ConstValue, Implied, SymVarId, SymVariablesManager, ValueRef,
+    BasicConstraint, ConstValue, Implied, SymVarId, SymVariablesManager, TraceManagerWithViews,
+    TraceViewProvider, ValueRef,
+    config::SolverImpl,
     config::{ExecutionTraceConfig, OutputConfig, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
 };
@@ -43,18 +48,51 @@ type IStep = Tagged<Indexed<Step>>;
 type IValue<'ctx> = Translation<ValueRef, CurrentSolverValue<'ctx>>;
 type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
 
-pub(crate) fn create_trace_components(
+pub(crate) struct BasicTraceManager<M> {
+    inner: M,
+    steps_view: RefView<Vec<Indexed<Step>>>,
+    constraints_view: RefView<Vec<BasicConstraint>>,
+}
+
+impl<M: AbsTraceManager<Step, Implied<ValueRef>, ConstValue>>
+    AbsTraceManager<Step, Implied<ValueRef>, ConstValue> for BasicTraceManager<M>
+{
+    delegate! {
+        to self.inner {
+            fn notify_step(&mut self, step: Step, constraint: BasicConstraint);
+        }
+    }
+}
+
+impl<M: Shutdown> Shutdown for BasicTraceManager<M> {
+    delegate! {
+        to self.inner {
+            fn shutdown(&mut self);
+        }
+    }
+}
+
+impl<M> TraceViewProvider<Indexed<Step>> for BasicTraceManager<M> {
+    fn view(&self) -> RefView<Vec<Indexed<Step>>> {
+        self.steps_view.clone()
+    }
+}
+
+impl<M> TraceViewProvider<BasicConstraint> for BasicTraceManager<M> {
+    fn view(&self) -> RefView<Vec<BasicConstraint>> {
+        self.constraints_view.clone()
+    }
+}
+
+pub(crate) fn create_trace_manager(
     step_counter: StepCounter,
     tags: RRef<Vec<Tag>>,
     sym_var_manager: RRef<impl SymVariablesManager + 'static>,
     trace_config: &ExecutionTraceConfig,
     output_config: &Vec<OutputConfig>,
     solver_config: &SolverImpl,
-) -> (
-    impl backend::TraceManager,
-    RefView<Vec<Indexed<Step>>>,
-    RefView<Vec<backend::Constraint>>,
-) {
+) -> impl TraceManagerWithViews {
+    // NOTE: It's very tricky to break this function down because of complicated borrows.
     let (solver, translator) = match solver_config {
         SolverImpl::Z3 { config } => {
             crate::solvers::z3::set_global_params(
@@ -116,9 +154,6 @@ pub(crate) fn create_trace_components(
         })
         .collect::<Vec<_>>();
 
-    let mut value_translator = translator.clone();
-    let mut case_translator = translator.clone();
-
     let agg_manager = AggregatorTraceManager::new(inner_inspectors);
 
     let inner_step_inspectors = trace_config
@@ -129,12 +164,15 @@ pub(crate) fn create_trace_components(
         .into_iter()
         .collect::<Vec<_>>();
 
-    let core_manager = agg_manager.inspected_by(inner_step_inspectors).adapt(
+    let inner_manager = type_check_inner_manager(agg_manager.inspected_by(inner_step_inspectors));
+
+    let mut value_translator = translator.clone();
+    let mut case_translator = translator.clone();
+    let core_manager = inner_manager.adapt(
         |s| s,
         move |v: ValueRef| Translation::of(v, &mut value_translator),
         move |c: ConstValue| Translation::of(c, &mut case_translator),
     );
-    let manager = core_manager;
 
     let all_constraints_inspectors = trace_config
         .preconditions_dump
@@ -151,7 +189,7 @@ pub(crate) fn create_trace_components(
 
     let dumpers_ref = Rc::new(RefCell::new(dumpers));
 
-    let manager = manager
+    let manager = core_manager
         .logged()
         .adapt_step(move |s| Tagged {
             value: s,
@@ -174,7 +212,11 @@ pub(crate) fn create_trace_components(
         ))
         .on_shutdown(move || dump(&dumpers_ref));
 
-    (manager, steps_view, constraints_view)
+    BasicTraceManager {
+        inner: manager,
+        steps_view,
+        constraints_view,
+    }
 }
 
 fn is_inner_inspector(t: &TraceInspectorType) -> bool {
@@ -183,4 +225,8 @@ fn is_inner_inspector(t: &TraceInspectorType) -> bool {
         SanityChecker { .. } | DivergingInput { .. } => true,
         BranchCoverage { .. } => false,
     }
+}
+
+fn type_check_inner_manager<'ctx, T: AbsTraceManager<IStep, IValue<'ctx>, ICase<'ctx>>>(m: T) -> T {
+    m
 }

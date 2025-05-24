@@ -5,7 +5,7 @@ mod call;
 mod concrete;
 mod config;
 mod constraint;
-pub(crate) mod expr;
+mod expr;
 mod implication;
 mod operand;
 mod outgen;
@@ -46,7 +46,7 @@ use self::{
     trace::BasicExeTraceRecorder,
 };
 
-type BasicTraceManager = dyn alias::TraceManager;
+type BasicTraceManager = dyn TraceManager;
 
 pub(crate) use place::BasicPlaceBuilder;
 
@@ -72,10 +72,12 @@ impl BasicBackend {
 
         let tags_ref = Rc::new(RefCell::new(Vec::new()));
 
-        let trace_recorder =
-            BasicExeTraceRecorder::new(config.exe_trace.control_flow_dump.as_ref());
         let type_manager = type_manager_ref.clone();
-        let (trace_manager, steps_view, constraints_view) = trace::create_trace_components(
+
+        let trace_recorder =
+            trace::create_trace_recorder(config.exe_trace.control_flow_dump.as_ref());
+
+        let trace_manager = trace::create_trace_manager(
             trace_recorder.counter.clone(),
             tags_ref.clone(),
             sym_var_manager.clone(),
@@ -83,6 +85,8 @@ impl BasicBackend {
             &config.outputs,
             &config.solver,
         );
+        let constraint_steps = TraceViewProvider::view(&trace_manager);
+        let constraints = TraceViewProvider::<BasicConstraint>::view(&trace_manager);
         let trace_manager_ref = Rc::new(RefCell::new(trace_manager));
         let trace_manager = trace_manager_ref.clone();
 
@@ -99,8 +103,8 @@ impl BasicBackend {
 
         let trace_querier = Rc::new(default_trace_querier(
             trace_recorder.records(),
-            steps_view,
-            constraints_view,
+            constraint_steps,
+            constraints,
         ));
         let implication_investigator = Rc::new(default_implication_investigator(trace_querier));
 
@@ -213,8 +217,6 @@ impl Shutdown for BasicBackend {
     }
 }
 
-use constraint::Constraint;
-
 trait SymVariablesManager {
     fn add_variable(&mut self, var: SymVariable<Implied<ValueRef>>) -> SymValueRef;
 
@@ -263,23 +265,6 @@ trait GenericVariablesState {
     fn drop_place(&mut self, place: &Self::PlaceValue);
 }
 
-trait VariablesState:
-    GenericVariablesState<
-        PlaceInfo = BasicPlaceInfo,
-        PlaceValue = PlaceValueRef,
-        Value = Implied<ValueRef>,
-    >
-{
-}
-impl<T> VariablesState for T where
-    T: GenericVariablesState<
-            PlaceInfo = BasicPlaceInfo,
-            PlaceValue = PlaceValueRef,
-            Value = Implied<ValueRef>,
-        >
-{
-}
-
 trait CallStackInfo {
     type VariablesState: GenericVariablesState;
 
@@ -294,7 +279,11 @@ trait ExeTraceStorage {
     fn records(&self) -> RefView<Vec<Self::Record>>;
 }
 
-trait TraceQuerier {
+trait TraceViewProvider<T> {
+    fn view(&self) -> RefView<Vec<T>>;
+}
+
+trait GenericTraceQuerier {
     type Record;
     type Constraint;
 
@@ -303,10 +292,6 @@ trait TraceQuerier {
         body_id: InstanceKindId,
         predicate: impl FnMut(&Self::Record, &Self::Constraint) -> bool,
     ) -> Option<impl AsRef<Self::Record> + AsRef<Self::Constraint>>;
-}
-
-trait TraceViewProvider<T> {
-    fn view(&self) -> RefView<Vec<T>>;
 }
 
 trait ImplicationInvestigator {

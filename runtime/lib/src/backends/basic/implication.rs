@@ -12,7 +12,7 @@ use constraint_set::NonEmptyConstraintSet;
 use derive_more as dm;
 
 use super::{
-    AssignmentId, Constraint, ImplicationInvestigator, InstanceKindId, alias::BasicTraceQuerier,
+    AssignmentId, BasicConstraint, ImplicationInvestigator, InstanceKindId, alias::TraceQuerier,
     trace::BasicExeTraceRecorder,
 };
 
@@ -151,7 +151,7 @@ struct BasicImplicationInvestigator<Q> {
     trace_querier: Rc<Q>,
 }
 
-pub(super) fn default_implication_investigator<Q: BasicTraceQuerier>(
+pub(super) fn default_implication_investigator<Q: TraceQuerier>(
     trace_querier: Rc<Q>,
 ) -> impl ImplicationInvestigator {
     BasicImplicationInvestigator {
@@ -163,14 +163,14 @@ pub(super) fn default_implication_investigator<Q: BasicTraceQuerier>(
 type Record = <BasicExeTraceRecorder as super::ExeTraceStorage>::Record;
 type AssignmentLocation = (InstanceKindId, AssignmentId);
 
-impl<Q: BasicTraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q> {
+impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q> {
     fn antecedent_of_latest_assignment(&self, loc: AssignmentLocation) -> Precondition {
         let precondition = self.control_dep_latest_assignment(loc);
         precondition
     }
 }
 
-impl<Q: BasicTraceQuerier> BasicImplicationInvestigator<Q> {
+impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
     fn control_dep_latest_assignment(
         &self,
         loc @ (body_id, _): AssignmentLocation,
@@ -183,7 +183,7 @@ impl<Q: BasicTraceQuerier> BasicImplicationInvestigator<Q> {
                 controllers.contains(&r.location().index)
             })?;
 
-        let constraint: &Constraint = controller_step.as_ref();
+        let constraint: &BasicConstraint = controller_step.as_ref();
 
         if constraint.discr.is_symbolic() {
             let record: &Record = controller_step.as_ref();
