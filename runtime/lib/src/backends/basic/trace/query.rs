@@ -4,7 +4,7 @@ use common::types::{InstanceKindId, trace::ExeTraceRecord};
 
 use crate::{
     backends::basic::{ExeTraceStorage, TraceQuerier},
-    utils::RefView,
+    utils::{HasIndex, Indexed, RefView},
 };
 
 type TraceView<T> = RefView<Vec<T>>;

@@ -1,5 +1,10 @@
-use core::ops::{Deref, RangeBounds};
+use core::{
+    borrow::Borrow,
+    fmt::Display,
+    ops::{Deref, RangeBounds},
+};
 
+use delegate::delegate;
 use derive_more as dm;
 
 pub(crate) mod alias;
@@ -8,6 +13,8 @@ pub(crate) mod logging;
 pub(crate) mod meta;
 
 use alias::RRef;
+
+use crate::abs::{HasTags, Tag};
 
 /// A trait for any hierarchical structure that may take a parent.
 pub(crate) trait Hierarchical<T> {
@@ -44,14 +51,14 @@ impl<T> RefView<T> {
     }
 
     pub(crate) fn borrow(&self) -> impl Deref<Target = T> + '_ {
-        self.0.borrow()
+        self.0.as_ref().borrow()
     }
 
     pub(crate) fn borrow_map<'a, U: 'a>(
         &'a self,
         f: impl FnOnce(&T) -> &U,
     ) -> impl Deref<Target = U> + 'a {
-        std::cell::Ref::map(self.0.borrow(), f)
+        std::cell::Ref::map(self.0.as_ref().borrow(), f)
     }
 }
 
@@ -92,5 +99,79 @@ impl<T: PartialOrd, R: RangeBounds<T>> RangeIntersection<T> for R {
             ((_, Unbounded), _) => true,
             (_, (_, Unbounded)) => false,
         })
+    }
+}
+
+#[derive(Clone, Debug, dm::Deref)]
+pub(super) struct Tagged<T> {
+    #[deref]
+    pub value: T,
+    pub tags: Vec<Tag>,
+}
+
+impl<T> Borrow<T> for Tagged<T> {
+    fn borrow(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T> HasTags for Tagged<T> {
+    fn tags(&self) -> &[Tag] {
+        &self.tags
+    }
+}
+
+impl<T: Display> Display for Tagged<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.tags.is_empty() {
+            return self.value.fmt(f);
+        } else {
+            write!(f, "{} #[{}]", self.value, self.tags.join(", "))
+        }
+    }
+}
+
+pub(crate) trait HasIndex {
+    fn index(&self) -> usize;
+}
+
+#[derive(Clone, Copy, Debug, dm::Deref, dm::From, serde::Serialize)]
+pub(crate) struct Indexed<T> {
+    #[deref]
+    pub value: T,
+    pub index: usize,
+}
+
+impl<T> HasIndex for Indexed<T> {
+    fn index(&self) -> usize {
+        self.index
+    }
+}
+
+impl<T> Borrow<T> for Indexed<T> {
+    fn borrow(&self) -> &T {
+        &self.value
+    }
+}
+
+impl<T: Display> Display for Indexed<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.index, self.value)
+    }
+}
+
+impl<T: HasIndex> HasIndex for Tagged<T> {
+    delegate! {
+        to self.value {
+            fn index(&self) -> usize;
+        }
+    }
+}
+
+impl<T: HasTags> HasTags for Indexed<T> {
+    delegate! {
+        to self.value {
+            fn tags(&self) -> &[Tag];
+        }
     }
 }
