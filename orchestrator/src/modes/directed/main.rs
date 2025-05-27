@@ -61,6 +61,7 @@ fn main() -> ExitCode {
     crate::logging::init_logging();
 
     let args = Args::parse();
+    log_debug!("Parsed Args: {:?}", args);
 
     let (p_map, reachability) = load_preprocessed_info(&args);
 

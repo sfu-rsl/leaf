@@ -118,7 +118,7 @@ impl<'ctx> AstNode<'ctx> {
     pub fn as_bit_vector(&self) -> &ast::BV<'ctx> {
         match self {
             Self::BitVector(BVNode(ast, _)) => ast,
-            _ => panic!("Expected the value to be a bit vector."),
+            _ => panic!("Expected the value to be a bit vector: {:?}", self),
         }
     }
 }

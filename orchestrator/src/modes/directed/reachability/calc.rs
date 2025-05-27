@@ -90,8 +90,12 @@ fn executable_funcs(
         p_map
             .entry_points
             .iter()
-            .flat_map(|e| call_reachability.reachables(e).iter())
-            .copied()
+            .flat_map(|e| {
+                call_reachability
+                    .reachables(e)
+                    .iter(|body| body.clone())
+                    .collect::<Vec<_>>()
+            })
             .collect_into(&mut result);
     } else {
         result.extend(p_map.call_graph.keys());

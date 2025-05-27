@@ -6,6 +6,10 @@ pub fn init_logging() {
         .with_env_var(LOG_ENV.to_string())
         .from_env_lossy();
 
+    #[allow(unused)]
+    let fmt_layer = tracing_tree::HierarchicalLayer::default()
+        .with_timer(tracing_tree::time::LocalDateTime::default())
+        .with_targets(true);
     let fmt_layer = fmt::layer().with_writer(std::io::stderr);
 
     let indicatif_layer = tracing_indicatif::IndicatifLayer::new();

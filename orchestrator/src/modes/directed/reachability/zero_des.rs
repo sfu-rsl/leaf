@@ -1,4 +1,7 @@
-use rkyv::{Archive, Archived, Serialize, collections::swiss_table::ArchivedHashSet};
+use rkyv::{
+    Archive, Archived, Deserialize, Serialize, api::high::HighDeserializer,
+    collections::swiss_table::ArchivedHashSet, rancor::Error,
+};
 
 use super::*;
 
@@ -38,24 +41,13 @@ impl<S: Eq + Hash + Clone, D: Eq + Hash + Clone> FromIterator<(S, D)> for PlainB
 
 impl<S: Hash + Eq, D: Hash + Eq> ReachabilityBiMap<S, D> for PlainBiMap<S, D> {
     // NOTE: We cannot provide a static empty HashSet. An alternative would be using BTreeSet.
-    type Set<'a, T>
-        = &'a dyn QSet<T>
-    where
-        Self: 'a,
-        T: 'a;
 
-    fn reachers<'a>(&'a self, dst: &D) -> Self::Set<'a, S>
-    where
-        S: 'a,
-    {
-        self.dst_src.get(dst).map_or(&(), |s| s)
+    fn reachers<'a>(&'a self, dst: &D) -> impl QSet<S> + 'a {
+        self.dst_src.get(dst)
     }
 
-    fn reachables<'a>(&'a self, src: &S) -> Self::Set<'a, D>
-    where
-        D: 'a,
-    {
-        self.src_dst.get(src).map_or(&(), |s| s)
+    fn reachables<'a>(&'a self, src: &S) -> impl QSet<D> + 'a {
+        self.src_dst.get(src)
     }
 }
 
@@ -63,33 +55,23 @@ impl<S: Eq + Hash + Archive, D: Eq + Hash + Archive> ReachabilityBiMap<S, D>
     for ArchivedPlainBiMap<S, D>
 where
     S::Archived: Eq + Hash + for<'a> From<&'a S>,
+    S::Archived: Deserialize<S, HighDeserializer<Error>>,
     D::Archived: Eq + Hash + for<'a> From<&'a D>,
+    D::Archived: Deserialize<D, HighDeserializer<Error>>,
 {
-    // NOTE: We cannot provide a static empty HashSet. An alternative would be using BTreeSet.
-    type Set<'a, T>
-        = &'a dyn QSet<T>
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn reachers<'a>(&'a self, dst: &D) -> Self::Set<'a, S>
-    where
-        S: 'a,
-    {
-        self.dst_src.get(&dst.into()).map_or(&(), |s| s)
+    fn reachers<'a>(&'a self, dst: &D) -> impl QSet<S> + 'a {
+        self.dst_src.get(&dst.into())
     }
 
-    fn reachables<'a>(&'a self, src: &S) -> Self::Set<'a, D>
-    where
-        D: 'a,
-    {
-        self.src_dst.get(&src.into()).map_or(&(), |s| s)
+    fn reachables<'a>(&'a self, src: &S) -> impl QSet<D> + 'a {
+        self.src_dst.get(&src.into())
     }
 }
 
 impl<T: Archive> QSet<T> for ArchivedHashSet<Archived<T>>
 where
     Archived<T>: Hash + Eq + for<'a> From<&'a T>,
+    Archived<T>: Deserialize<T, HighDeserializer<Error>>,
 {
     fn is_empty(&self) -> bool {
         ArchivedHashSet::is_empty(self)
@@ -99,11 +81,11 @@ where
         ArchivedHashSet::contains(self, &value.into())
     }
 
-    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
+    fn iter<'a, U>(&'a self, mut f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
     where
         T: 'a,
     {
-        unimplemented!()
+        ArchivedHashSet::iter(self).map(move |e| f(&rkyv::deserialize(e).unwrap()))
     }
 }
 

@@ -64,10 +64,6 @@ fn visit_and_add<'tcx>(pdm: &mut PlainProgramDependenceMap, tcx: TyCtxt<'tcx>, b
     let instance_kind = body.source.instance;
     let key = instance_kind.to_plain_id();
 
-    if key.to_string().contains("2:50359") {
-        log_warn!("The body: {}", tcx.pretty_mir(body));
-    }
-
     pdm.control_dep
         .entry(key)
         .or_insert_with(|| calc_control_dep(tcx, body));

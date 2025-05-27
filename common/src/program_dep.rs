@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs::OpenOptions, prelude::rust_2021::*};
 
 use macros::cond_derive_serde_rkyv;
 
-use super::types::{AdjListGraph, AssignmentId, BasicBlockIndex, DefId, InstanceKindId};
+use super::types::{AdjListGraph, AssignmentId, BasicBlockIndex, InstanceKindId};
 
 // A -> B(s) === A control-depends on B(s)
 pub type ControlDependencyGraph = AdjListGraph<BasicBlockIndex, BasicBlockIndex>;
@@ -121,12 +121,12 @@ pub mod rw {
         }
 
         impl ProgramDependenceMap for OwnedArchivedMap {
-            #[tracing::instrument(level = "debug", skip(self))]
+            #[tracing::instrument(level = "trace", skip(self))]
             fn control_dependency(&self, body: InstanceKindId) -> Option<impl ControlDependency> {
                 self.access().control_dep.get(&body.into())
             }
 
-            #[tracing::instrument(level = "debug", skip(self))]
+            #[tracing::instrument(level = "trace", skip(self))]
             fn assignment_id_map(
                 &self,
                 body: InstanceKindId,
@@ -136,7 +136,7 @@ pub mod rw {
         }
 
         impl ControlDependency for &<ControlDependencyGraph as Archive>::Archived {
-            #[tracing::instrument(level = "debug", skip(self))]
+            #[tracing::instrument(level = "trace", skip(self))]
             fn controllers<'a>(
                 &'a self,
                 block: BasicBlockIndex,
@@ -149,7 +149,7 @@ pub mod rw {
         }
 
         impl ProgramDepAssignmentIdMap for &<AssignmentIdMap as Archive>::Archived {
-            #[tracing::instrument(level = "debug", skip(self))]
+            #[tracing::instrument(level = "trace", skip(self))]
             fn basic_block_index(&self, id: AssignmentId) -> BasicBlockIndex {
                 self[id as usize].to_native()
             }

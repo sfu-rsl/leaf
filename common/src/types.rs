@@ -20,7 +20,10 @@ pub type InstanceKindDiscr = u8;
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(C)]
-#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 #[cfg_attr(feature = "rkyv",rkyv(
     // Derives can be passed through to the generated type:
     derive(Debug, Hash, PartialEq, Eq),
@@ -41,7 +44,10 @@ impl core::fmt::Display for DefId {
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
 #[repr(C)]
-#[cfg_attr(feature = "rkyv", derive(rkyv::Archive, rkyv::Serialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 #[cfg_attr(feature = "rkyv",rkyv(
     // Derives can be passed through to the generated type:
     derive(Debug, Hash, PartialEq, Eq),
@@ -362,7 +368,9 @@ pub mod trace {
                         "{to} ⤝{sym} {from}",
                         sym = if *broken { "~" } else { "" }
                     ),
-                    ExeTraceRecord::Branch { location, kind } => write!(f, "{location}: {kind}"),
+                    ExeTraceRecord::Branch(BranchRecord { location, decision }) => {
+                        write!(f, "{location}: {decision}")
+                    }
                 }
             }
         }

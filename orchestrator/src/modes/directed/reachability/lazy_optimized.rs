@@ -184,27 +184,12 @@ impl<M: QMap<D> + ToReverseMultiMap<D, S>, S: Eq + Hash + Clone, D: Eq + Hash + 
 where
     M::Value: QSet<S>,
 {
-    type Set<'a, T>
-        = &'a dyn QSet<T>
-    where
-        Self: 'a,
-        T: 'a;
-
-    fn reachers<'a>(&'a self, dst: &D) -> Self::Set<'a, S>
-    where
-        S: 'a,
-    {
-        self.dst_src
-            .deref()
-            .get(dst)
-            .map_or(&self.empty_src, |s| s as &dyn QSet<S>)
+    fn reachers<'a>(&'a self, dst: &D) -> impl QSet<S> + 'a {
+        self.dst_src.deref().get(dst)
     }
 
-    fn reachables<'a>(&'a self, src: &S) -> Self::Set<'a, D>
-    where
-        D: 'a,
-    {
-        self.src_dst.deref().get(src).unwrap_or(&self.empty_dst)
+    fn reachables<'a>(&'a self, src: &S) -> impl QSet<D> + 'a {
+        self.src_dst.deref().get(src)
     }
 }
 

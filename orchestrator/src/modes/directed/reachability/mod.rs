@@ -13,24 +13,15 @@ pub(crate) trait QSet<T> {
 
     fn contains(&self, value: &T) -> bool;
 
-    fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
+    fn iter<'a, U>(&'a self, f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
     where
         T: 'a;
 }
 
 pub(crate) trait ReachabilityBiMap<S, D = S> {
-    type Set<'a, T>: QSet<T>
-    where
-        Self: 'a,
-        T: 'a;
+    fn reachers<'a>(&'a self, dst: &D) -> impl QSet<S> + 'a;
 
-    fn reachers<'a>(&'a self, dst: &D) -> Self::Set<'a, S>
-    where
-        S: 'a;
-
-    fn reachables<'a>(&'a self, src: &S) -> Self::Set<'a, D>
-    where
-        D: 'a;
+    fn reachables<'a>(&'a self, src: &S) -> impl QSet<D> + 'a;
 }
 
 pub(crate) trait ProgramReachability {
@@ -54,11 +45,11 @@ mod implementation {
             HashSet::contains(self, value)
         }
 
-        fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
+        fn iter<'a, U>(&'a self, f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
         where
             T: 'a,
         {
-            Box::new(HashSet::iter(self))
+            HashSet::iter(self).map(f)
         }
     }
 
@@ -71,11 +62,11 @@ mod implementation {
             BTreeSet::contains(&self, value)
         }
 
-        fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
+        fn iter<'a, U>(&'a self, f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
         where
             T: 'a,
         {
-            Box::new(BTreeSet::iter(self))
+            BTreeSet::iter(self).map(f)
         }
     }
 
@@ -88,11 +79,28 @@ mod implementation {
             false
         }
 
-        fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
+        fn iter<'a, U>(&'a self, f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
         where
             T: 'a,
         {
-            Box::new(core::iter::empty())
+            core::iter::empty().map(f)
+        }
+    }
+
+    impl<S: QSet<T>, T> QSet<T> for Option<S> {
+        fn is_empty(&self) -> bool {
+            self.as_ref().map(|s| s.is_empty()).unwrap_or(true)
+        }
+
+        fn contains(&self, value: &T) -> bool {
+            self.as_ref().map(|s| s.contains(value)).unwrap_or(false)
+        }
+
+        fn iter<'a, U>(&'a self, f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
+        where
+            T: 'a,
+        {
+            self.as_ref().map(|s| s.iter(f)).into_iter().flatten()
         }
     }
 
@@ -105,58 +113,14 @@ mod implementation {
             QSet::contains(*self, value)
         }
 
-        fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
+        fn iter<'a, U>(&'a self, f: impl FnMut(&T) -> U) -> impl Iterator<Item = U>
         where
             T: 'a,
         {
-            QSet::iter(*self)
-        }
-    }
-
-    impl<T> QSet<T> for &'_ dyn QSet<T> {
-        fn is_empty(&self) -> bool {
-            QSet::is_empty(*self)
-        }
-
-        fn contains(&self, value: &T) -> bool {
-            QSet::contains(*self, value)
-        }
-
-        fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = &'a T> + 'a>
-        where
-            Self: Sized,
-            T: 'a,
-        {
-            QSet::iter(*self)
-        }
-    }
-
-    pub(crate) struct EmptyReachability;
-
-    impl<S, D> ReachabilityBiMap<S, D> for EmptyReachability {
-        type Set<'a, T>
-            = ()
-        where
-            Self: 'a,
-            T: 'a;
-
-        fn reachables<'a>(&'a self, _src: &S) -> Self::Set<'a, D>
-        where
-            D: 'a,
-        {
-            Default::default()
-        }
-
-        fn reachers<'a>(&'a self, _dst: &D) -> Self::Set<'a, S>
-        where
-            S: 'a,
-        {
-            Default::default()
+            QSet::iter(*self, f)
         }
     }
 }
-pub(crate) use implementation::*;
-
 pub(super) mod cache {
     use std::{fs, path::Path};
 

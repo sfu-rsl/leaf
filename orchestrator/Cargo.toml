@@ -35,6 +35,7 @@ common = { workspace = true, features = [
 tracing-subscriber = { workspace = true, features = ["json"] }
 tracing = { workspace = true }
 tracing-indicatif = "0.3.9"
+tracing-tree = { workspace = true, features = ["time"] }
 sha2 = "0.10.8"
 clap = { workspace = true }
 derive_more = { workspace = true }

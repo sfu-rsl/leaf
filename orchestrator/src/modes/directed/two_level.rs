@@ -270,7 +270,10 @@ mod next {
                     let reachers = self.reachability.reachers(target);
                     log_trace!("Target: {}", target);
                     log_trace!("Callees: {:?}", callees);
-                    log_trace!("Reachers: {:?}", comma_separated(reachers.iter()));
+                    log_trace!(
+                        "Reachers: {:?}",
+                        comma_separated(reachers.iter(|r| r.to_string()))
+                    );
                     let result = callees
                         .iter()
                         .map(|(_, c)| c)
@@ -314,7 +317,10 @@ mod next {
 
                     log_trace!("Target: {}", target);
                     log_trace!("Successors: {:?}", successors);
-                    log_trace!("Reachers: {:?}", comma_separated(reachers.iter()));
+                    log_trace!(
+                        "Reachers: {:?}",
+                        comma_separated(reachers.iter(|r| r.to_string()))
+                    );
                     let result = successors
                         .iter()
                         .map(|(s, _)| s)

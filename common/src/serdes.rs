@@ -5,9 +5,10 @@ use serde::{
     de::{self, IntoDeserializer, Unexpected, Visitor, value},
 };
 
-use crate::{pri::BasicBlockLocation, types::InstanceKindId};
-
-use super::types::DefId;
+use super::{
+    pri::BasicBlockLocation,
+    types::{DefId, InstanceKindId},
+};
 
 macro_rules! impl_from_str_through_des {
     ($t:ty) => {
@@ -136,7 +137,7 @@ impl<'de> Deserialize<'de> for BasicBlockLocation {
             type Value = BasicBlockLocation;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string in ##:##:## format")
+                formatter.write_str("a string in ##-##:##:## format")
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -149,7 +150,7 @@ impl<'de> Deserialize<'de> for BasicBlockLocation {
                 );
                 Ok(BasicBlockLocation {
                     body: parts.0.parse().map_err(E::custom)?,
-                    index: parts.1.parse().map_err(E::custom)?,
+                    index: parts.1[1..].parse().map_err(E::custom)?,
                 })
             }
         }
