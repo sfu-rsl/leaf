@@ -18,7 +18,7 @@ type Expression = SmtLibExpr;
 pub(crate) struct SwitchStep<V = Expression> {
     pub trace_index: usize,
     pub location: BasicBlockLocation,
-    pub taken: ConstraintKind<RawCaseValue>,
+    pub decision: ConstraintKind<RawCaseValue>,
     pub discr: Option<V>,
     pub implied_by_offset: Vec<usize>,
 }
@@ -209,7 +209,7 @@ mod json {
                     |(result_index, (index, ((loc, taken), decision, preconditions)))| SwitchStep {
                         trace_index: index,
                         location: loc,
-                        taken,
+                        decision: taken,
                         discr: decision.map(|c| c.discr),
                         implied_by_offset: preconditions
                             .into_iter()
@@ -232,7 +232,7 @@ impl core::fmt::Display for SwitchStep {
                 .as_ref()
                 .map(|d| d.to_string())
                 .unwrap_or("<Conc>".to_owned()),
-            kind: self.taken.as_ref(),
+            kind: self.decision.as_ref(),
         })
     }
 }

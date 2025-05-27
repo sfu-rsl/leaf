@@ -102,14 +102,14 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
         }
 
         let from_discr = last.discr.iter().flat_map(|discr| {
-            self.satisfy_decision_toward(prefix, &discr, &last.taken, edge.dst, edge.metadata)
+            self.satisfy_decision_toward(prefix, &discr, &last.decision, edge.dst, edge.metadata)
         });
 
         let from_antecedents = self
             .change_antecedents_toward(
                 prefix,
                 &last.implied_by_offset,
-                &last.taken,
+                &last.decision,
                 edge.dst,
                 edge.metadata,
             )
@@ -186,7 +186,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
                                 step
                             )
                         }),
-                        iter::once(step.taken.clone().not()),
+                        iter::once(step.decision.clone().not()),
                     )
                 });
 
@@ -233,7 +233,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
                 let discr = s.discr.as_ref().unwrap();
                 Constraint {
                     discr: discr.clone(),
-                    kind: s.taken.as_ref().map(ast_mapper(&discr)),
+                    kind: s.decision.as_ref().map(ast_mapper(&discr)),
                 }
             })
             .collect::<Vec<_>>();
@@ -300,7 +300,7 @@ fn parse_trace<'ctx>(
             discr: t.discr.as_ref().map(|d| d.parse(context, &mut vars)),
             trace_index: t.trace_index,
             location: t.location,
-            taken: t.taken.clone(),
+            decision: t.decision.clone(),
             implied_by_offset: t.implied_by_offset.clone(),
         })
         .collect::<Vec<_>>();
@@ -394,11 +394,11 @@ fn weaken_constraint<'ctx>(
                 .iter()
                 .map(|(_, c)| c.expect(Some(step.location))),
             outgoing_edges,
-            step.taken.is_boolean(),
+            step.decision.is_boolean(),
         ))
         .collect::<Vec<_>>();
 
-    let taken_kind = step.taken.clone();
+    let taken_kind = step.decision.clone();
 
     let next = if let Some(next) = reachability.and_then(|(_, next)| next) {
         // If provided (based on the trace)
@@ -441,7 +441,7 @@ fn weaken_constraint<'ctx>(
         });
 
     if let Some(weakened_kind) = weakened_kind {
-        step.taken = weakened_kind;
+        step.decision = weakened_kind;
     } else {
         log_debug!(
             "Removing constraint (discriminant). The next basic block ({}), is reachable from all edges of {:?}.",
