@@ -27,8 +27,8 @@ impl NextInputGenerator {
             answers_writer: SwitchableAnswersWriter::new(BinaryFileMultiAnswersWriter::new(
                 out_dir.to_path_buf(),
                 Some(format!(
-                    "directed_{}_{}_{}_",
-                    target.body.0, target.body.1, target.index
+                    "directed_{}_{}_{}_{}_",
+                    target.body.0, target.body.1.0, target.body.1.1, target.index,
                 )),
                 "bin".to_owned(),
                 Some(program_input),

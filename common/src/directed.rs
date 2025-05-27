@@ -3,12 +3,12 @@ use std::{collections::HashMap, path::Path, string::String, vec::Vec};
 
 use serde::{Deserialize, Serialize};
 
-pub use super::types::{AdjListGraph, BasicBlockIndex, InstanceKindId};
+pub use super::types::{AdjListGraph, BasicBlockIndex, InstanceKindId, trace::RawCaseValue};
 use super::utils::MessagedError;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub enum CfgConstraint {
-    Case(u128),
+    Case(RawCaseValue),
     Otherwise,
 }
 

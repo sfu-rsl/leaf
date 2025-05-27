@@ -46,6 +46,7 @@ impl FileGenConfig {
             .with_added_extension(self.extension_or_default())
     }
 
+    #[tracing::instrument(level = "debug")]
     pub(crate) fn open_or_create_single(
         &self,
         default_filename: &str,

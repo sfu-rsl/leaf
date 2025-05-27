@@ -93,12 +93,17 @@ where
 
     let inspector = move |step: &S, constraint: Constraint<&V, &C>| {
         let step: Indexed<Step> = (step.borrow().clone(), step.index()).into();
+        let preconditions = constraint.discr.borrow();
+        if !preconditions.is_some() {
+            return;
+        }
+
         use serde::{Serializer, ser::SerializeStruct};
         serializer
             .serialize_struct("Record", 2)
             .and_then(|mut rec_ser| {
                 rec_ser.serialize_field(stringify!(step), &step)?;
-                rec_ser.serialize_field("preconditions", constraint.discr.borrow())?;
+                rec_ser.serialize_field("preconditions", preconditions)?;
                 rec_ser.end()
             })
             .unwrap_or_else(|e| panic!("Could not dump step: {e}"));

@@ -37,7 +37,7 @@ use reachability::{ProgramReachability, QSet, ReachabilityBiMap};
 use trace::{SwitchStep, SwitchTrace, TraceReader};
 use two_level::DirectedEdge;
 
-#[derive(ValueEnum, Debug, Clone)]
+#[derive(ValueEnum, Debug, Clone, Copy)]
 enum Scoring {
     PrefixLen,
 }
@@ -211,6 +211,7 @@ fn execute_and_load_trace(
 ) -> Result<Vec<SwitchStep>, ExitCode> {
     const NAME_FULL_TRACE: &str = "full_trace";
     const NAME_SYM_TRACE: &str = "sym_trace";
+    const NAME_PRECONDITIONS: &str = "preconditions";
 
     let exe_result = execute_once_for_trace(
         ExecutionParams::new(
@@ -224,6 +225,7 @@ fn execute_and_load_trace(
         &args.outdir,
         NAME_FULL_TRACE,
         NAME_SYM_TRACE,
+        NAME_PRECONDITIONS,
     )
     .expect("Failed to execute the program");
 
@@ -237,15 +239,24 @@ fn execute_and_load_trace(
         }
     })?;
 
+    let artifact_path = |name| args.outdir.join(name).with_extension("jsonl");
+
     Ok(load_trace(
-        &args.outdir.join(NAME_FULL_TRACE).with_extension("jsonl"),
-        &args.outdir.join(NAME_SYM_TRACE).with_extension("jsonl"),
+        &artifact_path(NAME_FULL_TRACE),
+        &artifact_path(NAME_SYM_TRACE),
+        &artifact_path(NAME_PRECONDITIONS),
     ))
 }
 
 #[tracing::instrument(level = "debug")]
-fn load_trace(full_trace_path: &Path, sym_trace_path: &Path) -> SwitchTrace {
-    let result = trace::new_default_trace_reader(full_trace_path, sym_trace_path).read_trace();
+fn load_trace(
+    full_trace_path: &Path,
+    sym_trace_path: &Path,
+    preconditions_path: &Path,
+) -> SwitchTrace {
+    let result =
+        trace::new_default_trace_reader(full_trace_path, sym_trace_path, preconditions_path)
+            .read_trace();
     log_info!("Trace loaded with {} steps", result.len());
     log_debug!("Trace: {}...", comma_separated(result.iter().take(10)));
     result

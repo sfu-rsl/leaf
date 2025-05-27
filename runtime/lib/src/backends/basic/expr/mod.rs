@@ -491,7 +491,7 @@ impl ConstValue {
         ((value << bits_to_shift) >> bits_to_shift) as u128
     }
 
-    fn try_to_bit_rep(&self) -> Result<u128, &Self> {
+    pub(crate) fn try_to_bit_rep(&self) -> Result<u128, &Self> {
         match self {
             Self::Bool(value) => Ok(*value as u128),
             Self::Char(value) => Ok(*value as u128),

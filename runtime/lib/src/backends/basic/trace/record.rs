@@ -1,7 +1,7 @@
-use serde::Serialize;
+use serde::{Serialize, Serializer};
 use serde_json::Serializer as JsonSerializer;
 
-use common::log_debug;
+use common::{directed::RawCaseValue, log_debug, types::trace::BranchRecord};
 
 use crate::{
     abs::{
@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{StepCounter, backend};
-use backend::{ConstValue, ExeTraceStorage, config::OutputConfig, ExeTraceRecorder};
+use backend::{ConstValue, ExeTraceRecorder, ExeTraceStorage, config::OutputConfig};
 
 type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 
@@ -129,10 +129,10 @@ impl DecisionTraceRecorder for BasicExeTraceRecorder {
         node_location: BasicBlockLocation,
         kind: &ConstraintKind<Self::Case>,
     ) {
-        self.notify_step(ExeTraceRecord::Branch {
+        self.notify_step(ExeTraceRecord::Branch(BranchRecord {
             location: node_location,
-            kind: kind.clone(),
-        });
+            decision: kind.clone(),
+        }));
     }
 }
 
@@ -160,13 +160,37 @@ impl BasicExeTraceRecorder {
         let Some(serializer) = self.serializer.as_mut() else {
             return;
         };
-        let _ = self
-            .records
-            .as_ref()
-            .borrow()
-            .last()
-            .unwrap()
-            .serialize(serializer)
+        let _ = serialize_rec(self.records.as_ref().borrow().last().unwrap(), serializer)
             .inspect_err(|e| log_debug!("Failed to dump trace: {}", e));
+    }
+}
+
+fn serialize_rec<S: Serializer>(
+    record: &Indexed<ExeTraceRecord>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    let &Indexed {
+        ref value,
+        ref index,
+    } = record;
+
+    use crate::abs::ExeTraceRecord::*;
+    match value {
+        Branch(branch) => Indexed {
+            value: Branch(to_raw_case(branch)),
+            index: *index,
+        }
+        .serialize(serializer),
+        _ => record.serialize(serializer),
+    }
+}
+
+fn to_raw_case(branch: &BranchRecord<ConstValue>) -> BranchRecord<RawCaseValue> {
+    BranchRecord {
+        location: branch.location,
+        decision: branch
+            .decision
+            .as_ref()
+            .map(|c| c.try_to_bit_rep().unwrap()),
     }
 }

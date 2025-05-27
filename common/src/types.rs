@@ -159,7 +159,7 @@ pub mod trace {
         }
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ConstraintKind<C> {
         True,
@@ -267,7 +267,16 @@ pub mod trace {
         }
     }
 
-    #[derive(Debug)]
+    pub type RawCaseValue = u128;
+
+    #[derive(Debug, Clone)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+    pub struct BranchRecord<C> {
+        pub location: BasicBlockLocation,
+        pub decision: ConstraintKind<C>,
+    }
+
+    #[derive(Debug, Clone)]
     #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ExeTraceRecord<C> {
         Call {
@@ -280,10 +289,7 @@ pub mod trace {
             to: InstanceKindId,
             broken: bool,
         },
-        Branch {
-            location: BasicBlockLocation,
-            kind: ConstraintKind<C>,
-        },
+        Branch(BranchRecord<C>),
     }
 
     impl<C> ExeTraceRecord<C> {
@@ -292,7 +298,7 @@ pub mod trace {
             match self {
                 ExeTraceRecord::Call { from, .. } => from,
                 ExeTraceRecord::Return { from, .. } => from,
-                ExeTraceRecord::Branch { location, .. } => location,
+                ExeTraceRecord::Branch(BranchRecord { location, .. }) => location,
             }
         }
     }
@@ -302,7 +308,7 @@ pub mod trace {
 
         use super::super::super::utils::comma_separated;
 
-        use super::*;
+        use super::{BranchRecord, *};
 
         impl<V, C> Display for Constraint<V, C>
         where

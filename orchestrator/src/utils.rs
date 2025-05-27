@@ -81,6 +81,7 @@ pub fn execute_once_for_trace(
     traces_dir: &Path,
     full_trace_filename: &str,
     sym_trace_filename: &str,
+    preconditions_filename: &str,
 ) -> Result<ExecutionOutput, io::Error> {
     execute_once(
         params,
@@ -96,6 +97,12 @@ pub fn execute_once_for_trace(
             type = "file"
             directory = "{dir}"
             prefix = "{sym_trace_filename}"
+            format = "jsonl"
+
+            [exe_trace.preconditions_dump]
+            type = "file"
+            directory = "{dir}"
+            prefix = "{preconditions_filename}"
             format = "jsonl"
             "#,
             dir = traces_dir.display(),
