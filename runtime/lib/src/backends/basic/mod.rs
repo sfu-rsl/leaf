@@ -19,7 +19,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use common::{
     log_info,
-    pri::{AssignmentId, BasicBlockIndex},
+    pri::{AssignmentId, BasicBlockIndex, BasicBlockLocation},
     types::InstanceKindId,
 };
 use trace::default_trace_querier;
@@ -53,7 +53,7 @@ pub(crate) use place::BasicPlaceBuilder;
 pub struct BasicBackend {
     call_stack_manager: BasicCallStackManager,
     trace_manager: RRef<BasicTraceManager>,
-    trace_recorder: BasicExeTraceRecorder,
+    trace_recorder: RRef<BasicExeTraceRecorder>,
     expr_builder: RRef<BasicExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeDatabase>,
@@ -74,11 +74,12 @@ impl BasicBackend {
 
         let type_manager = type_manager_ref.clone();
 
-        let trace_recorder =
-            trace::create_trace_recorder(config.exe_trace.control_flow_dump.as_ref());
+        let trace_recorder_ref = Rc::new(RefCell::new(trace::create_trace_recorder(
+            config.exe_trace.control_flow_dump.as_ref(),
+        )));
 
         let trace_manager = trace::create_trace_manager(
-            trace_recorder.counter.clone(),
+            trace_recorder_ref.clone(),
             tags_ref.clone(),
             sym_var_manager.clone(),
             &config.exe_trace,
@@ -102,7 +103,7 @@ impl BasicBackend {
         let sym_write_handler_ref = sym_place_handler_factory(config.sym_place.write);
 
         let trace_querier = Rc::new(default_trace_querier(
-            trace_recorder.records(),
+            trace_recorder_ref.borrow().records(),
             constraint_steps,
             constraints,
         ));
@@ -125,7 +126,7 @@ impl BasicBackend {
                 &config.call,
             ),
             trace_manager,
-            trace_recorder,
+            trace_recorder: trace_recorder_ref.clone(),
             expr_builder: Rc::new(RefCell::new(expr::builders::to_implied_expr_builder(
                 expr_builder,
             ))),
@@ -299,4 +300,6 @@ trait ImplicationInvestigator {
         &self,
         assignment_id: (InstanceKindId, AssignmentId),
     ) -> Precondition;
+
+    fn antecedent_of_latest_call_at(&self, location: BasicBlockLocation) -> Precondition;
 }

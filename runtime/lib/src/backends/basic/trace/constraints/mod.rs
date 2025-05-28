@@ -13,6 +13,7 @@ use crate::{
         Tag,
         backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
     },
+    backends::basic::BasicDecisionTraceRecorder,
     solvers::z3::Z3Solver,
     trace::{
         AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
@@ -30,7 +31,7 @@ use backend::{
     expr::translators::z3::Z3ValueTranslator,
 };
 
-use super::{Step, StepCounter};
+use super::Step;
 
 use utils::{
     ShutdownTraceManagerExt, Translation,
@@ -50,17 +51,26 @@ type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
 
 pub(crate) struct BasicTraceManager<M> {
     inner: M,
+    trace_recorder: RRef<BasicDecisionTraceRecorder>,
     steps_view: RefView<Vec<Indexed<Step>>>,
     constraints_view: RefView<Vec<BasicConstraint>>,
 }
 
-impl<M: AbsTraceManager<Step, Implied<ValueRef>, ConstValue>>
+impl<M: AbsTraceManager<Indexed<Step>, Implied<ValueRef>, ConstValue>>
     AbsTraceManager<Step, Implied<ValueRef>, ConstValue> for BasicTraceManager<M>
 {
-    delegate! {
-        to self.inner {
-            fn notify_step(&mut self, step: Step, constraint: BasicConstraint);
-        }
+    fn notify_step(&mut self, step: Step, constraint: BasicConstraint) {
+        let step_index = self
+            .trace_recorder
+            .borrow_mut()
+            .notify_decision(step.0, &constraint.kind);
+        self.inner.notify_step(
+            Indexed {
+                value: step,
+                index: step_index,
+            },
+            constraint,
+        );
     }
 }
 
@@ -85,7 +95,7 @@ impl<M> TraceViewProvider<BasicConstraint> for BasicTraceManager<M> {
 }
 
 pub(crate) fn create_trace_manager(
-    step_counter: StepCounter,
+    trace_recorder: RRef<BasicDecisionTraceRecorder>,
     tags: RRef<Vec<Tag>>,
     sym_var_manager: RRef<impl SymVariablesManager + 'static>,
     trace_config: &ExecutionTraceConfig,
@@ -200,10 +210,6 @@ pub(crate) fn create_trace_manager(
         .adapt_value(|discr: Implied<ValueRef>| discr.value)
         .inspected_by(outer_agg_inspector)
         .inspected_by(all_constraints_inspectors)
-        .adapt_step(move |s: Step| Indexed {
-            index: *step_counter.as_ref().borrow(),
-            value: s,
-        })
         .inspected_by(utils::dumping::create_timer_dumper_inspector(
             dumpers_ref.clone(),
             trace_config
@@ -214,6 +220,7 @@ pub(crate) fn create_trace_manager(
 
     BasicTraceManager {
         inner: manager,
+        trace_recorder,
         steps_view,
         constraints_view,
     }

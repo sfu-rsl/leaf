@@ -11,13 +11,13 @@ use crate::{
     utils::{Indexed, RefView, alias::RRef, file::JsonLinesFormatter},
 };
 
-use super::{StepCounter, backend};
+use super::backend;
 use backend::{ConstValue, ExeTraceRecorder, ExeTraceStorage, config::OutputConfig};
 
 type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 
 pub(crate) struct BasicExeTraceRecorder {
-    pub(in super::super) counter: StepCounter,
+    counter: usize,
     records: RRef<Vec<Indexed<ExeTraceRecord>>>,
     stack: Vec<BasicBlockLocation<FuncDef>>,
     last_ret_point: Option<BasicBlockLocation<FuncDef>>,
@@ -39,7 +39,7 @@ impl BasicExeTraceRecorder {
         Self {
             serializer: file
                 .map(|f| JsonSerializer::with_formatter(f, JsonLinesFormatter::default())),
-            counter: RRef::new(0.into()),
+            counter: 0,
             records: Default::default(),
             stack: Default::default(),
             last_ret_point: Default::default(),
@@ -162,12 +162,11 @@ impl ExeTraceStorage for BasicExeTraceRecorder {
 }
 
 impl BasicExeTraceRecorder {
-    #[tracing::instrument(level = "debug", skip(self), fields(index = *self.counter.as_ref().borrow()))]
+    #[tracing::instrument(level = "debug", skip(self), fields(index = self.counter))]
     fn notify_step(&mut self, record: ExeTraceRecord) -> usize {
         let index = {
-            let mut counter = RRef::as_ref(&self.counter).borrow_mut();
-            let index = *counter + 1;
-            *counter = index;
+            let index = self.counter + 1;
+            self.counter = index;
             index
         };
         self.records.borrow_mut().push(Indexed {

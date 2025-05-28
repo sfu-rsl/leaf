@@ -4,15 +4,15 @@ use crate::{
     abs::{
         self, AssertKind, BasicBlockIndex, BasicBlockLocation, ConstraintKind,
         backend::{ConstraintHandler, SwitchHandler},
-        utils::InstanceKindIdExt,
+        utils::BasicBlockLocationExt,
     },
     utils::alias::RRef,
 };
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicDecisionTraceRecorder, BasicExprBuilder, BasicTraceManager, CallStackInfo,
-    Implied, ImpliedValueRefUnaryExprBuilder, ValueRef, expr::prelude::ConstValue,
+    BasicBackend, BasicExprBuilder, BasicTraceManager, CallStackInfo, Implied,
+    ImpliedValueRefUnaryExprBuilder, ValueRef, expr::prelude::ConstValue,
 };
 
 pub(super) type Constraint = crate::abs::Constraint<Implied<ValueRef>, ConstValue>;
@@ -21,7 +21,6 @@ pub(super) type DecisionCase = ConstValue;
 pub(crate) struct BasicConstraintHandler<'a, EB> {
     location: BasicBlockLocation,
     trace_manager: RefMut<'a, BasicTraceManager>,
-    trace_recorder: &'a mut BasicDecisionTraceRecorder,
     expr_builder: RRef<EB>,
 }
 
@@ -29,7 +28,6 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
     pub(super) fn new(backend: &'a mut BasicBackend, location: BasicBlockIndex) -> Self {
         Self {
             trace_manager: backend.trace_manager.borrow_mut(),
-            trace_recorder: &mut backend.trace_recorder,
             expr_builder: backend.expr_builder.clone(),
             location: backend
                 .call_stack_manager
@@ -79,10 +77,8 @@ impl<'a, EB: ImpliedValueRefUnaryExprBuilder> ConstraintHandler for BasicConstra
 
 impl<'a, EB> BasicConstraintHandler<'a, EB> {
     fn notify_constraint(&mut self, constraint: Constraint) {
-        self.trace_recorder
-            .notify_decision(self.location, &constraint.kind);
         self.trace_manager
-            .notify_step(self.location.into(), constraint);
+            .notify_step(Into::into(self.location), constraint);
     }
 }
 
