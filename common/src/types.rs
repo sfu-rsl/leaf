@@ -64,14 +64,25 @@ impl core::fmt::Display for InstanceKindId {
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 #[repr(C)]
-pub struct BasicBlockLocation {
-    pub body: InstanceKindId,
+pub struct BasicBlockLocation<B = InstanceKindId> {
+    pub body: B,
     pub index: BasicBlockIndex,
 }
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-impl core::fmt::Display for BasicBlockLocation {
+impl<B: core::fmt::Display> core::fmt::Display for BasicBlockLocation<B> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}[{}]", self.body, self.index)
+    }
+}
+impl<B> BasicBlockLocation<B> {
+    pub fn into<BTo>(self) -> BasicBlockLocation<BTo>
+    where
+        B: Into<BTo>,
+    {
+        BasicBlockLocation {
+            body: self.body.into(),
+            index: self.index,
+        }
     }
 }
 
@@ -89,7 +100,7 @@ impl core::fmt::Pointer for DynRawMetadata {
 // FIXME: Possibly large data structure.
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CalleeDef {
     pub static_addr: RawAddress,
     pub as_virtual: Option<(DynRawMetadata, u64)>,
@@ -99,11 +110,32 @@ pub struct CalleeDef {
 // FIXME: Merge virtual identifier with def_id
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FuncDef {
     pub static_addr: RawAddress,
     pub as_dyn_method: Option<(DynRawMetadata, u64)>,
     pub body_id: InstanceKindId,
+}
+
+impl From<FuncDef> for InstanceKindId {
+    fn from(value: FuncDef) -> Self {
+        value.body_id
+    }
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[cfg(feature = "value_types")]
+pub mod value {
+    /* FIXME: These types will have a limited set of possible values. Thus they can be
+     * optimized using techniques such as interning or even changing them to enums.
+     * Enums are not much a favorable option, since they are against the abstract
+     * representation of integers and floats in the engine.
+     */
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+    pub struct IntType {
+        pub bit_size: u64,
+        pub is_signed: bool,
+    }
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]

@@ -334,29 +334,43 @@ pub trait CoreTypeProvider<V> {
 }
 
 pub(crate) trait CallTraceRecorder {
-    fn notify_call(&mut self, call_site: BasicBlockLocation, entered_func: FuncDef, broken: bool);
+    fn notify_call(
+        &mut self,
+        call_site: BasicBlockLocation<FuncDef>,
+        entered_func: FuncDef,
+        broken: bool,
+    );
 
-    fn notify_return(&mut self, ret_point: BasicBlockLocation, caller_func: FuncDef, broken: bool);
+    fn notify_return(
+        &mut self,
+        ret_point: BasicBlockLocation<FuncDef>,
+        caller_func: FuncDef,
+        broken: bool,
+    );
 }
 
 pub(crate) trait PhasedCallTraceRecorder: CallTraceRecorder {
-    fn start_call(&mut self, call_site: BasicBlockLocation);
+    fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>);
 
     fn finish_call(&mut self, entered_func: FuncDef, broken: bool);
 
-    fn start_return(&mut self, ret_point: BasicBlockLocation);
+    fn start_return(&mut self, ret_point: BasicBlockLocation<FuncDef>);
 
-    fn finish_return(&mut self, broken: bool);
+    /// # Returns
+    /// The call site which the execution has returned to.
+    fn finish_return(&mut self, broken: bool) -> BasicBlockLocation<FuncDef>;
 }
 
 pub(crate) trait DecisionTraceRecorder {
     type Case;
 
+    /// # Returns
+    /// The step index.
     fn notify_decision(
         &mut self,
         node_location: BasicBlockLocation,
         kind: &ConstraintKind<Self::Case>,
-    );
+    ) -> usize;
 }
 
 pub(crate) mod implementation {

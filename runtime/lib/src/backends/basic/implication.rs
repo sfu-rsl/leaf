@@ -2,11 +2,11 @@ use core::borrow::Borrow;
 use std::{collections::BTreeSet, ops::FromResidual, rc::Rc};
 
 use common::{
-    pri::BasicBlockIndex,
     program_dep::{
         ControlDependency, ProgramDepAssignmentIdMap, ProgramDependenceMap,
         rw::{LoadedProgramDepMap, read_program_dep_map},
     },
+    types::{BasicBlockIndex, BasicBlockLocation},
 };
 use constraint_set::NonEmptyConstraintSet;
 use derive_more as dm;
@@ -164,22 +164,34 @@ type Record = <BasicExeTraceRecorder as super::ExeTraceStorage>::Record;
 type AssignmentLocation = (InstanceKindId, AssignmentId);
 
 impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q> {
-    fn antecedent_of_latest_assignment(&self, loc: AssignmentLocation) -> Precondition {
-        let precondition = self.control_dep_latest_assignment(loc);
-        precondition
+    fn antecedent_of_latest_assignment(
+        &self,
+        (body, assignment_id): AssignmentLocation,
+    ) -> Precondition {
+        let bb_index = self
+            .program_dep_map
+            .assignment_id_map(body)
+            .unwrap()
+            .basic_block_index(assignment_id);
+
+        self.control_dep_latest_at(BasicBlockLocation {
+            body,
+            index: bb_index,
+        })
+    }
+
+    fn antecedent_of_latest_call_at(&self, location: BasicBlockLocation) -> Precondition {
+        self.control_dep_latest_at(location)
     }
 }
 
 impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
-    fn control_dep_latest_assignment(
-        &self,
-        loc @ (body_id, _): AssignmentLocation,
-    ) -> Precondition {
+    fn control_dep_latest_at(&self, loc: BasicBlockLocation) -> Precondition {
         let controllers = self.controllers(loc).filter(|cs| !cs.is_empty())?;
 
         let controller_step = self
             .trace_querier
-            .find_in_latest_call_of(body_id, move |r, _| {
+            .find_in_latest_call_of(loc.body, move |r, _| {
                 controllers.contains(&r.location().index)
             })?;
 
@@ -195,18 +207,8 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
         }
     }
 
-    fn controllers(
-        &self,
-        (body_id, assignment_id): AssignmentLocation,
-    ) -> Option<Vec<BasicBlockIndex>> {
-        let cdg = self.program_dep_map.control_dependency(body_id)?;
-
-        let bb_index = self
-            .program_dep_map
-            .assignment_id_map(body_id)
-            .unwrap()
-            .basic_block_index(assignment_id);
-
-        Some(cdg.controllers(bb_index).into_iter().collect::<Vec<_>>())
+    fn controllers(&self, loc: BasicBlockLocation) -> Option<Vec<BasicBlockIndex>> {
+        let cdg = self.program_dep_map.control_dependency(loc.body)?;
+        Some(cdg.controllers(loc.index).into_iter().collect::<Vec<_>>())
     }
 }

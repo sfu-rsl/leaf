@@ -184,17 +184,16 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             .expect("Call stack should not be empty")
     }
 
-    fn finalize_internal_call(&mut self, result_dest: &VS::PlaceValue) {
-        let returned_val = if let Some(returned_val) = self.latest_returned_val.take() {
+    fn finalize_internal_call(&mut self) -> VS::Value {
+        if let Some(returned_val) = self.latest_returned_val.take() {
             returned_val
         } else {
             // The unit return type
             Implied::always(ConcreteValue::from(Constant::Zst).to_value_ref())
-        };
-        self.top().set_place(&result_dest, returned_val)
+        }
     }
 
-    fn finalize_external_call(&mut self, result_dest: &VS::PlaceValue) {
+    fn finalize_external_call(&mut self) -> VS::Value {
         // Clearing the data that is not cleared by the external function.
         let latest_call = self.latest_call.take();
         let symbolic_args = latest_call
@@ -212,11 +211,8 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
                 "from the external function."
                 ),
             );
-            self.top().set_place(result_dest, overridden);
-            return;
+            return overridden;
         }
-
-        self.top().set_place(result_dest, unknown_value());
 
         enum Action {
             Concretize,
@@ -242,7 +238,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             }
         };
         match action {
-            Concretize => self.top().set_place(&result_dest, unknown_value()),
+            Concretize => unknown_value(),
             OverApproximate => {
                 todo!("#306: Over-approximated symbolic values are not supported.")
             }
@@ -500,7 +496,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         }
     }
 
-    fn finalize_call(&mut self, result_dest: Self::Place) -> CallFlowSanity {
+    fn finalize_call(&mut self) -> (Self::Value, CallFlowSanity) {
         self.log_span_reset();
 
         let is_external = self
@@ -511,19 +507,22 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
                 log_debug!(target: TAG, "External function call detected with no acknowledged entrance.");
                 true
             });
-        if !is_external {
+
+        let return_val = if !is_external {
             log_debug!(target: TAG, "Finalizing an internal call.");
-            self.finalize_internal_call(result_dest.as_ref());
+            self.finalize_internal_call()
         } else {
             log_debug!(target: TAG, "Finalizing an external call.");
-            self.finalize_external_call(result_dest.as_ref());
-        }
+            self.finalize_external_call()
+        };
 
-        if is_external {
+        let sanity = if is_external {
             CallFlowSanity::Broken
         } else {
             CallFlowSanity::Expected
-        }
+        };
+
+        (return_val, sanity)
     }
 
     fn override_return_value(&mut self, value: Self::Value) {

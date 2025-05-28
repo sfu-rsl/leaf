@@ -3,15 +3,15 @@ use common::{
     types::InstanceKindId,
 };
 
-pub(crate) trait InstanceKindIdExt {
-    fn at_basic_block(self, index: BasicBlockIndex) -> BasicBlockLocation
+pub(crate) trait BasicBlockLocationExt {
+    fn at_basic_block(self, index: BasicBlockIndex) -> BasicBlockLocation<Self>
     where
         Self: Copy;
 }
 
-impl InstanceKindIdExt for InstanceKindId {
+impl<T> BasicBlockLocationExt for T {
     #[inline]
-    fn at_basic_block(self, index: BasicBlockIndex) -> BasicBlockLocation
+    fn at_basic_block(self, index: BasicBlockIndex) -> BasicBlockLocation<Self>
     where
         Self: Copy,
     {

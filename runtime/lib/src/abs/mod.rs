@@ -296,11 +296,16 @@ impl TryFrom<CastKind> for ValueType {
     }
 }
 
-#[derive(Clone, Copy, Debug, dm::From, dm::Deref)]
-pub(crate) struct FuncDef(common::pri::FuncDef);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Deref, dm::Into)]
+pub(crate) struct FuncDef(pub common::pri::FuncDef);
+impl Into<InstanceKindId> for FuncDef {
+    fn into(self) -> InstanceKindId {
+        self.0.into()
+    }
+}
 
-#[derive(Clone, Copy, Debug, dm::From, dm::Deref)]
-pub(crate) struct CalleeDef(common::pri::CalleeDef);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Deref)]
+pub(crate) struct CalleeDef(pub common::pri::CalleeDef);
 
 pub(crate) trait HasTags {
     fn tags(&self) -> &[Tag];

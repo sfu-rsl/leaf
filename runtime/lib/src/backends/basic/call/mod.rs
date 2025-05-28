@@ -1,10 +1,12 @@
 mod stack;
+use std::cell::RefMut;
+
 pub(super) use stack::BasicCallStackManager;
 
 use crate::abs::{
     BasicBlockIndex, CalleeDef, FuncDef, Local, LocalIndex, TypeId,
     backend::{CallHandler, PhasedCallTraceRecorder},
-    utils::InstanceKindIdExt,
+    utils::BasicBlockLocationExt,
 };
 
 use crate::backends::basic as backend;
@@ -50,7 +52,7 @@ trait GenericCallStackManager: CallStackInfo {
 
     fn override_return_value(&mut self, value: Self::Value);
 
-    fn finalize_call(&mut self, result_dest: Self::Place) -> CallFlowSanity;
+    fn finalize_call(&mut self) -> (Self::Value, CallFlowSanity);
 }
 
 trait CallStackManager:
@@ -73,7 +75,8 @@ impl<T> CallStackManager for T where
 pub(crate) struct BasicCallHandler<'a> {
     call_stack_manager: &'a mut dyn CallStackManager,
     type_manager: &'a dyn TypeDatabase,
-    trace_recorder: &'a mut dyn PhasedCallTraceRecorder,
+    implication_investigator: &'a dyn ImplicationInvestigator,
+    trace_recorder: RefMut<'a, dyn PhasedCallTraceRecorder>,
 }
 
 impl<'a> BasicCallHandler<'a> {
@@ -81,8 +84,13 @@ impl<'a> BasicCallHandler<'a> {
         Self {
             call_stack_manager: &mut backend.call_stack_manager,
             type_manager: backend.type_manager.as_ref(),
-            trace_recorder: &mut backend.trace_recorder,
+            implication_investigator: backend.implication_investigator.as_ref(),
+            trace_recorder: backend.trace_recorder.borrow_mut(),
         }
+    }
+
+    fn current_func(&self) -> FuncDef {
+        self.call_stack_manager.current_func()
     }
 }
 
@@ -93,25 +101,21 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
 
     #[inline]
     fn before_call(
-        self,
+        mut self,
         def: CalleeDef,
         call_site: BasicBlockIndex,
         func: Self::Operand,
         args: impl Iterator<Item = Self::Arg>,
         are_args_tupled: bool,
     ) {
-        self.trace_recorder.start_call(
-            self.call_stack_manager
-                .current_func()
-                .body_id
-                .at_basic_block(call_site),
-        );
+        let call_site = self.current_func().at_basic_block(call_site);
+        self.trace_recorder.start_call(call_site);
         self.call_stack_manager
             .prepare_for_call(def, func, args.collect(), are_args_tupled);
     }
 
     fn enter(
-        self,
+        mut self,
         def: FuncDef,
         arg_places: impl Iterator<Item = Self::Place>,
         ret_val_place: Self::Place,
@@ -149,23 +153,30 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
     }
 
     #[inline]
-    fn ret(self, ret_point: BasicBlockIndex) {
+    fn ret(mut self, ret_point: BasicBlockIndex) {
         self.trace_recorder.start_return(
             self.call_stack_manager
                 .current_func()
-                .body_id
                 .at_basic_block(ret_point),
         );
         self.call_stack_manager.pop_stack_frame();
     }
 
-    fn after_call(self, result_dest: Self::Place) {
+    fn after_call(mut self, result_dest: Self::Place) {
         debug_assert!(!result_dest.is_symbolic());
-        let sanity = self
-            .call_stack_manager
-            .finalize_call(DeterPlaceValueRef::new(result_dest));
-        self.trace_recorder
+        let (mut return_val, sanity) = self.call_stack_manager.finalize_call();
+        let call_site = self
+            .trace_recorder
             .finish_return(matches!(sanity, CallFlowSanity::Broken));
+        debug_assert_eq!(call_site.body, self.current_func());
+
+        let antecedent = self
+            .implication_investigator
+            .antecedent_of_latest_call_at(call_site.into());
+        return_val.by.add_info(&antecedent);
+        self.call_stack_manager
+            .top()
+            .set_place(DeterPlaceValueRef::new(result_dest).as_ref(), return_val);
     }
 
     fn metadata(self) -> Self::MetadataHandler {
@@ -278,3 +289,5 @@ mod untuple {
     }
 }
 use untuple::BasicUntupleHelper;
+
+use super::ImplicationInvestigator;

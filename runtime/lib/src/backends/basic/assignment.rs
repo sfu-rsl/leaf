@@ -19,7 +19,7 @@ use backend::{
     expr::prelude::*, implication::Precondition, place::DiscriminantPossiblePlace,
 };
 
-pub(crate) struct BasicAssignmentHandler<'s, EB: ImpliedValueRefExprBuilder> {
+pub(crate) struct BasicAssignmentHandler<'s, EB> {
     id: AssignmentId,
     current_func: InstanceKindId,
     dest: PlaceValueRef,

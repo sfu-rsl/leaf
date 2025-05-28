@@ -19,9 +19,8 @@ type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 pub(crate) struct BasicExeTraceRecorder {
     pub(in super::super) counter: StepCounter,
     records: RRef<Vec<Indexed<ExeTraceRecord>>>,
-    stack: Vec<FuncDef>,
-    last_call_site: Option<BasicBlockLocation>,
-    last_ret_point: Option<BasicBlockLocation>,
+    stack: Vec<BasicBlockLocation<FuncDef>>,
+    last_ret_point: Option<BasicBlockLocation<FuncDef>>,
     serializer: Option<JsonSerializer<std::fs::File, JsonLinesFormatter>>,
 }
 
@@ -43,7 +42,6 @@ impl BasicExeTraceRecorder {
             counter: RRef::new(0.into()),
             records: Default::default(),
             stack: Default::default(),
-            last_call_site: Default::default(),
             last_ret_point: Default::default(),
         }
     }
@@ -57,17 +55,27 @@ where
 }
 
 impl CallTraceRecorder for BasicExeTraceRecorder {
-    fn notify_call(&mut self, call_site: BasicBlockLocation, entered_func: FuncDef, broken: bool) {
+    fn notify_call(
+        &mut self,
+        call_site: BasicBlockLocation<FuncDef>,
+        entered_func: FuncDef,
+        broken: bool,
+    ) {
         self.notify_step(ExeTraceRecord::Call {
-            from: call_site,
+            from: call_site.into(),
             to: entered_func.body_id,
             broken,
         });
     }
 
-    fn notify_return(&mut self, ret_point: BasicBlockLocation, caller_func: FuncDef, broken: bool) {
+    fn notify_return(
+        &mut self,
+        ret_point: BasicBlockLocation<FuncDef>,
+        caller_func: FuncDef,
+        broken: bool,
+    ) {
         self.notify_step(ExeTraceRecord::Return {
-            from: ret_point,
+            from: ret_point.into(),
             to: caller_func.body_id,
             broken,
         });
@@ -76,14 +84,22 @@ impl CallTraceRecorder for BasicExeTraceRecorder {
 
 impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self))]
-    fn start_call(&mut self, call_site: BasicBlockLocation) {
-        self.last_call_site = Some(call_site);
+    fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>) {
+        *self
+            .stack
+            .last_mut()
+            .inspect(|l| debug_assert_eq!(&l.body, &call_site.body))
+            .expect("Inconsistent stack info") = call_site;
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
     fn finish_call(&mut self, entered_func: FuncDef, broken: bool) {
-        self.stack.push(entered_func);
-        let Some(call_site) = self.last_call_site.take() else {
+        let call_site = self.stack.last().copied();
+        self.stack.push(BasicBlockLocation {
+            body: entered_func,
+            index: 0,
+        });
+        let Some(call_site) = call_site else {
             if !broken {
                 panic!(
                     "Last call site is expected when not broken, current: {}",
@@ -98,26 +114,27 @@ impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    fn start_return(&mut self, ret_point: BasicBlockLocation) {
+    fn start_return(&mut self, ret_point: BasicBlockLocation<FuncDef>) {
         self.stack.pop().expect("Inconsistent stack info");
         self.last_ret_point = Some(ret_point);
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    fn finish_return(&mut self, broken: bool) {
-        let current = self.stack.last().copied().expect("Inconsistent stack info");
+    fn finish_return(&mut self, broken: bool) -> BasicBlockLocation<FuncDef> {
+        let call_site = self.stack.last().copied().expect("Inconsistent stack info");
         let Some(ret_point) = self.last_ret_point.take() else {
             if !broken {
                 panic!(
                     "Last return point is expected when not broken, current: {}",
-                    current
+                    call_site
                 )
             } else {
-                return;
+                return call_site;
             }
         };
 
-        self.notify_return(ret_point, current, broken);
+        self.notify_return(ret_point, call_site.body, broken);
+        call_site
     }
 }
 
@@ -128,11 +145,11 @@ impl DecisionTraceRecorder for BasicExeTraceRecorder {
         &mut self,
         node_location: BasicBlockLocation,
         kind: &ConstraintKind<Self::Case>,
-    ) {
+    ) -> usize {
         self.notify_step(ExeTraceRecord::Branch(BranchRecord {
             location: node_location,
             decision: kind.clone(),
-        }));
+        }))
     }
 }
 
@@ -146,14 +163,19 @@ impl ExeTraceStorage for BasicExeTraceRecorder {
 
 impl BasicExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self), fields(index = *self.counter.as_ref().borrow()))]
-    fn notify_step(&mut self, record: ExeTraceRecord) {
-        let counter = RRef::as_ref(&self.counter);
-        *counter.borrow_mut() += 1;
+    fn notify_step(&mut self, record: ExeTraceRecord) -> usize {
+        let index = {
+            let mut counter = RRef::as_ref(&self.counter).borrow_mut();
+            let index = *counter + 1;
+            *counter = index;
+            index
+        };
         self.records.borrow_mut().push(Indexed {
             value: record,
-            index: *counter.borrow(),
+            index,
         });
         self.append_last_to_file();
+        index
     }
 
     fn append_last_to_file(&mut self) {
