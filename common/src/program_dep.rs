@@ -186,7 +186,7 @@ pub mod rw {
     pub fn read_program_dep_map() -> Result<LoadedProgramDepMap, Box<dyn StdError>> {
         log_info!("Finding and reading dependence map");
 
-        let path = crate::utils::search_current_ancestor_dirs_for(FILENAME_MAP)
+        let path = crate::utils::search_next_to_exe_for(FILENAME_MAP)
             .ok_or_else(|| Box::<dyn StdError>::from("Failed to find program dependence map"))?;
 
         #[cfg(info_db_fmt = "json")]

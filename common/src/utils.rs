@@ -39,6 +39,20 @@ pub fn search_current_ancestor_dirs_for(name: &str) -> Option<std::path::PathBuf
 }
 
 #[cfg(feature = "std")]
+/// Searches current exe's folder and `deps` folder next to it to find the entry with the name in them.
+/// If found, returns the path to the file or directory.
+pub fn search_next_to_exe_for(name: &str) -> Option<std::path::PathBuf> {
+    let current_exe = std::env::current_exe().ok()?;
+    let exe_dir = current_exe.parent()?;
+
+    const DIR_DEPS: &str = "deps";
+    ["", DIR_DEPS]
+        .iter()
+        .map(|d| exe_dir.join(d))
+        .find_map(|d| try_join_path(d, name))
+}
+
+#[cfg(feature = "std")]
 pub fn try_join_path(
     path: impl AsRef<std::path::Path>,
     child: impl AsRef<std::path::Path>,

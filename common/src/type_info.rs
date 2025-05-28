@@ -369,7 +369,7 @@ pub mod rw {
     pub fn read_types_db() -> Result<LoadedTypeDatabase, Box<dyn StdError>> {
         log_info!("Finding and reading types db");
 
-        let path = crate::utils::search_current_ancestor_dirs_for(FILENAME_DB)
+        let path = crate::utils::search_next_to_exe_for(FILENAME_DB)
             .ok_or_else(|| Box::<dyn StdError>::from("Failed to find types db"))?;
 
         #[cfg(info_db_fmt = "json")]
