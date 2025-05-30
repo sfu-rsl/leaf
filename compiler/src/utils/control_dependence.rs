@@ -97,13 +97,21 @@ impl<Node: Idx> PostDominators<Node> {
         self.dominators.immediate_dominator(node)
     }
 
+    pub fn is_reachable(&self, node: Node) -> bool {
+        self.dominators.is_reachable(node)
+    }
+
+    pub fn post_dominates(&self, a: Node, b: Node) -> bool {
+        self.dominators.dominates(a, b)
+    }
+
     /// Gets all nodes that post-dominate `node`, if they exist.
     pub fn post_dominators(&self, node: Node) -> Option<impl Iterator<Item = Node> + '_> {
         let reachable = self.dominators.is_reachable(node);
         reachable.then(move || {
             (0..self.num_nodes)
                 .map(Node::new)
-                .filter(move |other| self.dominators.dominates(*other, node))
+                .filter(move |other| self.post_dominates(*other, node))
         })
     }
 }

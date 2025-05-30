@@ -16,6 +16,7 @@ use rustc_span::{Span, def_id::DefId, source_map::Spanned};
 use rustc_target::abi::{FieldIdx, VariantIdx};
 
 use std::{
+    borrow::Cow,
     collections::{BTreeMap, HashMap, HashSet},
     num::NonZeroUsize,
     rc::Rc,
@@ -234,25 +235,27 @@ fn make_orig_index_map(body: &Body, storage: &mut dyn Storage) -> HashMap<BasicB
         .collect::<HashMap<_, _>>()
 }
 
-pub(crate) fn assignment_ids_split_agnostic<'tcx>(
-    body: &Body<'tcx>,
-) -> impl Iterator<Item = (Location, AssignmentId)> {
+pub(crate) fn assignment_ids_split_agnostic<'a, 'tcx>(
+    body: &'a Body<'tcx>,
+) -> impl Iterator<Item = (Location, Cow<'a, Place<'tcx>>, AssignmentId)> {
     // Basically, the order index of which we see an assignment is used as its id.
-    body.collect_ordered(
+    body.collect_map_ordered(
         |stmt| match stmt.kind {
-            mir::StatementKind::Assign(_) => true,
-            mir::StatementKind::SetDiscriminant { .. } => true,
-            _ => false,
+            mir::StatementKind::Assign(box (ref dest, _)) => Some(Cow::Borrowed(dest)),
+            mir::StatementKind::SetDiscriminant { ref place, .. } => Some(Cow::Borrowed(place)),
+            _ => None,
         },
         |terminator| match terminator.kind {
-            TerminatorKind::Call { .. } => true,
-            TerminatorKind::TailCall { .. } => true,
-            _ => false,
+            TerminatorKind::Call {
+                ref destination, ..
+            } => Some(Cow::Borrowed(destination)),
+            TerminatorKind::TailCall { .. } => Some(Cow::Owned(Place::return_place())),
+            _ => None,
         },
     )
     .into_iter()
     .enumerate()
-    .map(|(i, loc)| (loc, i.try_into().expect("Too many assignments")))
+    .map(|(i, (loc, dest))| (loc, dest, i.try_into().expect("Too many assignments")))
 }
 
 pub(crate) fn clear_existing_instrumentation<'tcx>(
@@ -350,7 +353,9 @@ impl VisitorFactory {
     where
         C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
-        let assignment_ids = assignment_ids_split_agnostic(call_adder.body()).collect();
+        let assignment_ids = assignment_ids_split_agnostic(call_adder.body())
+            .map(|(loc, _, id)| (loc, id))
+            .collect();
         LeafBodyVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
             assignment_ids: Rc::new(assignment_ids),
@@ -831,7 +836,11 @@ where
         call_adder.before_call_func(func, args, no_definition);
 
         if target.is_some() {
-            call_adder.after().after_call_func(destination);
+            let mut call_adder = call_adder.after();
+            let dest_ref = call_adder.reference_place(destination);
+            let dest_ty = destination.ty(&call_adder, call_adder.tcx()).ty;
+            let mut call_adder = call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
+            call_adder.after_call_func();
         } else {
             // This branch is only triggered by hitting a divergent function:
             // https://doc.rust-lang.org/rust-by-example/fn/diverging.html

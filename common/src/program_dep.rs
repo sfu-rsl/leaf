@@ -8,19 +8,28 @@ use super::types::{AdjListGraph, AssignmentId, BasicBlockIndex, InstanceKindId};
 // A -> B(s) === A control-depends on B(s)
 pub type ControlDependencyGraph = AdjListGraph<BasicBlockIndex, BasicBlockIndex>;
 
-type AssignmentIdMap = Vec<BasicBlockIndex>;
+// Using the index as the key.
+type AssignmentMap<V> = Vec<V>;
+type AssignmentIdMap = AssignmentMap<BasicBlockIndex>;
+
+#[derive(Clone)]
+#[cond_derive_serde_rkyv]
+pub struct AssignmentsInfo {
+    pub bb_map: AssignmentIdMap,
+    pub alternatives: AssignmentMap<bool>,
+}
 
 #[derive(Default, Clone)]
 #[cond_derive_serde_rkyv]
 pub struct PlainProgramDependenceMap<I: Eq + Hash = InstanceKindId> {
     pub control_dep: HashMap<I, ControlDependencyGraph>,
-    pub assignment_bb_map: HashMap<I, AssignmentIdMap>,
+    pub assignments: HashMap<I, AssignmentsInfo>,
 }
 
 pub trait ProgramDependenceMap {
     fn control_dependency(&self, body: InstanceKindId) -> Option<impl ControlDependency>;
 
-    fn assignment_id_map(&self, body: InstanceKindId) -> Option<impl ProgramDepAssignmentIdMap>;
+    fn assignments(&self, body: InstanceKindId) -> Option<impl ProgramDepAssignmentQuery>;
 }
 
 pub trait ControlDependency {
@@ -30,8 +39,12 @@ pub trait ControlDependency {
     ) -> impl IntoIterator<Item = BasicBlockIndex>;
 }
 
-pub trait ProgramDepAssignmentIdMap {
+pub trait ProgramDepAssignmentQuery {
     fn basic_block_index(&self, id: AssignmentId) -> BasicBlockIndex;
+
+    /// Whether there are alternative values for the left-hand of the assignment
+    /// based on this assignment takes place or not.
+    fn alternatives_may_exist(&self, id: AssignmentId) -> bool;
 }
 
 impl ControlDependency for ControlDependencyGraph {
@@ -43,9 +56,15 @@ impl ControlDependency for ControlDependencyGraph {
     }
 }
 
-impl ProgramDepAssignmentIdMap for AssignmentIdMap {
+impl ProgramDepAssignmentQuery for AssignmentsInfo {
+    #[inline]
     fn basic_block_index(&self, id: AssignmentId) -> BasicBlockIndex {
-        self[id as usize]
+        self.bb_map[id as usize]
+    }
+
+    #[inline]
+    fn alternatives_may_exist(&self, id: AssignmentId) -> bool {
+        self.alternatives[id as usize]
     }
 }
 
@@ -127,11 +146,8 @@ pub mod rw {
             }
 
             #[tracing::instrument(level = "trace", skip(self))]
-            fn assignment_id_map(
-                &self,
-                body: InstanceKindId,
-            ) -> Option<impl ProgramDepAssignmentIdMap> {
-                self.access().assignment_bb_map.get(&body.into())
+            fn assignments(&self, body: InstanceKindId) -> Option<impl ProgramDepAssignmentQuery> {
+                self.access().assignments.get(&body.into())
             }
         }
 
@@ -148,10 +164,17 @@ pub mod rw {
             }
         }
 
-        impl ProgramDepAssignmentIdMap for &<AssignmentIdMap as Archive>::Archived {
-            #[tracing::instrument(level = "trace", skip(self))]
+        impl ProgramDepAssignmentQuery for &<AssignmentsInfo as Archive>::Archived {
+            #[tracing::instrument(level = "trace", skip(self), ret)]
+            #[inline]
             fn basic_block_index(&self, id: AssignmentId) -> BasicBlockIndex {
-                self[id as usize].to_native()
+                self.bb_map[id as usize].to_native()
+            }
+
+            #[tracing::instrument(level = "trace", skip(self), ret)]
+            #[inline]
+            fn alternatives_may_exist(&self, id: AssignmentId) -> bool {
+                self.alternatives[id as usize]
             }
         }
 

@@ -138,19 +138,24 @@ pub(crate) mod mir {
     }
 
     pub(crate) trait BodyExt<'tcx> {
-        fn collect_ordered(
-            &self,
-            stmt_pred: impl Fn(&Statement<'tcx>) -> bool,
-            term_pred: impl Fn(&Terminator<'tcx>) -> bool,
-        ) -> Vec<Location>;
+        fn collect_map_ordered<'a, T>(
+            &'a self,
+            stmt_pred: impl Fn(&'a Statement<'tcx>) -> Option<T>,
+            term_pred: impl Fn(&'a Terminator<'tcx>) -> Option<T>,
+        ) -> Vec<(Location, T)>
+        where
+            'tcx: 'a;
     }
 
     impl<'tcx> BodyExt<'tcx> for Body<'tcx> {
-        fn collect_ordered(
-            &self,
-            stmt_pred: impl Fn(&Statement<'tcx>) -> bool,
-            term_pred: impl Fn(&Terminator<'tcx>) -> bool,
-        ) -> Vec<Location> {
+        fn collect_map_ordered<'a, T>(
+            &'a self,
+            stmt_pred: impl Fn(&'a Statement<'tcx>) -> Option<T>,
+            term_pred: impl Fn(&'a Terminator<'tcx>) -> Option<T>,
+        ) -> Vec<(Location, T)>
+        where
+            'tcx: 'a,
+        {
             self.basic_blocks
                 .iter_enumerated()
                 .flat_map(|(index, block)| {
@@ -158,17 +163,22 @@ pub(crate) mod mir {
                         .statements
                         .iter()
                         .enumerate()
-                        .filter(|(_, stmt)| stmt_pred(stmt))
-                        .map(move |(s_index, _)| Location {
-                            block: index,
-                            statement_index: s_index,
+                        .filter_map(|(i, stmt)| stmt_pred(stmt).map(|o| (i, o)))
+                        .map(move |(s_index, o)| {
+                            (
+                                Location {
+                                    block: index,
+                                    statement_index: s_index,
+                                },
+                                o,
+                            )
                         })
                         .chain(
                             block
                                 .terminator
-                                .as_ref()
-                                .filter(|t| term_pred(t))
-                                .map(move |_| self.terminator_loc(index)),
+                                .iter()
+                                .filter_map(|t| term_pred(t))
+                                .map(move |o| (self.terminator_loc(index), o)),
                         )
                 })
                 .collect()

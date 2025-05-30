@@ -3,7 +3,7 @@ use std::{collections::BTreeSet, ops::FromResidual, rc::Rc};
 
 use common::{
     program_dep::{
-        ControlDependency, ProgramDepAssignmentIdMap, ProgramDependenceMap,
+        ControlDependency, ProgramDepAssignmentQuery, ProgramDependenceMap,
         rw::{LoadedProgramDepMap, read_program_dep_map},
     },
     types::{BasicBlockIndex, BasicBlockLocation},
@@ -168,11 +168,13 @@ impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q
         &self,
         (body, assignment_id): AssignmentLocation,
     ) -> Precondition {
-        let bb_index = self
-            .program_dep_map
-            .assignment_id_map(body)
-            .unwrap()
-            .basic_block_index(assignment_id);
+        let assignments_info = self.program_dep_map.assignments(body).unwrap();
+
+        if !assignments_info.alternatives_may_exist(assignment_id) {
+            return Precondition::None;
+        }
+
+        let bb_index = assignments_info.basic_block_index(assignment_id);
 
         self.control_dep_latest_at(BasicBlockLocation {
             body,
