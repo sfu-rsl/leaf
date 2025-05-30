@@ -25,6 +25,7 @@ use std::{
 
 use clap::{Parser, ValueEnum};
 use derive_more::derive::Deref;
+use tracing::info_span;
 
 use common::{
     directed::ProgramMap, log_debug, log_info, pri::BasicBlockLocation, utils::comma_separated,
@@ -306,16 +307,35 @@ fn process_edge(
         dst: edge.dst,
     };
     if let Some(results) = solver.try_satisfy_edge(&edge) {
-        for result in results {
-            log_debug!("Result: {:?}", result.0);
-            if matches!(result.0, z3::SatResult::Sat) {
-                next_input_dumper.dump_as_next_input(
-                    &result.1,
-                    scoring.map(|s| match s {
-                        Scoring::PrefixLen => prefix_len as f64,
-                    }),
-                )
+        info_span!(
+            "input_gen",
+            edge = format!("{} @ {}", edge.src.trace_index, edge.src.location,),
+            toward = edge.dst
+        )
+        .in_scope(|| {
+            for result in results {
+                log_debug!(
+                    "Result: {:?} for {}",
+                    result.solver_result,
+                    result.step_index,
+                );
+
+                if matches!(result.solver_result, z3::SatResult::Sat) {
+                    let input_path = next_input_dumper.dump_as_next_input(
+                        &result.answers,
+                        scoring.map(|s| match s {
+                            Scoring::PrefixLen => prefix_len as f64,
+                        }),
+                    );
+                    if let Some(input_path) = input_path {
+                        log_info!(
+                            "Changed step {} and generated: {}",
+                            result.step_index,
+                            input_path.display(),
+                        )
+                    }
+                }
             }
-        }
+        });
     }
 }

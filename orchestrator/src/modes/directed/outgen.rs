@@ -1,4 +1,7 @@
-use std::{collections::HashMap, path::Path};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
 use common::{
     answers::{
@@ -39,7 +42,11 @@ impl NextInputGenerator {
     }
 
     #[tracing::instrument(level= "debug", skip_all, fields(len = answers.len()))]
-    pub fn dump_as_next_input(&mut self, answers: &HashMap<u32, AstNode>, score: Option<f64>) {
+    pub fn dump_as_next_input(
+        &mut self,
+        answers: &HashMap<u32, AstNode>,
+        score: Option<f64>,
+    ) -> Option<PathBuf> {
         let result = self.answers_writer.write(
             answers
                 .iter()
@@ -48,13 +55,14 @@ impl NextInputGenerator {
 
         let Ok(result) = result else {
             // Disabled
-            return;
+            return None;
         };
 
         match result {
             Ok(path) => {
                 self.total_count += 1;
                 report_diverging_input(&path, score, &self.output_format);
+                Some(path)
             }
             Err(err) => match err {
                 BinaryFileAnswerError::Incomplete => {
@@ -63,12 +71,13 @@ impl NextInputGenerator {
                 BinaryFileAnswerError::NonByte(_) => {
                     log_warn!("Some symbolic variables were not byte, disabling output dumping");
                     self.answers_writer.switch(false);
+                    None
                 }
                 BinaryFileAnswerError::Io(error) => {
                     panic!("Failed to dump the next input {error}")
                 }
             },
-        };
+        }
     }
 
     pub fn total_count(&self) -> usize {
