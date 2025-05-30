@@ -300,6 +300,4 @@ trait ImplicationInvestigator {
         &self,
         assignment_id: (InstanceKindId, AssignmentId),
     ) -> Precondition;
-
-    fn antecedent_of_latest_call_at(&self, location: BasicBlockLocation) -> Precondition;
 }

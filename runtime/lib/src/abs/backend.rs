@@ -255,7 +255,7 @@ pub(crate) trait CallHandler {
 
     fn ret(self, ret_point: BasicBlockIndex);
 
-    fn after_call(self, result_dest: Self::Place);
+    fn after_call(self, assignment_id: AssignmentId, result_dest: Self::Place);
 
     fn metadata(self) -> Self::MetadataHandler;
 }

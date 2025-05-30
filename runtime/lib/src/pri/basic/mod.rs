@@ -627,9 +627,9 @@ impl ProgramRuntimeInterface for BasicPri {
         func_control(|h| h.override_return_value(take_back_operand(operand)))
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
-    fn after_call_func(destination: PlaceRef) {
-        let dest_place = take_place_info_to_write(destination);
-        func_control(|h| h.after_call(dest_place))
+    fn after_call_func(id: AssignmentId, dest: PlaceRef) {
+        let dest_place = take_place_info_to_write(dest);
+        func_control(|h| h.after_call(id, dest_place))
     }
 
     fn intrinsic_assign_rotate_left(

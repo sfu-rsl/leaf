@@ -182,7 +182,9 @@ pub(crate) trait FunctionHandler<'tcx> {
 
     fn return_from_func(&mut self);
 
-    fn after_call_func(&mut self, destination: &Place<'tcx>);
+    fn after_call_func(&mut self)
+    where
+        Self: AssignmentInfoProvider<'tcx>;
 }
 
 pub(crate) trait IntrinsicHandler<'tcx> {
@@ -1973,20 +1975,20 @@ mod implementation {
             self.insert_blocks([block]);
         }
 
-        fn after_call_func(&mut self, destination: &Place<'tcx>) {
-            // we want the place reference to be after the function call as well
-            let BlocksAndResult(mut blocks, dest_ref) = self.internal_reference_place(destination);
-            let after_call_block =
-                self.make_bb_for_call(sym::after_call_func, vec![operand::copy_for_local(
-                    dest_ref,
-                )]);
-            blocks.push(after_call_block);
+        fn after_call_func(&mut self)
+        where
+            Self: AssignmentInfoProvider<'tcx>,
+        {
+            let block = self.make_bb_for_call(sym::after_call_func, vec![
+                operand::const_from_uint(self.tcx(), self.assignment_id()),
+                operand::copy_for_local(self.dest_ref().into()),
+            ]);
             debug_assert_matches!(
                 self.context.insertion_loc(),
                 After(..),
                 "Inserting after_call before a block is not expected."
             );
-            self.insert_blocks(blocks);
+            self.insert_blocks([block]);
         }
     }
 

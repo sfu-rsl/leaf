@@ -4,7 +4,7 @@ use std::cell::RefMut;
 pub(super) use stack::BasicCallStackManager;
 
 use crate::abs::{
-    BasicBlockIndex, CalleeDef, FuncDef, Local, LocalIndex, TypeId,
+    AssignmentId, BasicBlockIndex, CalleeDef, FuncDef, Local, LocalIndex, TypeId,
     backend::{CallHandler, PhasedCallTraceRecorder},
     utils::BasicBlockLocationExt,
 };
@@ -162,7 +162,7 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
         self.call_stack_manager.pop_stack_frame();
     }
 
-    fn after_call(mut self, result_dest: Self::Place) {
+    fn after_call(mut self, assignment_id: AssignmentId, result_dest: Self::Place) {
         debug_assert!(!result_dest.is_symbolic());
         let (mut return_val, sanity) = self.call_stack_manager.finalize_call();
         let call_site = self
@@ -172,7 +172,7 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
 
         let antecedent = self
             .implication_investigator
-            .antecedent_of_latest_call_at(call_site.into());
+            .antecedent_of_latest_assignment((call_site.body.body_id, assignment_id));
         return_val.by.add_info(&antecedent);
         self.call_stack_manager
             .top()

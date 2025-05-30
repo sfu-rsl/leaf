@@ -181,10 +181,6 @@ impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q
             index: bb_index,
         })
     }
-
-    fn antecedent_of_latest_call_at(&self, location: BasicBlockLocation) -> Precondition {
-        self.control_dep_latest_at(location)
-    }
 }
 
 impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {

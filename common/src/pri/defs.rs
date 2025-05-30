@@ -275,7 +275,7 @@ pub mod macros {
           ) }
           { fn return_from_func(ret_point: BasicBlockIndex) }
           { fn override_return_value(operand: OperandRef) }
-          { fn after_call_func(destination: PlaceRef) }
+          { fn after_call_func(id: AssignmentId, dest: PlaceRef) }
 
           // ----- Atomic -----
           { fn intrinsic_assign_rotate_left(id: AssignmentId, dest: PlaceRef, x: OperandRef, shift: OperandRef) }
@@ -631,7 +631,7 @@ pub mod macros {
             }$modifier!{
                 fn override_return_value(operand:OperandRef);
             }$modifier!{
-                fn after_call_func(destination:PlaceRef);
+                fn after_call_func(id: AssignmentId, dest: PlaceRef);
             }$modifier!{
                 fn intrinsic_assign_rotate_left(id:AssignmentId,dest:PlaceRef,x:OperandRef,shift:OperandRef);
             }$modifier!{
