@@ -40,6 +40,12 @@ pub(crate) struct Solver<'ctx, 'a> {
     tried_decisions: RefCell<SolverCache>,
 }
 
+pub(crate) struct SolveResult<'ctx> {
+    pub solver_result: z3::SatResult,
+    pub answers: HashMap<u32, AstNode<'ctx>>,
+    pub step_index: usize,
+}
+
 impl<'ctx, 'a> Solver<'ctx, 'a> {
     pub(crate) fn new(
         trace: &'a [SwitchStep],
@@ -82,7 +88,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
     pub(crate) fn try_satisfy_edge(
         &mut self,
         edge: &DirectedEdge<'_, &[CfgEdgeDestination]>,
-    ) -> Option<impl Iterator<Item = (z3::SatResult, HashMap<u32, AstNode<'ctx>>)>> {
+    ) -> Option<impl Iterator<Item = SolveResult>> {
         log_debug!(
             index = edge.src.trace_index,
             discr = edge.src.discr.as_ref().map(|d| d.to_string()),
@@ -101,18 +107,15 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
             return None;
         }
 
-        let from_discr = last.discr.iter().flat_map(|discr| {
-            self.satisfy_decision_toward(prefix, &discr, &last.decision, edge.dst, edge.metadata)
-        });
+        let from_discr = last
+            .discr
+            .is_some()
+            .then(|| self.satisfy_decision_toward(prefix, &last, edge.dst, edge.metadata))
+            .into_iter()
+            .flatten();
 
         let from_antecedents = self
-            .change_antecedents_toward(
-                prefix,
-                &last.implied_by_offset,
-                &last.decision,
-                edge.dst,
-                edge.metadata,
-            )
+            .change_antecedents_toward(prefix, &last, edge.dst, edge.metadata)
             .into_iter()
             .flatten();
 
@@ -127,82 +130,67 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
     fn satisfy_decision_toward<'b, 'c>(
         &'b self,
         prefix: &'b [ParsedSwitchStep<'ctx>],
-        discr: &'b ParsedDiscrValue<'ctx>,
-        taken_case: &'b ConstraintKind<RawCaseValue>,
+        step: &'b ParsedSwitchStep<'ctx>,
         dst: BasicBlockIndex,
         outgoing_edges: &'c [CfgEdgeDestination],
-    ) -> impl Iterator<Item = (z3::SatResult, HashMap<u32, AstNode<'ctx>>)> {
+    ) -> impl Iterator<Item = SolveResult<'ctx>> {
         let kinds_to_satisfy =
-            construct_constraint_kinds_to_satisfy(taken_case, outgoing_edges, dst);
-        self.satisfy_decision_for_kinds(prefix, discr, kinds_to_satisfy)
-            .instrumented(Span::current())
+            construct_constraint_kinds_to_satisfy(&step.decision, outgoing_edges, dst)
+                .instrumented(Span::current());
+        self.satisfy_decision_for_kinds(
+            prefix,
+            step,
+            step.discr.as_ref().unwrap(),
+            kinds_to_satisfy,
+        )
+        .instrumented(Span::current())
     }
 
     #[tracing::instrument(level = "debug", skip_all)]
     fn change_antecedents_toward<'b, 'c>(
         &'b self,
         prefix: &'b [ParsedSwitchStep<'ctx>],
-        implied_by_offset: &'b [usize],
-        taken_case: &'b ConstraintKind<RawCaseValue>,
+        step: &'b ParsedSwitchStep<'ctx>,
         dst: BasicBlockIndex,
         outgoing_edges: &'c [CfgEdgeDestination],
-    ) -> Option<impl Iterator<Item = (z3::SatResult, HashMap<u32, AstNode<'ctx>>)>> {
+    ) -> Option<impl Iterator<Item = SolveResult<'ctx>>> {
         if let AntecedentSolvingStrategy::None = self.antecedent_strategy {
             return None;
         }
 
-        let not_taken = taken_case.clone().not();
+        let not_taken = step.decision.clone().not();
 
         let can_take_another = cfg_constraints_to_kind(
             cfg_constraints_to(outgoing_edges, dst),
             outgoing_edges,
-            taken_case.is_boolean(),
+            step.decision.is_boolean(),
         )
         .any(|k| k.and(&not_taken, || case_count(outgoing_edges)).is_some());
         if !can_take_another {
             log_debug!("Already taken the desired edge, nothing to change");
         }
 
-        let implied_by = can_take_another
-            .then_some(implied_by_offset)
-            .into_iter()
-            .flatten()
-            .map(|offset| prefix[..=(prefix.len() - offset)].split_last().unwrap());
-
-        let result = match self.antecedent_strategy {
-            AntecedentSolvingStrategy::ConjunctionNegation => todo!(),
-            AntecedentSolvingStrategy::MultiAnswerNegation => {
-                let negated_antecedents = implied_by.map(move |(step, prefix)| {
-                    log_debug!(
-                        "Negating antecedent: {} @ {}",
-                        step.trace_index,
-                        step.location
-                    );
-                    self.satisfy_decision_for_kinds(
-                        prefix,
-                        &step.discr.as_ref().unwrap_or_else(|| {
-                            panic!(
-                                "Discriminant is expected for an antecedent at step: {:?}",
-                                step
-                            )
-                        }),
-                        iter::once(step.decision.clone().not()),
-                    )
-                });
-
-                negated_antecedents.flatten().instrumented(Span::current())
-            }
-            AntecedentSolvingStrategy::None => unreachable!(),
-        };
-        Some(result)
+        Some(
+            can_take_another
+                .then(|| self.change_antecedents(prefix, step).unwrap())
+                .into_iter()
+                .flatten()
+                .instrumented(Span::current()),
+        )
     }
 
     fn satisfy_decision_for_kinds<'b, I: IntoIterator<Item = ConstraintKind<RawCaseValue>>>(
         &'b self,
         prefix: &'b [ParsedSwitchStep<'ctx>],
+        step: &'b ParsedSwitchStep<'ctx>,
         discr: &'b ParsedDiscrValue<'ctx>,
         kinds: I,
-    ) -> impl Iterator<Item = (z3::SatResult, HashMap<u32, AstNode<'ctx>>)> {
+    ) -> impl Iterator<Item = SolveResult<'ctx>> {
+        log_debug!(
+            "Changing decision: ({} @ {})",
+            step.trace_index,
+            step.location,
+        );
         // Only send constraints for the participating variables.
         let vars_forest = self.vars_forests[prefix.len()].as_ref().unwrap();
         let vars_set_root = vars_forest.root_of(
@@ -214,7 +202,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
                 .unwrap(),
         );
 
-        const USE_WEAKENED_TRACE: bool = false;
+        const USE_WEAKENED_TRACE: bool = true;
         let prefix = if USE_WEAKENED_TRACE {
             &self.weakened_trace[..prefix.len()]
         } else {
@@ -260,8 +248,77 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
                 self.solver
                     .check(prefix.iter().cloned().chain(iter::once(to_satisfy)))
             })
+            .map(|(smt_res, answers)| SolveResult {
+                solver_result: smt_res,
+                answers,
+                step_index: step.trace_index,
+            })
             .instrumented(Span::current())
     }
+
+    fn change_antecedents<'b>(
+        &'b self,
+        prefix: &'b [ParsedSwitchStep<'ctx>],
+        step: &'b ParsedSwitchStep<'ctx>,
+    ) -> Option<impl Iterator<Item = SolveResult<'ctx>>> {
+        if let AntecedentSolvingStrategy::None = self.antecedent_strategy {
+            return None;
+        }
+
+        let result = match self.antecedent_strategy {
+            AntecedentSolvingStrategy::ConjunctionNegation => todo!(),
+            AntecedentSolvingStrategy::MultiAnswerNegation => antecedents(prefix, step)
+                .rev()
+                .map(move |(prefix, a_step)| {
+                    log_debug!(
+                        "Changing antecedent: ({} @ {}) => ({} @ {})",
+                        a_step.trace_index,
+                        a_step.location,
+                        step.trace_index,
+                        step.location,
+                    );
+                    Box::new(self.take_another_decision(prefix, a_step))
+                        as Box<dyn Iterator<Item = SolveResult<'ctx>>>
+                })
+                .flatten(),
+            AntecedentSolvingStrategy::None => unreachable!(),
+        };
+        Some(result)
+    }
+
+    fn take_another_decision<'b>(
+        &'b self,
+        prefix: &'b [ParsedSwitchStep<'ctx>],
+        step: &'b ParsedSwitchStep<'ctx>,
+    ) -> impl Iterator<Item = SolveResult<'ctx>> {
+        let from_discr = step
+            .discr
+            .as_ref()
+            .map(|discr| {
+                self.satisfy_decision_for_kinds(
+                    prefix,
+                    step,
+                    discr,
+                    iter::once(step.decision.clone().not()),
+                )
+            })
+            .into_iter()
+            .flatten();
+
+        let from_antecedents = self.change_antecedents(prefix, step).into_iter().flatten();
+
+        from_discr.chain(from_antecedents)
+    }
+}
+
+fn antecedents<'b, 'ctx>(
+    prefix: &'b [ParsedSwitchStep<'ctx>],
+    step: &'b ParsedSwitchStep<'ctx>,
+) -> impl DoubleEndedIterator<Item = (&'b [ParsedSwitchStep<'ctx>], &'b ParsedSwitchStep<'ctx>)> {
+    step.implied_by_offset
+        .iter()
+        .map(|offset| prefix[..=(prefix.len() - offset)].split_last().unwrap())
+        .map(|(a, b)| (b, a))
 }
 
 fn suggest_current_input_as_answer<'ctx>(
