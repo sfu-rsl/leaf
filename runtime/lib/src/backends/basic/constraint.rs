@@ -11,11 +11,13 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicExprBuilder, BasicTraceManager, CallStackInfo, Implied,
-    ImpliedValueRefUnaryExprBuilder, ValueRef, expr::prelude::ConstValue,
+    BasicBackend, BasicExprBuilder, BasicTraceManager, BasicValueUnaryExprBuilder, CallStackInfo,
+    expr::prelude::ConstValue,
 };
 
-pub(super) type Constraint = crate::abs::Constraint<Implied<ValueRef>, ConstValue>;
+use super::BasicValue;
+
+pub(super) type Constraint = crate::abs::Constraint<BasicValue, ConstValue>;
 pub(super) type DecisionCase = ConstValue;
 
 pub(crate) struct BasicConstraintHandler<'a, EB> {
@@ -38,8 +40,8 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
     }
 }
 
-impl<'a, EB: ImpliedValueRefUnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
-    type Operand = Implied<ValueRef>;
+impl<'a, EB: BasicValueUnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
+    type Operand = BasicValue;
     type SwitchHandler = BasicSwitchHandler<'a, EB>;
 
     fn switch(self, discriminant: Self::Operand) -> Self::SwitchHandler {
@@ -83,7 +85,7 @@ impl<'a, EB> BasicConstraintHandler<'a, EB> {
 }
 
 pub(crate) struct BasicSwitchHandler<'a, EB> {
-    discr: Implied<ValueRef>,
+    discr: BasicValue,
     parent: BasicConstraintHandler<'a, EB>,
 }
 

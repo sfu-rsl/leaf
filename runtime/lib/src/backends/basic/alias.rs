@@ -1,9 +1,10 @@
 use core::ops::DerefMut;
 
 use super::{
-    ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, Implied, LazyTypeInfo,
+    ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,
     TraceViewProvider,
     expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef, place::PlaceValueRef},
+    implication::Implied,
     trace::BasicExeTraceRecorder,
 };
 use crate::{
@@ -95,6 +96,12 @@ where
 {
 }
 
+pub(super) trait BasicValueExprBuilder: ImpliedValueRefExprBuilder {}
+impl<T: ImpliedValueRefExprBuilder> BasicValueExprBuilder for T {}
+
+pub(super) trait BasicValueUnaryExprBuilder: ImpliedValueRefUnaryExprBuilder {}
+impl<T: ImpliedValueRefUnaryExprBuilder> BasicValueUnaryExprBuilder for T {}
+
 pub(super) use super::expr::builders::DefaultImpliedExprBuilder as BasicExprBuilder;
 pub(super) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
 
@@ -112,21 +119,19 @@ impl<'t, T> TypeDatabase for T where
 }
 
 pub(super) trait VariablesState:
-    GenericVariablesState<
-        PlaceInfo = BasicPlaceInfo,
-        PlaceValue = PlaceValueRef,
-        Value = Implied<ValueRef>,
-    >
+    GenericVariablesState<PlaceInfo = BasicPlaceInfo, PlaceValue = PlaceValueRef, Value = BasicValue>
 {
 }
 impl<T> VariablesState for T where
     T: GenericVariablesState<
             PlaceInfo = BasicPlaceInfo,
             PlaceValue = PlaceValueRef,
-            Value = Implied<ValueRef>,
+            Value = BasicValue,
         >
 {
 }
+
+pub(super) type BasicValue = Implied<ValueRef>;
 
 pub(super) type BasicVariablesState = super::state::RawPointerVariableState<BasicSymExprBuilder>;
 
@@ -140,11 +145,11 @@ pub(super) type BasicDecisionTraceRecorder =
 pub(super) type BasicCallStackManager = super::call::BasicCallStackManager<BasicVariablesState>;
 
 pub(crate) trait TraceManager:
-    abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
+    abs::backend::TraceManager<super::trace::Step, BasicValue, ConstValue> + Shutdown
 {
 }
 impl<T> TraceManager for T where
-    T: abs::backend::TraceManager<super::trace::Step, Implied<ValueRef>, ConstValue> + Shutdown
+    T: abs::backend::TraceManager<super::trace::Step, BasicValue, ConstValue> + Shutdown
 {
 }
 pub(super) trait TraceManagerWithViews:

@@ -176,7 +176,7 @@ impl RuntimeBackend for BasicBackend {
 
     type PlaceInfo = BasicPlaceInfo;
     type Place = PlaceValueRef;
-    type Operand = Implied<ValueRef>;
+    type Operand = BasicValue;
 
     fn place(&mut self, usage: PlaceUsage) -> Self::PlaceHandler<'_> {
         BasicPlaceHandler::new(usage, self)
@@ -219,7 +219,7 @@ impl Shutdown for BasicBackend {
 }
 
 trait SymVariablesManager {
-    fn add_variable(&mut self, var: SymVariable<Implied<ValueRef>>) -> SymValueRef;
+    fn add_variable(&mut self, var: SymVariable<BasicValue>) -> SymValueRef;
 
     fn iter_variables(
         &self,

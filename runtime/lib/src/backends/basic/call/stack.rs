@@ -8,7 +8,7 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    ConcreteValue, Implied, ValueRef, VariablesState,
+    BasicValue, ConcreteValue, Implied, VariablesState,
     config::{CallConfig, ExternalCallStrategy},
     expr::prelude::DeterPlaceValueRef,
 };
@@ -531,7 +531,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     }
 }
 
-fn unknown_value() -> Implied<ValueRef> {
+fn unknown_value() -> BasicValue {
     Implied::by_unknown(ConcreteValue::from(Constant::Some).to_value_ref())
 }
 

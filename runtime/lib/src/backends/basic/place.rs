@@ -218,8 +218,7 @@ mod handlers {
 
     use super::*;
     use backend::{
-        BasicBackend, BasicPlaceInfo, CallStackInfo, Implied, TypeDatabase, ValueRef,
-        VariablesState,
+        BasicBackend, BasicPlaceInfo, BasicValue, CallStackInfo, TypeDatabase, VariablesState,
     };
 
     pub(crate) struct BasicPlaceHandler<'a> {
@@ -242,7 +241,7 @@ mod handlers {
         type PlaceInfo<'a> = BasicPlaceInfo;
         type Place = PlaceValueRef;
         type DiscriminablePlace = DiscriminantPossiblePlace;
-        type Operand = Implied<ValueRef>;
+        type Operand = BasicValue;
 
         fn from_info<'a>(self, info: Self::PlaceInfo<'a>) -> Self::Place {
             self.vars_state.ref_place(&info, self.usage)

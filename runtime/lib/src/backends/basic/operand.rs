@@ -6,8 +6,10 @@ use crate::{
 use crate::backends::basic as backend;
 use backend::{
     BasicBackend, BasicSymVariablesManager, CallStackInfo, Implied, PlaceValueRef,
-    SymVariablesManager, ValueRef, VariablesState, expr::prelude::ConcreteValue,
+    SymVariablesManager, VariablesState, expr::prelude::ConcreteValue,
 };
+
+use super::BasicValue;
 
 pub(crate) struct BasicOperandHandler<'a> {
     vars_state: &'a mut dyn VariablesState,
@@ -25,7 +27,7 @@ impl<'a> BasicOperandHandler<'a> {
 
 impl OperandHandler for BasicOperandHandler<'_> {
     type Place = PlaceValueRef;
-    type Operand = Implied<ValueRef>;
+    type Operand = BasicValue;
 
     fn copy_of(self, place: Self::Place) -> Self::Operand {
         self.vars_state.copy_place(&place)

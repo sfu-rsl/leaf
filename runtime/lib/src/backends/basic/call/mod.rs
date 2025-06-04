@@ -1,5 +1,5 @@
 mod stack;
-use std::cell::RefMut;
+use std::{borrow::Cow, cell::RefMut};
 
 pub(super) use stack::BasicCallStackManager;
 
@@ -11,8 +11,8 @@ use crate::abs::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicVariablesState, CallStackInfo, GenericVariablesState, Implied,
-    PlaceValueRef, TypeDatabase, ValueRef, expr::prelude::DeterPlaceValueRef,
+    BasicBackend, BasicValue, BasicVariablesState, CallStackInfo, GenericVariablesState,
+    PlaceValueRef, TypeDatabase, expr::prelude::DeterPlaceValueRef,
 };
 
 enum CallFlowSanity {
@@ -96,7 +96,7 @@ impl<'a> BasicCallHandler<'a> {
 
 impl<'a> CallHandler for BasicCallHandler<'a> {
     type Place = PlaceValueRef;
-    type Operand = Implied<ValueRef>;
+    type Operand = BasicValue;
     type MetadataHandler = ();
 
     #[inline]
