@@ -489,6 +489,7 @@ dependencies = [
  "derive_more",
  "glob",
  "ignore",
+ "itertools 0.14.0",
  "macros",
  "paste",
  "regex-lite",

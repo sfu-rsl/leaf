@@ -1,8 +1,12 @@
 use std::collections::HashMap;
 
+use rustc_abi::VariantIdx;
 use rustc_data_structures::graph::dominators::{Dominators, dominators};
 use rustc_middle::{
-    mir::{BasicBlock, BasicBlocks, Body, Local, Location, TerminatorKind},
+    mir::{
+        AggregateKind, BasicBlock, BasicBlocks, Body, Local, Location, Rvalue, StatementKind,
+        TerminatorKind,
+    },
     ty::TyCtxt,
 };
 
@@ -97,26 +101,25 @@ fn make_assignment_info<'tcx>(body: &Body<'tcx>) -> AssignmentsInfo {
         .map(|e| PostDominators::build(&body.basic_blocks, e))
         .collect();
 
-    let mut assignments_by_local: HashMap<Local, Vec<Location>> = HashMap::new();
+    // Conservatively overapproximate over the local
+    type AlternativeClass = (Local, Option<VariantIdx>);
+    let mut assignments_grouped: HashMap<AlternativeClass, Vec<Location>> = HashMap::new();
     let mut dest_locals = Vec::new();
     let mut bb_map = Vec::new();
 
     for (loc, dest, _) in assignment_ids_split_agnostic(body) {
         bb_map.push(loc.block.as_u32());
-        // Conservatively overapproximate over the local
-        assignments_by_local
-            .entry(dest.local)
-            .or_default()
-            .push(loc);
-        dest_locals.push((loc, dest.local));
+        let class = (dest.local, opt_variant_index(body, loc));
+        assignments_grouped.entry(class).or_default().push(loc);
+        dest_locals.push((loc, class));
     }
 
     log_debug!("In body: {:?}", body.source.def_id());
     let alternatives = dest_locals
         .into_iter()
-        .map(|(loc, local)| {
-            log_debug!("Checking for alternatives of {:?} @ {:?}", local, loc);
-            there_are_alternatives_for(loc, &assignments_by_local[&local], &dom, &post_doms)
+        .map(|(loc, class)| {
+            log_debug!("Checking for alternatives of {:?} @ {:?}", class, loc);
+            there_are_alternatives_for(loc, &assignments_grouped[&class], &dom, &post_doms)
         })
         .collect();
 
@@ -203,4 +206,17 @@ fn there_are_alternatives_for(
     };
 
     all_assignments.iter().any(|a| is_a_sign(a.block))
+}
+
+fn opt_variant_index<'tcx>(body: &Body<'tcx>, assignment_loc: Location) -> Option<VariantIdx> {
+    body.stmt_at(assignment_loc)
+        .left()
+        .and_then(|stmt| match stmt.kind {
+            StatementKind::Assign(box (
+                _,
+                Rvalue::Aggregate(box AggregateKind::Adt(_, variant_index, _, _, _), _),
+            )) => Some(variant_index),
+            StatementKind::SetDiscriminant { variant_index, .. } => Some(variant_index),
+            _ => None,
+        })
 }
