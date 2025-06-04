@@ -1,24 +1,21 @@
-use std::{ops::DerefMut, rc::Rc};
+use std::{num::NonZero, ops::DerefMut, rc::Rc};
+
+use derive_more as dm;
+
+use common::type_info::TypeInfo;
 
 use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
     backends::basic::{
-        GenericVariablesState, Implied, Precondition,
+        GenericVariablesState, TypeLayoutResolver, ValueRef,
         alias::{SymValueRefExprBuilder, TypeDatabase},
-        expr::{
-            lazy::RawPointerRetriever,
-            place::{DeterministicPlaceValue, SymbolicPlaceValue},
-        },
+        expr::{lazy::RawPointerRetriever, prelude::*},
+        implication::{Antecedents, Implied, Precondition, PreconditionConstraints},
+        place::{LocalWithMetadata, PlaceWithMetadata, Projection},
+        type_info::TypeLayoutResolverExt,
     },
     type_info::TypeInfoExt,
     utils::{InPlaceSelfHierarchical, alias::RRef},
-};
-use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo, UnionShape};
-
-use super::super::{
-    ValueRef,
-    expr::prelude::*,
-    place::{LocalWithMetadata, PlaceWithMetadata, Projection},
 };
 
 mod memory;
@@ -118,7 +115,7 @@ type SymPlaceHandlerObject = RRef<SymPlaceHandlerDyn>;
 /// Provides a mapping for raw pointers to symbolic values.
 /// All places that have a valid address are handled by this state, otherwise
 /// they will be sent to the `fallback` state to be handled.
-pub(crate) struct RawPointerVariableState<EB> {
+pub(in super::super) struct RawPointerVariableState<EB> {
     memory: memory::MemoryGate,
     type_manager: Rc<dyn TypeDatabase>,
     sym_read_handler: SymPlaceHandlerObject,
@@ -189,7 +186,7 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
     #[tracing::instrument(level = "debug", skip(self))]
     fn copy_place(&self, place: &PlaceValueRef) -> Self::Value {
         match place.as_ref() {
-            PlaceValue::Deterministic(ref place) => self.copy_deterministic_place(place),
+            PlaceValue::Deterministic(ref place) => self.copy_deterministic_place(place).into(),
             PlaceValue::Symbolic(ref sym_place) => self.copy_symbolic_place(sym_place),
         }
     }
@@ -197,7 +194,7 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
     #[tracing::instrument(level = "debug", skip(self))]
     fn take_place(&mut self, place: &PlaceValueRef) -> Self::Value {
         match place.as_ref() {
-            PlaceValue::Deterministic(ref place) => self.take_deterministic_place(place),
+            PlaceValue::Deterministic(ref place) => self.take_deterministic_place(place).into(),
             PlaceValue::Symbolic(ref sym_place) => self.take_symbolic_place(sym_place),
         }
     }
@@ -223,9 +220,44 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
     }
 }
 
+#[derive(dm::From)]
+enum DeterministicReadResult {
+    MemObject(SymValueRef),
+    Porter(PorterValue),
+    Lazy(RawConcreteValue),
+}
+
+impl DeterministicReadResult {
+    #[inline]
+    fn to_value_ref(self) -> ValueRef {
+        match self {
+            Self::MemObject(value) => value.into(),
+            Self::Porter(value) => value.to_value_ref().into(),
+            Self::Lazy(value) => value.to_value_ref(),
+        }
+    }
+
+    fn is_symbolic(&self) -> bool {
+        match self {
+            Self::MemObject(_) | Self::Porter(_) => true,
+            Self::Lazy(_) => false,
+        }
+    }
+}
+
+impl From<Implied<DeterministicReadResult>> for Implied<ValueRef> {
+    #[inline]
+    fn from(value: Implied<DeterministicReadResult>) -> Self {
+        value.map_value(DeterministicReadResult::to_value_ref)
+    }
+}
+
 // Deterministic Place
 impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
-    fn copy_deterministic_place(&self, place_val: &DeterministicPlaceValue) -> Implied<ValueRef> {
+    fn copy_deterministic_place(
+        &self,
+        place_val: &DeterministicPlaceValue,
+    ) -> Implied<DeterministicReadResult> {
         let addr = place_val.address();
         let size = self.get_type_size(place_val);
 
@@ -237,16 +269,13 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 .retrieve_sym_value(sym_val.clone(), place_val.type_id())
                 .into(),
             // None
-            [] => place_val.to_raw_value().to_value_ref(),
+            [] => place_val.to_raw_value().into(),
             // Multiple/Different Id
-            _ => self
-                .create_porter_for_copy(place_val, size, values)
-                .to_value_ref()
-                .into(),
+            _ => self.create_porter_for_copy(place_val, size, values).into(),
         };
 
         Implied {
-            by: Precondition::merge(self.memory.read_preconditions(addr, size)),
+            by: Self::to_single_precondition(self.memory.read_preconditions(addr, size), size),
             value,
         }
     }
@@ -254,7 +283,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     fn take_deterministic_place(
         &mut self,
         place_val: &DeterministicPlaceValue,
-    ) -> Implied<ValueRef> {
+    ) -> Implied<DeterministicReadResult> {
         let addr = place_val.address();
         let size = self.get_type_size(place_val);
 
@@ -266,16 +295,13 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 .retrieve_sym_value(sym_val.clone(), place_val.type_id())
                 .into(),
             // None
-            [] => place_val.to_raw_value().to_value_ref(),
+            [] => place_val.to_raw_value().into(),
             // Multiple/Different Id
-            _ => self
-                .create_porter_for_move(place_val, size, values)
-                .to_value_ref()
-                .into(),
+            _ => self.create_porter_for_move(place_val, size, values).into(),
         };
 
         Implied {
-            by: Precondition::merge(self.memory.read_preconditions(addr, size)),
+            by: Self::to_single_precondition(self.memory.read_preconditions(addr, size), size),
             value,
         }
     }
@@ -294,6 +320,23 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         self.memory.erase_values(place_val.address(), size);
         self.memory
             .erase_preconditions_in(place_val.address(), size);
+    }
+
+    fn to_single_precondition(
+        sub_preconditions: Vec<(PointerOffset, NonZero<TypeSize>, Antecedents)>,
+        whole_size: TypeSize,
+    ) -> Precondition {
+        let constraints = match sub_preconditions.as_slice() {
+            [(0, size, _)] if *size == NonZero::new(whole_size).unwrap() => Some(
+                PreconditionConstraints::Whole(sub_preconditions.into_iter().next().unwrap().2),
+            ),
+            [..] => PreconditionConstraints::refined(
+                sub_preconditions
+                    .into_iter()
+                    .map(|(offset, size, antecedents)| (offset, size, antecedents)),
+            ),
+        };
+        constraints.into()
     }
 }
 
@@ -389,7 +432,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         let mut sym_values = Vec::new();
         self.to_sym_values(&mut sym_values, 0, size, value.value, type_id);
         self.memory.replace_values(addr, size, sym_values);
-        self.memory.append_merge_precondition(addr, size, value.by);
+        self.memory.replace_preconditions(addr, size, value.by);
     }
 
     fn to_sym_values(
@@ -447,61 +490,27 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         adt: &AdtValue,
         type_id: TypeId,
     ) {
-        let ty = self.get_type(type_id);
-        let variant = match adt.kind {
-            /* NOTE: Don't we need to take care of tag value and possible symbolic value for it?
-             * No, because the tag is always concrete at the time of construction.
-             * Even if it it is niche, it will be calculated based on a field value which is
-             * taken care of. */
-            AdtKind::Enum { variant } => ty.get_variant(variant).unwrap(),
-            _ => ty.expect_single_variant(),
-        };
+        let field_ranges = self
+            .type_manager
+            .layouts()
+            .resolve_adt_fields(type_id, adt.kind.variant_index());
 
-        match &variant.fields {
-            FieldsShapeInfo::Struct(StructShape { fields }) => {
-                for (field, info) in adt.fields.iter().zip(fields) {
-                    if let Some(value) = &field.value {
-                        self.to_sym_values(
-                            values,
-                            base_offset + info.offset,
-                            self.get_type(info.ty).size().unwrap(),
-                            value.clone(),
-                            info.ty,
-                        );
-                    }
-                }
-            }
-            FieldsShapeInfo::Union(UnionShape { fields }) => {
-                let field_find = &mut adt
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, f)| f.value.as_ref().map(|v| (i, v.clone())));
-                let (i, value) = field_find
-                    .next()
-                    .expect("Could not find the single field of a union.");
-                debug_assert!(
-                    field_find.next().is_none(),
-                    "Multiple fields found in a union."
-                );
-                /* NOTE: The documents about union is a bit unreliable.
-                 * - https://doc.rust-lang.org/reference/types/union.html
-                 * - https://doc.rust-lang.org/nightly/nightly-rustc/rustc_target/abi/enum.FieldsShape.html#variant.Union
-                 */
-                let offset = 0;
+        /* NOTE: Don't we need to take care of tag value and possible symbolic value for it?
+         * No, because the tag is always concrete at the time of construction.
+         * Even if it it is niche, it will be calculated based on a field value which is
+         * taken care of in the assignment logic. */
+
+        for (field, (field_ty, field_offset, field_size)) in adt.fields.iter().zip(field_ranges) {
+            if let Some(value) = &field.value {
                 self.to_sym_values(
                     values,
-                    base_offset + offset,
-                    self.get_type(fields[i].ty).size().unwrap(),
+                    base_offset + field_offset,
+                    field_size,
                     value.clone(),
-                    fields[i].ty,
+                    field_ty,
                 );
             }
-            _ => panic!(
-                "Unexpected shape for fields of an ADT: {:?}",
-                variant.fields
-            ),
-        };
+        }
     }
 
     #[tracing::instrument(level = "debug", skip(self, array), fields(value = %array))]
@@ -512,19 +521,15 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         array: &ArrayValue,
         type_id: TypeId,
     ) {
-        let item_ty = {
-            let item_ty_id = self.get_type(type_id).expect_array().item_ty;
-            self.get_type(item_ty_id)
-        };
-        let item_size = item_ty.size().unwrap();
-
-        for (i, element) in array.elements.iter().enumerate() {
+        let (elem_type_id, elem_ranges) =
+            self.type_manager.layouts().resolve_array_elements(type_id);
+        for (element, (elem_offset, elem_size)) in array.elements.iter().zip(elem_ranges) {
             self.to_sym_values(
                 values,
-                base_offset + (item_ty.size * i as PointerOffset),
-                item_size,
+                base_offset + elem_offset,
+                elem_size,
                 element.clone(),
-                item_ty.id,
+                elem_type_id,
             );
         }
     }
@@ -573,5 +578,6 @@ impl<EB: SymValueRefExprBuilder> RawPointerRetriever for RawPointerVariableState
     fn retrieve(&self, addr: RawAddress, type_id: TypeId) -> ValueRef {
         self.copy_deterministic_place(&DeterministicPlaceValue::from_addr_type(addr, type_id))
             .value
+            .to_value_ref()
     }
 }

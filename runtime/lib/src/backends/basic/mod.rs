@@ -40,12 +40,12 @@ use self::{
     config::BasicBackendConfig,
     constraint::BasicConstraintHandler,
     expr::{SymVarId, prelude::*},
-    implication::{Implied, Precondition, default_implication_investigator},
+    implication::{Antecedents, Implied, Precondition, default_implication_investigator},
     operand::BasicOperandHandler,
     place::BasicPlaceHandler,
     state::{BasicMemoryHandler, RawPointerVariableState, make_sym_place_handler},
     sym_vars::BasicSymVariablesManager,
-    trace::BasicExeTraceRecorder,
+    trace::{BasicExeTraceRecorder, default_trace_querier},
 };
 
 type BasicTraceManager = dyn TraceManager;
@@ -290,17 +290,30 @@ trait GenericTraceQuerier {
     type Record;
     type Constraint;
 
-    fn find_in_latest_call_of<'a>(
+    fn find_map_in_latest_call_of<'a, T>(
         &'a self,
         body_id: InstanceKindId,
-        predicate: impl FnMut(&Self::Record, &Self::Constraint) -> bool,
-    ) -> Option<impl AsRef<Self::Record> + AsRef<Self::Constraint>>;
+        f: impl FnMut(&Self::Record, &Self::Constraint) -> Option<T>,
+    ) -> Option<(impl AsRef<Self::Record> + AsRef<Self::Constraint>, T)>;
+}
+
+#[derive(Debug)]
+struct EnumAntecedentsResult {
+    tag: Antecedents,
+    fields: Option<Antecedents>,
 }
 
 trait ImplicationInvestigator {
     fn antecedent_of_latest_assignment(
         &self,
         assignment_id: (InstanceKindId, AssignmentId),
+    ) -> Option<Antecedents>;
+
+    fn antecedent_of_latest_enum_assignment(
+        &self,
+        assignment_id: (InstanceKindId, AssignmentId),
+    ) -> Option<EnumAntecedentsResult>;
+}
 
 trait TypeLayoutResolver<'t> {
     fn resolve_array_elements(

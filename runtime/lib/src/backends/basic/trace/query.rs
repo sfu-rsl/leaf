@@ -47,11 +47,11 @@ impl GenericTraceQuerier for BasicTraceQuerier {
     type Record = BasicExeTraceRecord;
     type Constraint = BasicConstraint;
 
-    fn find_in_latest_call_of<'a>(
+    fn find_map_in_latest_call_of<'a, T>(
         &'a self,
         body_id: InstanceKindId,
-        mut predicate: impl FnMut(&Self::Record, &Self::Constraint) -> bool,
-    ) -> Option<impl AsRef<Self::Record> + AsRef<Self::Constraint>> {
+        mut f: impl FnMut(&Self::Record, &Self::Constraint) -> Option<T>,
+    ) -> Option<(impl AsRef<Self::Record> + AsRef<Self::Constraint>, T)> {
         // (Indexed<...>s, Constraints) -> (Indexed<Constraint>s)
         let constraint_steps = self.constraint_steps.borrow();
         let constraint_indices = constraint_steps.iter().map(HasIndex::index);
@@ -80,9 +80,9 @@ impl GenericTraceQuerier for BasicTraceQuerier {
 
         let record_of_interest = latest_records_in_body
             .filter_map(|(r, opt_c)| opt_c.map(|c| (r, c)))
-            .find(|((_, r), (_, c))| predicate(r, c));
+            .find_map(|x @ ((_, r), (_, c))| f(r, &c).map(|v| (x, v)));
 
-        record_of_interest.map(|((r_i, _), (c_i, _))| self.create_view(r_i, c_i))
+        record_of_interest.map(|(((r_i, _), (c_i, _)), v)| (self.create_view(r_i, c_i), v))
     }
 }
 

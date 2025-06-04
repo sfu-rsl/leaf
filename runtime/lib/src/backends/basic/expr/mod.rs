@@ -839,9 +839,9 @@ pub(crate) struct TruncationExpr {
 
 pub(crate) type SymIndex = SliceIndex<SymValueRef>;
 pub(crate) type MultiValueLeaf = ValueRef;
-pub(crate) type MultiValueTree = SymbolicReadTree<SymIndex, MultiValueLeaf>;
+pub(crate) type MultiValueTree<V = MultiValueLeaf> = SymbolicReadTree<SymIndex, V>;
 pub(crate) type MultiValueArray = Vec<MultiValueTree>;
-pub(crate) type MultiValue = Select<SymIndex, MultiValueTree>;
+pub(crate) type MultiValue<V = MultiValueLeaf> = Select<SymIndex, MultiValueTree<V>>;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SliceIndex<I> {

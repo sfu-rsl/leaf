@@ -61,8 +61,10 @@ where
             S: serde::Serializer,
         {
             match self {
-                Precondition::None | Precondition::Unknown => serializer.serialize_none(),
-                Precondition::Constraints(constraints) => constraints.deref().serialize(serializer),
+                Precondition::NoneOrUnknown => serializer.serialize_none(),
+                Precondition::Constraints(constraints) => {
+                    constraints.expect_whole().serialize(serializer)
+                }
             }
         }
     }

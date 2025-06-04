@@ -13,7 +13,10 @@ pub(super) type Address = common::types::RawAddress;
 mod high {
     use common::{log_debug, log_warn, pri::TypeId, types::PointerOffset};
 
-    use crate::backends::basic::{Precondition, expr::SymValueRef};
+    use crate::backends::basic::{
+        expr::SymValueRef,
+        implication::{Antecedents, Precondition, PreconditionConstraints},
+    };
 
     use low::Memory;
 
@@ -28,7 +31,7 @@ mod high {
      * If retrieving the containing object, the preconditions of the fields work
      * for the object as well. And if it is the field being accessed, we approximate
      * with the preconditions of the parent. */
-    type PreconditionObject = Precondition;
+    type PreconditionObject = Antecedents;
 
     #[derive(Default)]
     pub(crate) struct MemoryGate {
@@ -84,7 +87,7 @@ mod high {
             &'a self,
             addr: Address,
             size: TypeSize,
-        ) -> Vec<&'a Precondition> {
+        ) -> Vec<(PointerOffset, NonZero<TypeSize>, PreconditionObject)> {
             let Some(size) = NonZero::<TypeSize>::new(size) else {
                 // ZST instances are constants, thus no precondition.
                 return Default::default();
@@ -93,19 +96,39 @@ mod high {
             let range = range_from(addr, size);
 
             let mut preconditions = Vec::new();
-            self.precondition_mem
-                .apply_in_range(&range, |addr, size ,_| { let obj_range = range_from(*addr, *size);
-                 // Overlapping but not a container
-                if !RangeIntersection::contains(&obj_range, &range) {
-                    log_warn!(
-                        "Object boundary/alignment assumption does not hold. This is probably due to missed deallocations."
-                    );
-                    false
-                } else {
-                    true
-                } },|_, _, precondition| {
-                    preconditions.push(precondition);
-                });
+            self.precondition_mem.apply_in_range(
+                &range,
+                |addr, size, _| {
+                    let obj_range = range_from(*addr, *size);
+                    // Overlapping but not contained
+                    if !RangeIntersection::contains(&range, &obj_range)
+                        && !RangeIntersection::contains(&obj_range, &range)
+                    {
+                        log_warn!(
+                            concat!(
+                                "Object boundary/alignment assumption does not hold. ",
+                                "An overlapping object's preconditions fetched. Skipping. ",
+                                "This is probably due to missed deallocations. ",
+                                "Query: {:?}, Object: {:?}"
+                            ),
+                            range,
+                            obj_range,
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                },
+                |p_addr, p_size, precondition| {
+                    let offset = if *p_addr > range.start {
+                        offset_of(range.start, *p_addr)
+                    } else {
+                        0
+                    };
+                    let size = (*p_size).min(NonZero::new(size.get() - offset).unwrap());
+                    preconditions.push((offset, size, precondition.clone()));
+                },
+            );
 
             preconditions
         }
@@ -184,7 +207,7 @@ mod high {
         }
 
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn append_merge_precondition(
+        pub(crate) fn replace_preconditions(
             &mut self,
             addr: Address,
             size: TypeSize,
@@ -198,41 +221,26 @@ mod high {
 
             self.inner_erase_preconditions_in(addr, size.get(), true);
 
-            if !precondition.is_some() {
+            let Some(constraints) = precondition.take_constraints() else {
                 return;
-            }
+            };
 
-            let range = range_from(addr, size);
-
-            let updated = self.precondition_mem.apply_in_range_mut(
-                &range,
-                |addr, size, _| {
-                    let obj_range = range_from(*addr, *size);
-                    if !RangeIntersection::contains(&obj_range, &range) {
-                        log_warn!(
-                            concat!(
-                                "Object boundary/alignment assumption does not hold. ",
-                                "An overlapping object / symbolic container found. ",
-                                "This is probably due to missed deallocations. ",
-                                "Query: {:?}, Object: {:?}"
-                            ),
-                            range,
-                            obj_range,
-                        );
-                        false
-                    } else {
-                        debug_assert!(RangeIntersection::contains(&obj_range, &range));
-                        true
-                    }
-                },
-                |_, _, existing| *existing = Precondition::merge([&existing, &precondition]),
-            );
-
-            if updated == 0 {
+            let base_addr = addr;
+            let whole_size = size;
+            let mut insert = |offset, size: NonZero<TypeSize>, precondition| {
+                let addr = base_addr.wrapping_byte_add(offset as usize);
+                debug_assert!(addr as u64 + size.get() <= base_addr as u64 + whole_size.get());
                 self.precondition_mem
                     .after_or_at_mut(&addr)
                     .insert_before(addr, (size, precondition))
-                    .unwrap();
+                    .unwrap()
+            };
+            match constraints {
+                PreconditionConstraints::Whole(constraints) => insert(0, size, constraints),
+                PreconditionConstraints::Refined(items) => items
+                    .get()
+                    .into_iter()
+                    .for_each(|(offset, size, precondition)| insert(offset, size, precondition)),
             }
         }
 
@@ -249,12 +257,15 @@ mod high {
             };
 
             let range = range_from(addr, size);
-
+            let mut container = false;
+            let mut last_erased = None;
             self.precondition_mem.drain_range_and_apply(
                 &range,
                 |addr, size, _| {
                     let obj_range = range_from(*addr, *size);
                     if obj_range == range {
+                        true
+                    } else if RangeIntersection::contains(&range, &obj_range) {
                         true
                     }
                     // Container
@@ -265,17 +276,18 @@ mod high {
                                     "Object boundary/alignment assumption does not hold. ",
                                     "A contained object is being erased before the container. ",
                                     "This is probably due to missed deallocations. ",
-                                    "Skipping erasing the preconditions of the container object. ",
+                                    "Breaking the preconditions of the container object anyway. ",
                                     "Query: {:?}, Object: {:?}"
                                 ),
                                 range,
                                 obj_range,
                             );
                         }
-                        false
+                        container = true;
+                        true
                     }
                     // Overlapping but not contained
-                    else if !RangeIntersection::contains(&obj_range, &range) {
+                    else {
                         log_warn!(
                             concat!(
                                 "Object boundary/alignment assumption does not hold. ",
@@ -288,13 +300,58 @@ mod high {
                             obj_range,
                         );
                         true
-                    } else {
-                        true
                     }
                 },
-                |_, _, _| {},
+                |addr, size, precondition| {
+                    last_erased = Some(((addr, size), precondition));
+                },
             );
+
+            // FIXME: We can do better with cursors, but let's keep it simple for now.
+            if container {
+                self.split_erase_preconditions_and_insert(last_erased.unwrap(), range);
+            }
         }
+
+        #[tracing::instrument(level = "debug", skip(self, obj_precondition))]
+        fn split_erase_preconditions_and_insert(
+            &mut self,
+            ((obj_addr, obj_size), obj_precondition): (
+                (*const (), NonZero<TypeSize>),
+                PreconditionObject,
+            ),
+            range: Range<Address>,
+        ) {
+            let mut insert = |part: (*const (), *const ())| {
+                if let Some(size) = NonZero::new(
+                    unsafe { part.1.byte_offset_from(part.0) }
+                        .try_into()
+                        .unwrap(),
+                ) {
+                    self.precondition_mem
+                        .after_or_at_mut(&part.0)
+                        .insert_before(part.0, (size, obj_precondition.clone()))
+                        .unwrap();
+                }
+            };
+
+            let obj_range = range_from(obj_addr, obj_size);
+            let first_part = (obj_range.start, range.start);
+            let second_part = (range.end, obj_range.end);
+            if first_part.0 < first_part.1 {
+                insert(first_part);
+            }
+            if second_part.0 < second_part.1 {
+                insert(second_part);
+            }
+        }
+    }
+
+    #[inline]
+    fn offset_of(base_addr: Address, inner_addr: Address) -> PointerOffset {
+        unsafe { inner_addr.byte_offset_from(base_addr) }
+            .try_into()
+            .unwrap()
     }
 }
 pub(super) use high::MemoryGate;

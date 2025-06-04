@@ -173,7 +173,11 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
         let antecedent = self
             .implication_investigator
             .antecedent_of_latest_assignment((call_site.body.body_id, assignment_id));
-        return_val.by.add_info(&antecedent);
+        if let Some(antecedent) = antecedent {
+            return_val.by.add_antecedents(Cow::Owned(antecedent), || {
+                result_dest.type_info().get_size(self.type_manager).unwrap()
+            });
+        }
         self.call_stack_manager
             .top()
             .set_place(DeterPlaceValueRef::new(result_dest).as_ref(), return_val);

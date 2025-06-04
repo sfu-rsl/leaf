@@ -153,7 +153,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         let host = self.copy_deterministic_place(&host_place).value;
         if host.is_symbolic() {
             let host = sym_place_handler.handle(
-                SymValueRef::new(host),
+                SymValueRef::new(host.to_value_ref()),
                 Box::new(|_| ConcreteValueRef::new(host_place.to_raw_value().to_value_ref())),
             );
             if host.is_symbolic() {
@@ -203,7 +203,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                     .take_if(|index| index.is_symbolic())
                     .map(|index| {
                         sym_place_handler.handle(
-                            SymValueRef::new(index),
+                            SymValueRef::new(index.to_value_ref()),
                             Self::conc_value_obtainer(index_place.as_ref()),
                         )
                     })
@@ -305,7 +305,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         resolver.resolve(place_val)
     }
 
-    fn get_select_sym_place_result(&self, select: &PlaceSelect) -> Implied<ValueSelect> {
+    fn get_select_sym_place_result(&self, select: &PlaceSelect) -> Implied<ValueSelect<ValueRef>> {
         let mut preconditions = Vec::new();
         let value = select.map_leaves(
             |index| SliceIndex {
@@ -315,18 +315,22 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             |place| {
                 let Implied { by, value } = self.get_single_sym_place_result(place);
                 preconditions.push(by);
-                value
+                value.to_value_ref()
             },
         );
 
         Implied {
+            // We overapproximate over the preconditions of the leaves for simplicity.
             by: Precondition::merge(preconditions),
             value,
         }
     }
 
     #[inline]
-    fn get_single_sym_place_result(&self, single: &SinglePlaceResult) -> Implied<ValueRef> {
+    fn get_single_sym_place_result(
+        &self,
+        single: &SinglePlaceResult,
+    ) -> Implied<DeterministicReadResult> {
         self.copy_deterministic_place(single.0.as_ref())
     }
 }
