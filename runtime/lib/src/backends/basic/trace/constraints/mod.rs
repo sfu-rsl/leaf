@@ -24,7 +24,7 @@ use crate::{
 
 use super::backend;
 use backend::{
-    BasicConstraint, ConstValue, Implied, SymVarId, SymVariablesManager, TraceManagerWithViews,
+    BasicConstraint, BasicValue, ConstValue, SymVarId, SymVariablesManager, TraceManagerWithViews,
     TraceViewProvider, ValueRef,
     config::SolverImpl,
     config::{ExecutionTraceConfig, OutputConfig, TraceInspectorType},
@@ -56,8 +56,8 @@ pub(crate) struct BasicTraceManager<M> {
     constraints_view: RefView<Vec<BasicConstraint>>,
 }
 
-impl<M: AbsTraceManager<Indexed<Step>, Implied<ValueRef>, ConstValue>>
-    AbsTraceManager<Step, Implied<ValueRef>, ConstValue> for BasicTraceManager<M>
+impl<M: AbsTraceManager<Indexed<Step>, BasicValue, ConstValue>>
+    AbsTraceManager<Step, BasicValue, ConstValue> for BasicTraceManager<M>
 {
     fn notify_step(&mut self, step: Step, constraint: BasicConstraint) {
         let step_index = self
@@ -207,7 +207,7 @@ pub(crate) fn create_trace_manager(
         })
         .inspected_by(sym_discr_inspectors)
         .filtered_by(|_, c| c.discr.is_symbolic())
-        .adapt_value(|discr: Implied<ValueRef>| discr.value)
+        .adapt_value(|discr: BasicValue| discr.value)
         .inspected_by(outer_agg_inspector)
         .inspected_by(all_constraints_inspectors)
         .inspected_by(utils::dumping::create_timer_dumper_inspector(

@@ -517,6 +517,15 @@ pub(crate) enum AdtKind {
     },
 }
 
+impl AdtKind {
+    pub fn variant_index(&self) -> Option<VariantIndex> {
+        match self {
+            Self::Struct => None,
+            Self::Enum { variant } => Some(*variant),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AdtValue {
     pub kind: AdtKind,

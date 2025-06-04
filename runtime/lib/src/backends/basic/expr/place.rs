@@ -33,6 +33,11 @@ impl PlaceValue {
             PlaceValue::Symbolic(value) => value.type_info(),
         }
     }
+
+    #[inline]
+    pub(crate) fn type_id(&self) -> TypeId {
+        self.type_info().id().unwrap()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -1,14 +1,16 @@
 use delegate::delegate;
 
-use common::type_info::{CoreTypes, TypeInfo, pass_core_type_names_to};
+use common::type_info::{
+    CoreTypes, FieldsShapeInfo, StructShape, TypeInfo, pass_core_type_names_to,
+};
 
 use crate::{
-    abs::{IntType, backend::TypeDatabase},
-    type_info,
+    abs::{IntType, PointerOffset, TypeSize, backend::TypeDatabase},
+    type_info::{self, TypeInfoExt},
 };
 
 use crate::backends::basic as backend;
-use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, ValueType};
+use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, TypeLayoutResolver, ValueType};
 
 pub(crate) struct BasicTypeManager<D: TypeDatabase<'static>> {
     inner: D,
@@ -158,3 +160,77 @@ where
         }
     }
 }
+
+struct LayoutResolver<'a, D: ?Sized>(&'a D);
+
+// https://doc.rust-lang.org/reference/type-layout.html
+impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutResolver<'a, D> {
+    fn resolve_array_elements(
+        &self,
+        type_id: TypeId,
+    ) -> (TypeId, impl Iterator<Item = (PointerOffset, TypeSize)> + 't) {
+        let ty = self.0.get_type(&type_id).expect_array();
+        let item_ty = self.0.get_type(&ty.item_ty);
+        let item_size = item_ty.size().unwrap();
+        (
+            item_ty.id,
+            (0..ty.len).into_iter().map(move |i| {
+                let offset = item_size * i;
+                (offset, item_size)
+            }),
+        )
+    }
+
+    fn resolve_adt_fields(
+        &self,
+        type_id: TypeId,
+        variant: Option<crate::abs::VariantIndex>,
+    ) -> impl Iterator<Item = (TypeId, PointerOffset, TypeSize)> + 't {
+        let ty = self.0.get_type(&type_id);
+        let variant = match variant {
+            Some(variant) => ty.get_variant(variant).unwrap(),
+            None => ty.expect_single_variant(),
+        };
+
+        use FieldsShapeInfo::*;
+        match &variant.fields {
+            Struct(StructShape { fields }) | Union(StructShape { fields }) => {
+                if cfg!(debug_assertions) {}
+                {
+                    if matches!(&variant.fields, Union(..)) {
+                        assert!(
+                            fields.iter().all(|f| f.offset == 0),
+                            "Union fields must have zero offset"
+                        );
+                    }
+                }
+
+                // We collect them to break the borrow
+                let field_tys = fields
+                    .iter()
+                    .map(|f| self.0.get_type(&f.ty))
+                    .collect::<Vec<_>>();
+                fields
+                    .iter()
+                    .zip(field_tys.into_iter())
+                    .map(|(f, field_ty)| {
+                        let offset = f.offset;
+                        let size = field_ty.size().unwrap();
+                        (field_ty.id, offset, size)
+                    })
+            }
+            NoFields | Array(..) => panic!(
+                "Unexpected shape for fields of an ADT: {:?}",
+                variant.fields
+            ),
+        }
+    }
+}
+
+pub(super) trait TypeLayoutResolverExt<'t>: TypeDatabase<'t> {
+    fn layouts<'a>(&'a self) -> impl TypeLayoutResolver<'t> + 'a {
+        LayoutResolver(self)
+    }
+}
+
+impl<'t, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolverExt<'t> for D {}

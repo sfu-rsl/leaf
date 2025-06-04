@@ -192,6 +192,17 @@ impl<'t> TypeDatabase<'t> for &'t TypesData {
     }
 }
 
+#[cfg(feature = "std")]
+impl<'t, D: TypeDatabase<'t> + ?Sized> TypeDatabase<'t> for std::rc::Rc<D> {
+    delegate::delegate! {
+        to self.as_ref() {
+            fn opt_get_type(&self, key: &TypeId) -> Option<&'t TypeInfo>;
+            fn get_type(&self, key: &TypeId) -> &'t TypeInfo;
+            fn core_types(&self) -> &CoreTypes<TypeId>;
+        }
+    }
+}
+
 #[cfg(feature = "type_info_rw")]
 pub mod rw {
     use core::error::Error as StdError;

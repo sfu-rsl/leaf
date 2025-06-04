@@ -13,7 +13,7 @@ doctest = false
 std = []
 logging = ["dep:tracing"]
 serde = ["dep:serde"]
-type_info = ["std"]
+type_info = ["std", "dep:delegate"]
 type_info_rw = [
     "type_info",
     "rkyv",

@@ -19,13 +19,15 @@ use std::{cell::RefCell, rc::Rc};
 
 use common::{
     log_info,
-    pri::{AssignmentId, BasicBlockIndex, BasicBlockLocation},
+    pri::{AssignmentId, BasicBlockIndex},
     types::InstanceKindId,
 };
-use trace::default_trace_querier;
 
 use crate::{
-    abs::{FuncDef, PlaceUsage, SymVariable, Tag, TypeId, backend::*},
+    abs::{
+        FuncDef, PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex,
+        backend::*,
+    },
     utils::{RefView, alias::RRef},
 };
 
@@ -299,5 +301,16 @@ trait ImplicationInvestigator {
     fn antecedent_of_latest_assignment(
         &self,
         assignment_id: (InstanceKindId, AssignmentId),
-    ) -> Precondition;
+
+trait TypeLayoutResolver<'t> {
+    fn resolve_array_elements(
+        &self,
+        type_id: TypeId,
+    ) -> (TypeId, impl Iterator<Item = (PointerOffset, TypeSize)> + 't);
+
+    fn resolve_adt_fields(
+        &self,
+        type_id: TypeId,
+        variant: Option<VariantIndex>,
+    ) -> impl Iterator<Item = (TypeId, PointerOffset, TypeSize)> + 't;
 }
