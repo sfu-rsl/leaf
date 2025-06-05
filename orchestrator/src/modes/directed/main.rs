@@ -293,6 +293,11 @@ fn load_trace(
     result
 }
 
+#[tracing::instrument(
+    level = "debug",
+    skip_all,
+    fields(edge = format!("{} @ {}", edge.src.trace_index, edge.src.location), toward = edge.dst)
+)]
 fn process_edge(
     p_map: &ProgramMap,
     solver: &mut solve::Solver,
@@ -307,12 +312,7 @@ fn process_edge(
         dst: edge.dst,
     };
     if let Some(results) = solver.try_satisfy_edge(&edge) {
-        info_span!(
-            "input_gen",
-            edge = format!("{} @ {}", edge.src.trace_index, edge.src.location,),
-            toward = edge.dst
-        )
-        .in_scope(|| {
+        info_span!("input_gen").in_scope(|| {
             for result in results {
                 log_debug!(
                     "Result: {:?} for {}",

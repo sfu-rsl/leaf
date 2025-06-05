@@ -72,7 +72,11 @@ impl_from_str_through_des!(DefId);
 
 impl InstanceKindId {
     fn to_ser_str(&self) -> String {
-        std::format!("{}-{}", self.0, self.1.to_ser_str())
+        if core::hint::likely(self.0 == 0) {
+            self.1.to_ser_str()
+        } else {
+            std::format!("{}-{}", self.1.to_ser_str(), self.0)
+        }
     }
 }
 
@@ -95,20 +99,22 @@ impl<'de> Deserialize<'de> for InstanceKindId {
             type Value = InstanceKindId;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string in ##-##:## format")
+                formatter.write_str("a string in ##:##(-##)? format")
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
             where
                 E: de::Error,
             {
-                let parts = v
-                    .split_once('-')
-                    .ok_or(E::invalid_value(Unexpected::Str(v), &self))?;
-                Ok(InstanceKindId(
-                    parts.0.parse().map_err(E::custom)?,
-                    parts.1.parse().map_err(E::custom)?,
-                ))
+                if let Some(parts) = v.split_once('-') {
+                    core::hint::cold_path();
+                    Ok(InstanceKindId(
+                        parts.1.parse().map_err(E::custom)?,
+                        parts.0.parse().map_err(E::custom)?,
+                    ))
+                } else {
+                    Ok(InstanceKindId(0, v.parse().map_err(E::custom)?))
+                }
             }
         }
 
@@ -137,7 +143,7 @@ impl<'de> Deserialize<'de> for BasicBlockLocation {
             type Value = BasicBlockLocation;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a string in ##-##:##:## format")
+                formatter.write_str("a string in ##:##(-##)?:## format")
             }
 
             fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>

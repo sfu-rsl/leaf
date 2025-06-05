@@ -2,11 +2,12 @@
 #![feature(core_intrinsics)]
 #![feature(ptr_metadata)]
 #![feature(const_type_id)]
+#![feature(cold_path)]
+#![feature(likely_unlikely)]
 #![cfg_attr(not(core_build), feature(register_tool))]
 #![cfg_attr(not(core_build), register_tool(leaf_attr))]
 #![cfg_attr(all(not(core_build), feature = "answers"), feature(path_add_extension))]
 #![cfg_attr(all(not(core_build), feature = "building"), feature(exit_status_error))]
-
 #![no_std]
 
 #[cfg(feature = "std")]
@@ -24,10 +25,10 @@ pub mod conc_loop;
 pub mod config;
 #[cfg(feature = "directed")]
 pub mod directed;
-#[cfg(feature = "program_dep")]
-pub mod program_dep;
 #[cfg(feature = "logging")]
 pub mod logging;
+#[cfg(feature = "program_dep")]
+pub mod program_dep;
 #[cfg(feature = "rkyv")]
 mod rkyving;
 #[cfg(feature = "serde")]

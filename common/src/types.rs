@@ -57,7 +57,12 @@ pub struct InstanceKindId(pub InstanceKindDiscr, pub DefId);
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 impl core::fmt::Display for InstanceKindId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "Instance({}-{})", self.0, self.1)
+        write!(f, "Instance({}", self.1)?;
+        if self.0 == 0 {
+        } else {
+            write!(f, "-{}", self.0)?;
+        }
+        write!(f, ")")
     }
 }
 
@@ -120,21 +125,6 @@ pub struct FuncDef {
 impl From<FuncDef> for InstanceKindId {
     fn from(value: FuncDef) -> Self {
         value.body_id
-    }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[cfg(feature = "value_types")]
-pub mod value {
-    /* FIXME: These types will have a limited set of possible values. Thus they can be
-     * optimized using techniques such as interning or even changing them to enums.
-     * Enums are not much a favorable option, since they are against the abstract
-     * representation of integers and floats in the engine.
-     */
-    #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-    pub struct IntType {
-        pub bit_size: u64,
-        pub is_signed: bool,
     }
 }
 

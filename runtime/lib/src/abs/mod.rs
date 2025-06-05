@@ -5,6 +5,7 @@ pub(crate) mod backend;
 pub(crate) mod expr;
 pub(crate) mod fmt;
 pub(crate) mod place;
+mod serdes;
 pub(crate) mod utils;
 
 pub(crate) use common::pri::Tag;
@@ -244,7 +245,8 @@ impl ValueType {
  * Enums are not much a favorable option, since they are against the abstract
  * representation of integers and floats in the engine.
  */
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, dm::Debug)]
+#[debug("{}", self)]
 pub(crate) struct IntType {
     pub bit_size: u64,
     pub is_signed: bool,

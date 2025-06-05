@@ -11,7 +11,7 @@ use tracing::Span;
 
 use common::{
     directed::{CfgConstraint, CfgEdgeDestination, ProgramMap, RawCaseValue},
-    log_debug, log_warn,
+    log_debug, log_trace, log_warn,
     pri::{BasicBlockIndex, BasicBlockLocation},
     types::trace::ConstraintKind,
     utils::comma_separated,
@@ -28,7 +28,8 @@ type Constraint<'ctx> = common::types::trace::Constraint<ParsedDiscrValue<'ctx>,
 type ParsedSwitchStep<'ctx> = SwitchStep<ParsedDiscrValue<'ctx>>;
 type VariablesForest = Rc<DisjointSet>;
 
-type SolverCache = HashSet<(usize, ConstraintKind<RawCaseValue>)>;
+type DecisionCache = HashSet<(usize, ConstraintKind<RawCaseValue>)>;
+type ChangeCache = HashSet<usize>;
 
 pub(crate) struct Solver<'ctx, 'a> {
     solver: Z3Solver<'ctx, u32>,
@@ -37,7 +38,8 @@ pub(crate) struct Solver<'ctx, 'a> {
     weakened_trace: Vec<ParsedSwitchStep<'ctx>>,
     vars_forests: Vec<Option<VariablesForest>>,
     antecedent_strategy: AntecedentSolvingStrategy,
-    tried_decisions: RefCell<SolverCache>,
+    tried_decisions: RefCell<DecisionCache>,
+    tried_changes: RefCell<ChangeCache>,
 }
 
 pub(crate) struct SolveResult<'ctx> {
@@ -71,6 +73,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
             vars_forests,
             antecedent_strategy,
             tried_decisions: Default::default(),
+            tried_changes: Default::default(),
         }
     }
 
@@ -89,23 +92,24 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
         &mut self,
         edge: &DirectedEdge<'_, &[CfgEdgeDestination]>,
     ) -> Option<impl Iterator<Item = SolveResult>> {
-        log_debug!(
-            index = edge.src.trace_index,
-            discr = edge.src.discr.as_ref().map(|d| d.to_string()),
-            antecedents = comma_separated(edge.src.implied_by_offset.iter()),
-            "Edge to satisfy: {} toward {}",
-            &edge.src.location,
-            edge.dst,
-        );
-
-        let index = self.trace.element_offset(edge.src);
-        let constraints = &self.parsed_trace[..=index.expect("Inconsistent referencing")];
+        let index = self
+            .trace
+            .element_offset(edge.src)
+            .expect("Inconsistent referencing");
+        let constraints = &self.parsed_trace[..=index];
         let (last, prefix) = constraints.split_last().unwrap();
 
         // If (symbolic) constraint is available or some other have implied it.
         if last.discr.is_none() && last.implied_by_offset.is_empty() {
             return None;
         }
+
+        log_debug!(
+            discr = edge.src.discr.as_ref().map(|d| d.to_string()),
+            antecedents = (!edge.src.implied_by_offset.is_empty())
+                .then(|| comma_separated(antecedents(prefix, last).map(|(_, s)| s.trace_index))),
+            "Satisfying edge",
+        );
 
         let from_discr = last
             .discr
@@ -191,6 +195,21 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
             step.trace_index,
             step.location,
         );
+
+        let to_satisfy = kinds
+            .into_iter()
+            .filter(move |k| {
+                self.tried_decisions
+                    .borrow_mut()
+                    .insert((step.trace_index, k.clone()))
+            })
+            .map(|k| k.map(ast_mapper(discr)))
+            .map(|kind| Constraint {
+                discr: discr.clone(),
+                kind,
+            })
+            .inspect(|c| log_debug!("Constraint to satisfy: {c}"));
+
         // Only send constraints for the participating variables.
         let vars_forest = self.vars_forests[prefix.len()].as_ref().unwrap();
         let vars_set_root = vars_forest.root_of(
@@ -226,22 +245,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
             })
             .collect::<Vec<_>>();
 
-        let prefix_len = prefix.len();
-        log_debug!("Found {} relevant constraints in the prefix", prefix_len);
-
-        let to_satisfy = kinds
-            .into_iter()
-            .filter(move |k| {
-                self.tried_decisions
-                    .borrow_mut()
-                    .insert((prefix_len, k.clone()))
-            })
-            .map(|k| k.map(ast_mapper(discr)))
-            .map(|kind| Constraint {
-                discr: discr.clone(),
-                kind,
-            })
-            .inspect(|c| log_debug!("Constraint to satisfy: {c}"));
+        log_debug!("Found {} relevant constraints in the prefix", prefix.len());
 
         to_satisfy
             .map(move |to_satisfy| {
@@ -277,7 +281,7 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
                         step.trace_index,
                         step.location,
                     );
-                    Box::new(self.take_another_decision(prefix, a_step))
+                    Box::new(self.take_other_decisions(prefix, a_step))
                         as Box<dyn Iterator<Item = SolveResult<'ctx>>>
                 })
                 .flatten(),
@@ -286,11 +290,19 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
         Some(result)
     }
 
-    fn take_another_decision<'b>(
+    fn take_other_decisions<'b>(
         &'b self,
         prefix: &'b [ParsedSwitchStep<'ctx>],
         step: &'b ParsedSwitchStep<'ctx>,
     ) -> impl Iterator<Item = SolveResult<'ctx>> {
+        if !self.tried_changes.borrow_mut().insert(step.trace_index) {
+            log_trace!(
+                "Already tried to change decision for step {}",
+                step.trace_index
+            );
+            return None.into_iter().flatten();
+        }
+
         let from_discr = step
             .discr
             .as_ref()
@@ -307,7 +319,9 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
 
         let from_antecedents = self.change_antecedents(prefix, step).into_iter().flatten();
 
-        from_discr.chain(from_antecedents)
+        Some(from_discr.chain(from_antecedents))
+            .into_iter()
+            .flatten()
     }
 }
 
@@ -500,11 +514,13 @@ fn weaken_constraint<'ctx>(
     if let Some(weakened_kind) = weakened_kind {
         step.decision = weakened_kind;
     } else {
-        log_debug!(
-            "Removing constraint (discriminant). The next basic block ({}), is reachable from all edges of {:?}.",
-            next,
-            step
-        );
+        if step.discr.is_some() {
+            log_debug!(
+                "Removing constraint (discriminant). The next basic block ({}), is reachable from all edges of {:?}.",
+                next,
+                step
+            );
+        }
         step.discr = None;
     }
 }

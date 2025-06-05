@@ -190,8 +190,8 @@ fn get_call_sites(
 
             let result = call_sites
                 .iter()
-                .filter(|(_, c)| c.eq(callee))
-                .map(|(bb, _)| bb)
+                .filter(|(_, c, _)| c.eq(callee))
+                .map(|(bb, _, _)| bb)
                 .copied();
             for call_site in result {
                 yield call_site;
@@ -276,7 +276,7 @@ mod next {
                     );
                     let result = callees
                         .iter()
-                        .map(|(_, c)| c)
+                        .map(|(_, c, _)| c)
                         .copied()
                         .filter(move |c| c == target || reachers.contains(c));
                     for callee in result {
