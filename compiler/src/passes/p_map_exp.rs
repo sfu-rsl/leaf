@@ -92,16 +92,17 @@ fn visit_body<'tcx>(
     let mut ret_points = Vec::new();
     let mut calls = Calls::new();
 
-    let first_non_single_edge = |bb: BasicBlock| {
+    let first_targetable = |bb: BasicBlock| {
         let mut current = bb;
-        while let Some(TerminatorEdges::Single(next)) = body.basic_blocks[current]
-            .terminator
-            .as_ref()
-            .filter(|t| !matches!(t.kind, TerminatorKind::Assert { .. }))
-            .map(|t| t.edges())
-        {
-            current = next;
-        }
+        // FIXME: Fix problem with massive number of gotos and the importance of assignments.
+        // while let Some(TerminatorEdges::Single(next)) = body.basic_blocks[current]
+        //     .terminator
+        //     .as_ref()
+        //     .filter(|t| !matches!(t.kind, TerminatorKind::Assert { .. }))
+        //     .map(|t| t.edges())
+        // {
+        //     current = next;
+        // }
         current
     };
 
@@ -113,12 +114,12 @@ fn visit_body<'tcx>(
                 index.as_u32(),
                 targets
                     .into_iter()
-                    .map(|(bb, c)| (first_non_single_edge(bb.into()).as_u32(), c))
+                    .map(|(bb, c)| (first_targetable(bb.into()).as_u32(), c))
                     .collect(),
             );
         };
 
-        let mut insert_to_calls = |def_id, generic_args| {
+        let mut insert_to_calls = |def_id, generic_args, dbg| {
             if let Ok(Some(instance_kind)) = tcx.resolve_instance_raw(
                 tcx.typing_env_in_body(body.source.def_id())
                     .as_query_input((def_id, generic_args)),
