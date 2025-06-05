@@ -13,7 +13,7 @@ pub(crate) async fn calc_program_reachability(p_map: &ProgramMap) -> ProgramReac
     let call_edges = p_map
         .call_graph
         .iter()
-        .flat_map(|(caller, callees)| callees.iter().map(|(_, callee)| (*caller, *callee)));
+        .flat_map(|(caller, callees)| callees.iter().map(|(_, callee, _)| (*caller, *callee)));
 
     fn encode_body_id(discr: InstanceKindDiscr, crate_num: u32, item_id: u32) -> u128 {
         ((discr as u128) << (u32::BITS + u32::BITS))

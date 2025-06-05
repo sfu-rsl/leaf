@@ -1,11 +1,11 @@
 use rustc_middle::{
-    mir::{BasicBlock, Body, HasLocalDecls, TerminatorEdges, TerminatorKind},
+    mir::{BasicBlock, Body, HasLocalDecls},
     ty::{InstanceKind, TyCtxt},
 };
 
 use common::directed::{
-    BasicBlockIndex, CfgConstraint, CfgEdgeDestination, ControlFlowGraph, InstanceKindId,
-    ProgramMap,
+    BasicBlockIndex, CallDebugInfo, CallGraphEdgeDestination, CfgConstraint, CfgEdgeDestination,
+    ControlFlowGraph, ProgramMap,
 };
 
 use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
@@ -14,7 +14,7 @@ use crate::utils::{
     mir::{InstanceKindExt, TyCtxtExt},
 };
 
-type Calls = Vec<(BasicBlockIndex, InstanceKindId)>;
+type Calls = Vec<CallGraphEdgeDestination>;
 type ReturnPoints = Vec<BasicBlockIndex>;
 
 #[derive(Default)]
@@ -123,7 +123,7 @@ fn visit_body<'tcx>(
                 tcx.typing_env_in_body(body.source.def_id())
                     .as_query_input((def_id, generic_args)),
             ) {
-                calls.push((index.as_u32(), instance_kind.def.to_plain_id()));
+                calls.push((index.as_u32(), instance_kind.def.to_plain_id(), dbg));
             }
         };
 
@@ -167,14 +167,20 @@ fn visit_body<'tcx>(
             }
             Return => ret_points.push(index.as_u32()),
             UnwindResume | UnwindTerminate(_) | Unreachable | CoroutineDrop => {}
-            kind @ (Call { func, .. } | TailCall { func, .. }) => {
+            kind @ (Call { func, fn_span, .. } | TailCall { func, fn_span, .. }) => {
                 use rustc_type_ir::TyKind::*;
                 match func.ty(body.local_decls(), tcx).kind() {
                     FnDef(def_id, generic_args)
                     | Closure(def_id, generic_args)
                     | Coroutine(def_id, generic_args)
                     | CoroutineClosure(def_id, generic_args) => {
-                        insert_to_calls(*def_id, generic_args)
+                        let dbg = CallDebugInfo {
+                            location: tcx.sess.source_map().span_to_string(
+                                *fn_span,
+                                rustc_span::FileNameDisplayPreference::Short,
+                            ),
+                        };
+                        insert_to_calls(*def_id, generic_args, dbg);
                     }
                     FnPtr(..) => {
                         // TODO

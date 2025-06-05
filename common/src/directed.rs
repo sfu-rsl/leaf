@@ -14,7 +14,13 @@ pub enum CfgConstraint {
 
 pub type CfgEdgeDestination = (BasicBlockIndex, Option<CfgConstraint>); // Target, Possible constraint
 pub type ControlFlowGraph = AdjListGraph<BasicBlockIndex, CfgEdgeDestination>;
-pub type CallGraphEdgeDestination<I> = (BasicBlockIndex, I);
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CallDebugInfo {
+    pub location: String,
+}
+
+pub type CallGraphEdgeDestination<I = InstanceKindId> = (BasicBlockIndex, I, CallDebugInfo);
 pub type CallGraph<I = InstanceKindId> = AdjListGraph<I, CallGraphEdgeDestination<I>>;
 
 #[derive(Default, Clone, Serialize, Deserialize)]
