@@ -2087,6 +2087,7 @@ dependencies = [
  "libafl",
  "libafl_bolts",
  "libafl_leaf",
+ "serde",
  "tracing-log",
  "tracing-subscriber",
 ]

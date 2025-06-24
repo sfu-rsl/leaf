@@ -1,5 +1,6 @@
 use core::num::NonZero;
 use std::{
+    borrow::Cow,
     io::Write,
     path::{Path, PathBuf},
     process::{Child, Command, ExitStatus, Stdio},
@@ -11,16 +12,19 @@ use clap::Parser;
 use libafl::{
     corpus::ondisk::OnDiskMetadataFormat, executors::command::CommandConfigurator, prelude::*,
 };
-use libafl_bolts::{AsSlice, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
+use libafl_bolts::{AsSlice, Named, current_nanos, nonzero, rands::StdRand, tuples::tuple_list};
 use libafl_leaf::{DivergingInputTestcaseScore, DivergingMutator, MultiMutationalStageWithStats};
 
 use ::common::log_debug;
+use serde::{Deserialize, Serialize};
 
 const NAME_ORCHESTRATOR: &str = "leafo_onetime";
 
 const DIR_MUTATOR_WORK: &str = "mutator";
 
 mod utils;
+
+use self::mut_chain::*;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -87,7 +91,10 @@ pub fn main() {
     let observer = ();
     // For pure concolic execution, all distinct inputs are interesting
     let mut feedback = feedback_and_fast!(ConstFeedback::True,);
-    let mut objective = feedback_and_fast!(CrashFeedback::new(), feedback.clone());
+    let mut objective = feedback_or!(
+        feedback_and_fast!(CrashFeedback::new(), feedback.clone(),),
+        MutationChainAdderFeedback::default()
+    );
 
     let mut state = StdState::new(
         StdRand::with_seed(args.rand_seed.unwrap()),
@@ -158,15 +165,18 @@ pub fn main() {
         &mutant_work_dir,
     );
 
-    let mut stages = tuple_list!(IfStage::new(
-        // Do not repeat inputs
-        |f, _, s: &mut StdState<_, _, _, _>, _| { is_new_or_disable(f, s) },
-        tuple_list!(MultiMutationalStageWithStats::new(
-            "DivergingInputGen".into(),
-            "diverging_input".into(),
-            mutator
-        )),
-    ));
+    let mut stages = tuple_list!(
+        IfStage::new(
+            // Do not repeat inputs
+            |f, _, s: &mut StdState<_, _, _, _>, _| { is_new_or_disable(f, s) },
+            tuple_list!(MultiMutationalStageWithStats::new(
+                "DivergingInputGen".into(),
+                "diverging_input".into(),
+                mutator
+            )),
+        ),
+        LastChildStage::default()
+    );
 
     fuzzer
         .fuzz_loop(&mut stages, &mut executor, &mut state, &mut manager)
@@ -241,18 +251,37 @@ where
         Some(_) => {
             let current_id = state.current_corpus_id().unwrap().unwrap();
             let mut testcase = state.current_testcase().unwrap().clone();
+            // Load the file, so cloning happens correctly.
             state.corpus().load_input_into(&mut testcase)?;
-            state.corpus_mut().remove(current_id)?;
-            let testcase = Some(testcase);
-            fuzzer
-                .scheduler_mut()
-                .on_remove(state, current_id, &testcase)?;
-            let mut testcase = testcase.unwrap();
-            testcase.set_disabled(true);
-            let _ = state
-                .corpus_mut()
-                .add_disabled(testcase)
-                .inspect_err(|e| log_debug!("Problem with adding input back to the corpus {}", e));
+
+            // Removing
+            let mut testcase = {
+                state.corpus_mut().remove(current_id)?;
+                let testcase = Some(testcase);
+                fuzzer
+                    .scheduler_mut()
+                    .on_remove(state, current_id, &testcase)?;
+                testcase.unwrap()
+            };
+
+            // The metadata is read to update the parent id of the children,
+            // so it is consumed at this point.
+            let children = testcase.remove_metadata::<ChildrenMetadata>().unwrap();
+            let parent_id = testcase.parent_id();
+
+            // Adding as disabled
+            let new_id = {
+                testcase.set_disabled(true);
+                state.corpus_mut().add_disabled(testcase).inspect_err(|e| {
+                    log_debug!("Problem with adding input back to the corpus {}", e)
+                })
+            };
+            let old_id = current_id;
+
+            if let Ok(new_id) = new_id {
+                update_children_metadata(state.corpus(), old_id, new_id, parent_id, children);
+            }
+
             state.clear_corpus_id()?;
             Ok(false)
         }
@@ -302,6 +331,239 @@ impl CommandConfigurator<BytesInput> for ProgramExecutionConfigurator {
             ExitKind::Ok
         } else {
             ExitKind::Crash
+        }
+    }
+}
+
+mod mut_chain {
+    use super::*;
+
+    /// The reverse relationship of the parent-child for the testcases.
+    /// # Remarks
+    /// Used for updating the parent id of the children when the parent is disabled and its id is changed.
+    #[derive(Debug, Default, Clone, Serialize, Deserialize, SerdeAny)]
+    pub(super) struct ChildrenMetadata {
+        /// Given that each mutation results in new children, this the last one in the corpus.
+        /// # Remarks
+        /// We rely on the FIFO implementation of the corpus, so this is enough to find the rest.
+        last_enabled_possible_child: Option<CorpusId>,
+        /// Other children that are sequentially present before the last enabled possible child anymore.
+        other_children: Vec<CorpusId>,
+    }
+
+    #[derive(Default)]
+    pub(super) struct LastChildStage<I>(core::marker::PhantomData<I>);
+
+    impl<I> Named for LastChildStage<I> {
+        fn name(&self) -> &Cow<'static, str> {
+            static NAME: Cow<'static, str> = Cow::Borrowed("LastChildStage");
+            &NAME
+        }
+    }
+
+    impl<E, EM, I, S, Z> Stage<E, EM, S, Z> for LastChildStage<I>
+    where
+        S: HasCorpus<I> + HasCurrentTestcase<I> + HasCurrentCorpusId,
+    {
+        fn perform(
+            &mut self,
+            _fuzzer: &mut Z,
+            _executor: &mut E,
+            state: &mut S,
+            _manager: &mut EM,
+        ) -> Result<(), Error> {
+            let Ok(mut current) = state.current_testcase_mut() else {
+                return Ok(());
+            };
+
+            current.metadata_or_insert_with(|| ChildrenMetadata {
+                last_enabled_possible_child: state
+                    .corpus()
+                    .last()
+                    .filter(|id| id > &state.current_corpus_id().unwrap().unwrap())
+                    .filter(|id| {
+                        state.corpus().get(*id).is_ok_and(|t| {
+                            t.borrow().parent_id() == state.current_corpus_id().unwrap()
+                        })
+                    }),
+                other_children: vec![],
+            });
+
+            Ok(())
+        }
+    }
+
+    impl<S, I> Restartable<S> for LastChildStage<I>
+    where
+        S: HasMetadata + HasNamedMetadata + HasCurrentCorpusId,
+    {
+        #[inline]
+        fn should_restart(&mut self, _state: &mut S) -> Result<bool, Error> {
+            Ok(true)
+        }
+
+        #[inline]
+        fn clear_progress(&mut self, _state: &mut S) -> Result<(), Error> {
+            Ok(())
+        }
+    }
+
+    /// A feedback that appends the mutation chain to the testcase metadata.
+    /// # Remarks
+    /// Meant for objectives.
+    #[derive(Default)]
+    pub(super) struct MutationChainAdderFeedback;
+
+    impl<EM, I, OT, S> Feedback<EM, I, OT, S> for MutationChainAdderFeedback
+    where
+        S: HasCorpus<I> + HasSolutions<I>,
+    {
+        fn append_metadata(
+            &mut self,
+            state: &mut S,
+            _manager: &mut EM,
+            _observers: &OT,
+            testcase: &mut Testcase<I>,
+        ) -> Result<(), Error> {
+            let mut chain = vec![];
+            let mut parent_id = testcase.parent_id();
+            while let Some(p_id) = parent_id {
+                chain.push(p_id);
+
+                let parent = state
+                    .corpus()
+                    .get_from_all(p_id)
+                    .or(state.solutions().get_from_all(p_id))?;
+
+                if let Ok(meta) = parent.borrow().metadata::<DivergingSolutionMetadata>() {
+                    chain = meta
+                        .mutation_chain
+                        .iter()
+                        .cloned()
+                        .chain(chain.into_iter())
+                        .collect();
+                    break;
+                }
+
+                parent_id = parent.borrow().parent_id();
+            }
+
+            let filenames = chain
+                .iter()
+                .map(|id| {
+                    state
+                        .corpus()
+                        .get_from_all(*id)
+                        .unwrap()
+                        .borrow()
+                        .filename()
+                        .clone()
+                })
+                .collect::<Vec<_>>();
+
+            testcase.add_metadata(DivergingSolutionMetadata {
+                mutation_chain: chain,
+                filenames,
+            });
+
+            Ok(())
+        }
+    }
+
+    impl<S> StateInitializer<S> for MutationChainAdderFeedback {}
+
+    impl Named for MutationChainAdderFeedback {
+        #[inline]
+        fn name(&self) -> &Cow<'static, str> {
+            static NAME: Cow<'static, str> = Cow::Borrowed("MutationChainAdderFeedback");
+            &NAME
+        }
+    }
+
+    /// # Remarks
+    /// To be available in the objective's metadata file.
+    #[derive(Debug, Default, Clone, Serialize, Deserialize, SerdeAny)]
+    struct DivergingSolutionMetadata {
+        mutation_chain: Vec<CorpusId>,
+        filenames: Vec<Option<String>>,
+    }
+
+    pub(super) fn update_children_metadata<I>(
+        corpus: &impl Corpus<I>,
+        old_id: CorpusId,
+        new_id: CorpusId,
+        parent_id: Option<CorpusId>,
+        children: Box<ChildrenMetadata>,
+    ) {
+        // Those that are not moved yet
+        if let Some(last_enabled_possible) = children.last_enabled_possible_child {
+            let last_enabled = if let Some(first) = corpus.first() {
+                'last_valid: {
+                    let mut id = last_enabled_possible;
+                    while first <= id {
+                        if let Ok(testcase) = corpus.get(id) {
+                            break 'last_valid Some((id, testcase));
+                        }
+                        id = CorpusId(id.0 - 1);
+                    }
+                    None
+                }
+                .filter(|(_, testcase)| {
+                    testcase
+                        .borrow()
+                        .parent_id()
+                        .is_some_and(|p_id| p_id == old_id)
+                })
+            } else {
+                None
+            };
+
+            // Mutants of the parent are sequentially added to the corpus
+            if let Some((last_enabled_id, _)) = last_enabled {
+                let mut current = Some(last_enabled_id);
+                while let Some(id) = current {
+                    let mut testcase = corpus.get(id).unwrap().borrow_mut();
+                    if testcase.parent_id() == Some(old_id) {
+                        testcase.set_parent_id(new_id);
+                    } else {
+                        break;
+                    }
+                    current = corpus.prev(id);
+                }
+            }
+        }
+
+        // Those that are moved before
+        for child in children.other_children.iter() {
+            let mut testcase = corpus.get_from_all(*child).unwrap().borrow_mut();
+            debug_assert_eq!(
+                testcase.parent_id(),
+                Some(old_id),
+                "Child {:?} has unexpected parent {:?}",
+                child,
+                testcase.parent_id()
+            );
+            testcase.set_parent_id(new_id);
+        }
+
+        // Let the parent know about the move
+        if let Some(parent) = parent_id.map(|p_id| corpus.get_from_all(p_id).unwrap()) {
+            // The parent might be disabled before, and not have the metadata anymore (won't care about the children).
+            if let Ok(children) = parent.borrow_mut().metadata_mut::<ChildrenMetadata>() {
+                children.other_children.push(new_id);
+                // The sequence is broken, so add the previous children too.
+                {
+                    let mut current = Some(old_id);
+                    while let Some(id) = current {
+                        if corpus.get(id).unwrap().borrow_mut().parent_id() == parent_id {
+                            children.other_children.push(id);
+                        } else {
+                            break;
+                        }
+                        current = corpus.prev(id);
+                    }
+                }
+            }
         }
     }
 }

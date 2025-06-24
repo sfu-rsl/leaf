@@ -12,12 +12,18 @@ default = []
 tui = ["libafl/tui_monitor"]
 
 [dependencies]
-common = { workspace = true, features = ["logging"]}
+common = { workspace = true, features = ["logging"] }
 
-libafl = { workspace = true, features = ["std", "prelude", "errors_backtrace"] }
+libafl = { workspace = true, features = [
+    "std",
+    "prelude",
+    "errors_backtrace",
+    "serdeany_autoreg",
+] }
 libafl_bolts = { workspace = true }
-libafl_leaf = { workspace = true, features = ["errors_backtrace"]}
+libafl_leaf = { workspace = true, features = ["errors_backtrace"] }
 
 clap = { workspace = true, features = ["derive"] }
 tracing-subscriber = { workspace = true }
 tracing-log = "0.2.0"
+serde = { workspace = true }
