@@ -125,6 +125,7 @@ macro_rules! define_core_types {
     ($($name: ident),*$(,)?) => {
         array_backed_struct! {
             #[cond_derive_serde_rkyv]
+            #[derive(Clone)]
             pub struct CoreTypes<V = TypeId> {
                 $($name),*
             }: V;
@@ -391,11 +392,15 @@ pub mod rw {
     }
 
     pub fn write_types_db_in<'a>(
-        types: impl Iterator<Item = &'a TypeInfo>,
+        types: impl Iterator<Item = &'a TypeInfo> + Clone,
         core_types: CoreTypes<TypeId>,
         out_dir: impl AsRef<Path>,
     ) -> Result<(), Box<dyn StdError>> {
         log_info!("Writing type info db in: `{}`", out_dir.as_ref().display());
+
+        if cfg!(debug_assertions) {
+            serdes::write(types.clone(), core_types.clone(), out_dir.as_ref())?;
+        }
 
         // Writing in JSON format may be used for debugging purposes, so making it easier to enable.
         let result = if cfg!(info_db_fmt = "json") {
