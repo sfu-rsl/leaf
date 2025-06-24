@@ -92,17 +92,27 @@ fn visit_body<'tcx>(
     let mut ret_points = Vec::new();
     let mut calls = Calls::new();
 
-    let first_targetable = |bb: BasicBlock| {
+    let predecessors_map = body.basic_blocks.predecessors();
+    // FIXME: Can be replaced with a preprocessed map.
+    let merged_chain_head = |bb: BasicBlock| {
         let mut current = bb;
-        // FIXME: Fix problem with massive number of gotos and the importance of assignments.
-        // while let Some(TerminatorEdges::Single(next)) = body.basic_blocks[current]
-        //     .terminator
-        //     .as_ref()
-        //     .filter(|t| !matches!(t.kind, TerminatorKind::Assert { .. }))
-        //     .map(|t| t.edges())
-        // {
-        //     current = next;
-        // }
+        // Walk back goto predecessors.
+        while let Some(prev) = {
+            let predecessors = &predecessors_map[current];
+            if predecessors.len() != 1 {
+                None
+            } else {
+                let prev = predecessors[0];
+                body.basic_blocks[prev]
+                    .terminator()
+                    .kind
+                    .as_goto()
+                    .is_some()
+                    .then_some(prev)
+            }
+        } {
+            current = prev;
+        }
         current
     };
 
@@ -111,10 +121,10 @@ fn visit_body<'tcx>(
 
         let mut insert_to_cfg = |targets: Vec<CfgEdgeDestination>| {
             cfg.insert(
-                index.as_u32(),
+                merged_chain_head(index).as_u32(),
                 targets
                     .into_iter()
-                    .map(|(bb, c)| (first_targetable(bb.into()).as_u32(), c))
+                    .map(|(bb, c)| (merged_chain_head(bb.into()).as_u32(), c))
                     .collect(),
             );
         };
