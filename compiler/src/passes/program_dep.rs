@@ -4,8 +4,8 @@ use rustc_abi::VariantIdx;
 use rustc_data_structures::graph::dominators::{Dominators, dominators};
 use rustc_middle::{
     mir::{
-        AggregateKind, BasicBlock, BasicBlocks, Body, Local, Location, Rvalue, StatementKind,
-        TerminatorKind,
+        AggregateKind, BasicBlock, BasicBlocks, Body, Local, Location, ProjectionElem, Rvalue,
+        StatementKind, TerminatorKind,
     },
     ty::TyCtxt,
 };
@@ -95,37 +95,63 @@ fn calc_control_dep<'tcx>(_tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> ControlDepen
         .collect()
 }
 
+type DirectAssignmentClass = (Local, Option<VariantIdx>);
+
+enum LValue {
+    Direct(DirectAssignmentClass),
+    Deref,
+}
+
 fn make_assignment_info<'tcx>(body: &Body<'tcx>) -> AssignmentsInfo {
     let dom = dominators(&body.basic_blocks);
     let post_doms: Vec<_> = exit_points(&body.basic_blocks)
         .map(|e| PostDominators::build(&body.basic_blocks, e))
         .collect();
 
-    // Conservatively overapproximate over the local
-    type AlternativeClass = (Local, Option<VariantIdx>);
-    let mut assignments_grouped: HashMap<AlternativeClass, Vec<Location>> = HashMap::new();
-    let mut dest_locals = Vec::new();
     let mut bb_map = Vec::new();
 
-    for (loc, dest, _) in assignment_ids_split_agnostic(body) {
+    let mut assignments_grouped: HashMap<DirectAssignmentClass, Vec<Location>> = HashMap::new();
+
+    let mut left_values = Vec::new();
+    let mut observed_variants: HashMap<Local, Vec<VariantIdx>> = HashMap::new();
+
+    for (loc, lhs, _) in assignment_ids_split_agnostic(body) {
         bb_map.push(loc.block.as_u32());
-        let class = (dest.local, opt_variant_index(body, loc));
-        assignments_grouped.entry(class).or_default().push(loc);
-        dest_locals.push((loc, class));
+
+        let left_val = if lhs
+            .iter_projections()
+            .last()
+            .is_some_and(|p| matches!(p.1, ProjectionElem::Deref))
+        {
+            LValue::Deref
+        } else {
+            // Conservatively overapproximate over the local
+            // FIXME: This may cause large imprecisions if large objects (with many fields) are used.
+            let class = (lhs.local, variant_index_set_at(body, loc));
+            if let Some(variant_index) = class.1 {
+                observed_variants
+                    .entry(class.0)
+                    .or_default()
+                    .push(variant_index);
+            }
+            assignments_grouped.entry(class).or_default().push(loc);
+            LValue::Direct(class)
+        };
+        left_values.push((loc, left_val));
     }
 
     log_debug!("In body: {:?}", body.source.def_id());
-    let alternatives = dest_locals
-        .into_iter()
-        .map(|(loc, class)| {
-            log_debug!("Checking for alternatives of {:?} @ {:?}", class, loc);
-            there_are_alternatives_for(loc, &assignments_grouped[&class], &dom, &post_doms)
-        })
-        .collect();
+    let has_alternatives = check_alternatives(
+        dom,
+        post_doms,
+        assignments_grouped,
+        left_values,
+        observed_variants,
+    );
 
     AssignmentsInfo {
         bb_map,
-        alternatives,
+        has_alternatives,
     }
 }
 
@@ -140,10 +166,63 @@ fn exit_points<'a, 'tcx>(
         })
 }
 
-#[tracing::instrument(level = "debug", skip(dom, post_doms), ret)]
+fn check_alternatives(
+    dom: Dominators<BasicBlock>,
+    post_doms: Vec<PostDominators<BasicBlock>>,
+    assignments_grouped: HashMap<(Local, Option<VariantIdx>), Vec<Location>>,
+    left_values: Vec<(Location, LValue)>,
+    observed_variants: HashMap<Local, Vec<VariantIdx>>,
+) -> Vec<bool> {
+    left_values
+        .into_iter()
+        .map(|(loc, left_val)| {
+            match left_val {
+                LValue::Deref => {
+                    // Deref assignments are always considered to have alternatives.
+                    // Look at the first case in `there_are_alternatives_for`.
+                    return true;
+                }
+                LValue::Direct(class) => {
+                    log_debug!("Checking for alternatives of {:?} @ {:?}", class, loc);
+                    let assignments_in_class = assignments_grouped[&class].iter().cloned();
+
+                    // The variant of a non-aggregate assignment (like return values) can be anything.
+                    let other_assignments: Box<dyn Iterator<Item = Location>> = if class.1.is_some()
+                    {
+                        Box::new(
+                            assignments_grouped
+                                .get(&(class.0, None))
+                                .map(|v| v.iter().cloned())
+                                .into_iter()
+                                .flatten(),
+                        )
+                    } else if let Some(variants) = observed_variants.get(&class.0) {
+                        Box::new(variants.iter().flat_map(|v| {
+                            assignments_grouped
+                                .get(&(class.0, Some(*v)))
+                                .map(|v| v.iter().cloned())
+                                .into_iter()
+                                .flatten()
+                        }))
+                    } else {
+                        Box::new(core::iter::empty())
+                    };
+                    there_are_alternatives_for(
+                        loc,
+                        assignments_in_class.chain(other_assignments),
+                        &dom,
+                        &post_doms,
+                    )
+                }
+            }
+        })
+        .collect()
+}
+
+#[tracing::instrument(level = "debug", skip(related_assignments, dom, post_doms), ret)]
 fn there_are_alternatives_for(
     this: Location,
-    all_assignments: &[Location],
+    mut related_assignments: impl Iterator<Item = Location>,
     dom: &Dominators<BasicBlock>,
     post_doms: &[PostDominators<BasicBlock>],
 ) -> bool {
@@ -205,10 +284,11 @@ fn there_are_alternatives_for(
         false
     };
 
-    all_assignments.iter().any(|a| is_a_sign(a.block))
+    related_assignments.any(|a| is_a_sign(a.block))
 }
 
-fn opt_variant_index<'tcx>(body: &Body<'tcx>, assignment_loc: Location) -> Option<VariantIdx> {
+/// Returns the variant index of the assignment at the given location, if known.
+fn variant_index_set_at<'tcx>(body: &Body<'tcx>, assignment_loc: Location) -> Option<VariantIdx> {
     body.stmt_at(assignment_loc)
         .left()
         .and_then(|stmt| match stmt.kind {

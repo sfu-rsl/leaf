@@ -16,7 +16,7 @@ type AssignmentIdMap = AssignmentMap<BasicBlockIndex>;
 #[cond_derive_serde_rkyv]
 pub struct AssignmentsInfo {
     pub bb_map: AssignmentIdMap,
-    pub alternatives: AssignmentMap<bool>,
+    pub has_alternatives: AssignmentMap<bool>,
 }
 
 #[derive(Default, Clone)]
@@ -64,7 +64,7 @@ impl ProgramDepAssignmentQuery for AssignmentsInfo {
 
     #[inline]
     fn alternatives_may_exist(&self, id: AssignmentId) -> bool {
-        self.alternatives[id as usize]
+        self.has_alternatives[id as usize]
     }
 }
 
@@ -174,7 +174,7 @@ pub mod rw {
             #[tracing::instrument(level = "trace", skip(self), ret)]
             #[inline]
             fn alternatives_may_exist(&self, id: AssignmentId) -> bool {
-                self.alternatives[id as usize]
+                self.has_alternatives[id as usize]
             }
         }
 
