@@ -189,6 +189,8 @@ pub(crate) mod mir {
         /// Returns a unique identifier for the variant of this kind.
         fn discriminant(&self) -> InstanceKindDiscr;
 
+        fn has_identical_polymorphic_body(&self) -> bool;
+
         fn to_plain_id(self) -> InstanceKindId;
     }
 
@@ -208,6 +210,24 @@ pub(crate) mod mir {
                 InstanceKind::CloneShim(..) => 10,
                 InstanceKind::FnPtrAddrShim(..) => 11,
                 InstanceKind::AsyncDropGlueCtorShim(..) => 12,
+            }
+        }
+
+        fn has_identical_polymorphic_body(&self) -> bool {
+            match self {
+                InstanceKind::Item(..) => true,
+                InstanceKind::Intrinsic(..) => false, // Should not even have a body
+                InstanceKind::VTableShim(..) => false, // Opaque for MIR
+                InstanceKind::ReifyShim(..) => false, // Opaque for MIR
+                InstanceKind::FnPtrShim(..) => false, // Different for different signatures
+                InstanceKind::Virtual(..) => false,   // Opaque for MIR
+                InstanceKind::ClosureOnceShim { .. } => true, // Always <Self as FnMut>::call_mut
+                InstanceKind::ConstructCoroutineInClosureShim { .. } => false,
+                InstanceKind::ThreadLocalShim(..) => true, // Should not even have generic parameters (not sure)
+                InstanceKind::DropGlue(..) => false,       // Different for different types
+                InstanceKind::CloneShim(..) => false,      // Different for different types
+                InstanceKind::FnPtrAddrShim(..) => false,  // Different for different types
+                InstanceKind::AsyncDropGlueCtorShim(..) => false, // Different for different types
             }
         }
 

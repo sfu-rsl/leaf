@@ -11,7 +11,7 @@ use rustc_middle::{
 };
 
 use common::{
-    log_debug,
+    log_debug, log_info,
     program_dep::{AssignmentsInfo, ControlDependencyGraph, PlainProgramDependenceMap},
 };
 
@@ -43,6 +43,8 @@ impl CompilationPass for ProgramDependenceMapExporter {
     }
 
     fn visit_tcx_at_codegen_after(&mut self, tcx: TyCtxt, storage: &mut dyn Storage) {
+        log_info!("Exporting program dependence");
+
         let mut pdm = storage.get_or_default::<PlainProgramDependenceMap>(KEY_MAP.to_owned());
 
         tcx.collect_and_partition_mono_items(())
@@ -65,6 +67,10 @@ impl CompilationPass for ProgramDependenceMapExporter {
 
 fn visit_and_add<'tcx>(pdm: &mut PlainProgramDependenceMap, tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
     let instance_kind = body.source.instance;
+    if !instance_kind.has_identical_polymorphic_body() {
+        // Skip if the InstanceKindId is not enough to distinguish the body.
+        return;
+    }
     let key = instance_kind.to_plain_id();
 
     pdm.control_dep

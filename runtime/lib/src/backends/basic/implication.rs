@@ -304,7 +304,7 @@ impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q
         &self,
         (body, assignment_id): AssignmentLocation,
     ) -> Option<Antecedents> {
-        let assignments_info = self.program_dep_map.assignments(body).unwrap();
+        let assignments_info = self.program_dep_map.assignments(body)?;
 
         if !assignments_info.alternatives_may_exist(assignment_id) {
             return None;
@@ -323,7 +323,7 @@ impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q
         &self,
         (body, assignment_id): (InstanceKindId, AssignmentId),
     ) -> Option<EnumAntecedentsResult> {
-        let assignments_info = self.program_dep_map.assignments(body).unwrap();
+        let assignments_info = self.program_dep_map.assignments(body)?;
         let bb_index = assignments_info.basic_block_index(assignment_id);
 
         /* NOTE: Why don't we check alternatives for the tag?
