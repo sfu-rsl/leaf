@@ -363,6 +363,14 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
     #[tracing::instrument(level = "debug", skip(self), ret)]
     fn control_dep_latest_at(&self, loc: BasicBlockLocation) -> Option<Antecedents> {
         let cdg = self.program_dep_map.control_dependency(loc.body)?;
+
+        if !self
+            .trace_querier
+            .any_sym_dependent_in_current_call(loc.body)
+        {
+            return None;
+        }
+
         let get_controllers = |block| {
             Some(cdg.controllers(block).into_iter().collect::<Vec<_>>()).filter(|cs| !cs.is_empty())
         };
@@ -370,7 +378,7 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
         let mut controllers = get_controllers(loc.index)?;
         let (controller_step, found) =
             self.trace_querier
-                .find_map_in_latest_call_of(loc.body, move |r, c| {
+                .find_map_in_current_func(loc.body, move |r, c| {
                     let block = r.location().index;
                     if controllers.contains(&block) {
                         if c.discr.is_symbolic() || c.discr.by.is_some() {

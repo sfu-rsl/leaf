@@ -90,6 +90,8 @@ impl BasicBackend {
         );
         let constraint_steps = TraceViewProvider::view(&trace_manager);
         let constraints = TraceViewProvider::<BasicConstraint>::view(&trace_manager);
+        let sym_dependent_step_indices =
+            TraceIndicesProvider::<trace::SymDependentMarker>::indices(&trace_manager);
         let trace_manager_ref = Rc::new(RefCell::new(trace_manager));
         let trace_manager = trace_manager_ref.clone();
 
@@ -108,6 +110,7 @@ impl BasicBackend {
             trace_recorder_ref.borrow().records(),
             constraint_steps,
             constraints,
+            sym_dependent_step_indices,
         ));
         let implication_investigator = Rc::new(default_implication_investigator(trace_querier));
 
@@ -286,11 +289,17 @@ trait TraceViewProvider<T> {
     fn view(&self) -> RefView<Vec<T>>;
 }
 
+trait TraceIndicesProvider<T> {
+    fn indices(&self) -> RefView<Vec<usize>>;
+}
+
 trait GenericTraceQuerier {
     type Record;
     type Constraint;
 
-    fn find_map_in_latest_call_of<'a, T>(
+    fn any_sym_dependent_in_current_call(&self, body_id: InstanceKindId) -> bool;
+
+    fn find_map_in_current_func<'a, T>(
         &'a self,
         body_id: InstanceKindId,
         f: impl FnMut(&Self::Record, &Self::Constraint) -> Option<T>,

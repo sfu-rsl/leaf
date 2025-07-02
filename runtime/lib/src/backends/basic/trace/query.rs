@@ -22,17 +22,20 @@ where
     pub exe_records: TraceView<BasicExeTraceRecord>,
     pub constraint_steps: TraceView<BasicConstraintTraceStep>,
     pub constraints: TraceView<BasicConstraint>,
+    pub sym_dependent_step_indices: TraceView<usize>,
 }
 
 pub(crate) fn default_trace_querier(
     exe_records: TraceView<BasicExeTraceRecord>,
     constraint_steps: TraceView<BasicConstraintTraceStep>,
     constraints: TraceView<BasicConstraint>,
+    sym_dependent_step_indices: TraceView<usize>,
 ) -> impl super::super::alias::TraceQuerier {
     BasicTraceQuerier {
         exe_records,
         constraint_steps,
         constraints,
+        sym_dependent_step_indices,
     }
 }
 
@@ -41,13 +44,45 @@ trait ExeRecord {
     fn is_call(&self, callee: InstanceKindId) -> bool;
 
     fn is_in(&self, body_id: InstanceKindId) -> bool;
+
+    fn depth(&self) -> usize;
 }
 
 impl GenericTraceQuerier for BasicTraceQuerier {
     type Record = BasicExeTraceRecord;
     type Constraint = BasicConstraint;
 
-    fn find_map_in_latest_call_of<'a, T>(
+    fn any_sym_dependent_in_current_call(&self, body_id: InstanceKindId) -> bool {
+        let records = self.exe_records.borrow();
+        let Some(current_depth) = records
+            .last()
+            // We assume that the last record is always in the current body
+            .inspect(|r| debug_assert!(r.is_in(body_id)))
+            .map(|r| r.depth())
+        else {
+            return false;
+        };
+        let sym_dependent_indices = self.sym_dependent_step_indices.borrow();
+        let Some(latest_sym_dependent) = sym_dependent_indices.last().copied() else {
+            return false;
+        };
+        let records = records.iter();
+        let latest_records_in_body = records
+            .rev()
+            .take_while(|r| r.depth() >= current_depth)
+            .filter(|r| r.depth() == current_depth);
+        let latest_records_before_latest =
+            latest_records_in_body.skip_while(|r| r.index() > latest_sym_dependent);
+
+        itertools::merge_join_by(
+            latest_records_before_latest,
+            sym_dependent_indices.iter().rev(),
+            |r, i| r.index().cmp(i).reverse(),
+        )
+        .any(|either| either.is_both())
+    }
+
+    fn find_map_in_current_func<'a, T>(
         &'a self,
         body_id: InstanceKindId,
         mut f: impl FnMut(&Self::Record, &Self::Constraint) -> Option<T>,
@@ -63,6 +98,10 @@ impl GenericTraceQuerier for BasicTraceQuerier {
             .enumerate();
 
         let records = self.exe_records.borrow();
+        let current_depth = records
+            .last()
+            .inspect(|r| debug_assert!(r.is_in(body_id)))
+            .map(|r| r.depth())?;
         let records = records.iter().enumerate();
         let records_with_constraints = itertools::merge_join_by(
             records.rev(),
@@ -75,12 +114,13 @@ impl GenericTraceQuerier for BasicTraceQuerier {
         });
 
         let latest_records_in_body = records_with_constraints
-            .take_while(|((_, r), _)| !r.is_call(body_id))
-            .filter(|((_, r), _)| r.is_in(body_id));
+            .take_while(|((_, r), _)| r.depth() >= current_depth)
+            .filter(|((_, r), _)| r.depth() == current_depth);
 
         let record_of_interest = latest_records_in_body
             .filter_map(|(r, opt_c)| opt_c.map(|c| (r, c)))
-            .find_map(|x @ ((_, r), (_, c))| f(r, &c).map(|v| (x, v)));
+            .inspect(|((_, r), _)| debug_assert!(r.is_in(body_id)))
+            .find_map(|pair @ ((_, r), (_, c))| f(r, &c).map(|v| (pair, v)));
 
         record_of_interest.map(|(((r_i, _), (c_i, _)), v)| (self.create_view(r_i, c_i), v))
     }
@@ -135,6 +175,10 @@ mod helpers {
 
         fn is_in(&self, body_id: InstanceKindId) -> bool {
             ExeTraceRecord::location(self.borrow()).body == body_id
+        }
+
+        fn depth(&self) -> usize {
+            self.depth
         }
     }
 }

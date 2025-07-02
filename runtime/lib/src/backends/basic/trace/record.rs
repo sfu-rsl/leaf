@@ -1,3 +1,6 @@
+use core::borrow::Borrow;
+
+use derive_more as dm;
 use serde::{Serialize, Serializer};
 use serde_json::Serializer as JsonSerializer;
 
@@ -8,7 +11,7 @@ use crate::{
         BasicBlockLocation, ConstraintKind, FuncDef,
         backend::{CallTraceRecorder, DecisionTraceRecorder, PhasedCallTraceRecorder},
     },
-    utils::{Indexed, RefView, alias::RRef, file::JsonLinesFormatter},
+    utils::{HasIndex, Indexed, RefView, alias::RRef, file::JsonLinesFormatter},
 };
 
 use super::backend;
@@ -16,9 +19,28 @@ use backend::{ConstValue, ExeTraceRecorder, ExeTraceStorage, config::OutputConfi
 
 type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 
+#[derive(Debug, Serialize, dm::Deref)]
+pub(crate) struct Record {
+    #[deref]
+    record: Indexed<crate::abs::ExeTraceRecord<ConstValue>>,
+    pub(super) depth: usize,
+}
+
+impl HasIndex for Record {
+    fn index(&self) -> usize {
+        self.record.index
+    }
+}
+
+impl Borrow<crate::abs::ExeTraceRecord<ConstValue>> for Record {
+    fn borrow(&self) -> &crate::abs::ExeTraceRecord<ConstValue> {
+        &self.record.value
+    }
+}
+
 pub(crate) struct BasicExeTraceRecorder {
     counter: usize,
-    records: RRef<Vec<Indexed<ExeTraceRecord>>>,
+    records: RRef<Vec<Record>>,
     stack: Vec<BasicBlockLocation<FuncDef>>,
     last_ret_point: Option<BasicBlockLocation<FuncDef>>,
     serializer: Option<JsonSerializer<std::fs::File, JsonLinesFormatter>>,
@@ -154,7 +176,7 @@ impl DecisionTraceRecorder for BasicExeTraceRecorder {
 }
 
 impl ExeTraceStorage for BasicExeTraceRecorder {
-    type Record = Indexed<ExeTraceRecord>;
+    type Record = Record;
 
     fn records(&self) -> RefView<Vec<Self::Record>> {
         self.records.clone().into()
@@ -162,16 +184,19 @@ impl ExeTraceStorage for BasicExeTraceRecorder {
 }
 
 impl BasicExeTraceRecorder {
-    #[tracing::instrument(level = "debug", skip(self), fields(index = self.counter))]
+    #[tracing::instrument(level = "debug", skip(self), fields(index = self.counter + 1))]
     fn notify_step(&mut self, record: ExeTraceRecord) -> usize {
         let index = {
             let index = self.counter + 1;
             self.counter = index;
             index
         };
-        self.records.borrow_mut().push(Indexed {
-            value: record,
-            index,
+        self.records.borrow_mut().push(Record {
+            record: Indexed {
+                value: record,
+                index,
+            },
+            depth: self.stack.len(),
         });
         self.append_last_to_file();
         index
@@ -186,18 +211,18 @@ impl BasicExeTraceRecorder {
     }
 }
 
-fn serialize_rec<S: Serializer>(
-    record: &Indexed<ExeTraceRecord>,
-    serializer: S,
-) -> Result<S::Ok, S::Error> {
-    let &Indexed {
-        ref value,
-        ref index,
+fn serialize_rec<S: Serializer>(record: &Record, serializer: S) -> Result<S::Ok, S::Error> {
+    let Record {
+        record: Indexed {
+            ref value,
+            ref index,
+        },
+        ..
     } = record;
 
     use crate::abs::ExeTraceRecord::*;
     match value {
-        Branch(branch) => Indexed {
+        Branch(ref branch) => Indexed {
             value: Branch(to_raw_case(branch)),
             index: *index,
         }

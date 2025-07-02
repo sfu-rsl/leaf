@@ -2,7 +2,7 @@ use core::ops::DerefMut;
 
 use super::{
     ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,
-    TraceViewProvider,
+    TraceIndicesProvider, TraceViewProvider,
     expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef, place::PlaceValueRef},
     implication::Implied,
     trace::BasicExeTraceRecorder,
@@ -153,13 +153,17 @@ impl<T> TraceManager for T where
 {
 }
 pub(super) trait TraceManagerWithViews:
-    TraceManager + TraceViewProvider<Indexed<super::trace::Step>> + TraceViewProvider<BasicConstraint>
+    TraceManager
+    + TraceViewProvider<Indexed<super::trace::Step>>
+    + TraceViewProvider<BasicConstraint>
+    + TraceIndicesProvider<super::trace::SymDependentMarker>
 {
 }
 impl<T> TraceManagerWithViews for T where
     T: TraceManager
         + TraceViewProvider<Indexed<super::trace::Step>>
         + TraceViewProvider<BasicConstraint>
+        + TraceIndicesProvider<super::trace::SymDependentMarker>
 {
 }
 

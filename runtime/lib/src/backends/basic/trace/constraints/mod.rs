@@ -6,6 +6,7 @@ mod utils;
 
 use std::{cell::RefCell, rc::Rc};
 
+use common::types::trace::Constraint;
 use delegate::delegate;
 
 use crate::{
@@ -13,7 +14,6 @@ use crate::{
         Tag,
         backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
     },
-    backends::basic::BasicDecisionTraceRecorder,
     solvers::z3::Z3Solver,
     trace::{
         AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
@@ -24,14 +24,14 @@ use crate::{
 
 use super::backend;
 use backend::{
-    BasicConstraint, BasicValue, ConstValue, SymVarId, SymVariablesManager, TraceManagerWithViews,
-    TraceViewProvider, ValueRef,
+    BasicConstraint, BasicDecisionTraceRecorder, BasicValue, ConstValue, SymVarId,
+    SymVariablesManager, TraceIndicesProvider, TraceManagerWithViews, TraceViewProvider, ValueRef,
     config::SolverImpl,
     config::{ExecutionTraceConfig, OutputConfig, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
 };
 
-use super::Step;
+use super::{Step, SymDependentMarker};
 
 use utils::{
     ShutdownTraceManagerExt, Translation,
@@ -54,6 +54,7 @@ pub(crate) struct BasicTraceManager<M> {
     trace_recorder: RRef<BasicDecisionTraceRecorder>,
     steps_view: RefView<Vec<Indexed<Step>>>,
     constraints_view: RefView<Vec<BasicConstraint>>,
+    sym_dependent_steps_view: RefView<Vec<usize>>,
 }
 
 impl<M: AbsTraceManager<Indexed<Step>, BasicValue, ConstValue>>
@@ -91,6 +92,12 @@ impl<M> TraceViewProvider<Indexed<Step>> for BasicTraceManager<M> {
 impl<M> TraceViewProvider<BasicConstraint> for BasicTraceManager<M> {
     fn view(&self) -> RefView<Vec<BasicConstraint>> {
         self.constraints_view.clone()
+    }
+}
+
+impl<M> TraceIndicesProvider<SymDependentMarker> for BasicTraceManager<M> {
+    fn indices(&self) -> RefView<Vec<usize>> {
+        self.sym_dependent_steps_view.clone()
     }
 }
 
@@ -197,6 +204,10 @@ pub(crate) fn create_trace_manager(
     let steps_view = outer_agg_inspector.steps();
     let constraints_view = outer_agg_inspector.constraints();
 
+    let sym_dependent_steps_indices: RRef<Vec<usize>> = Default::default();
+    let sym_dependent_recorder_inspector =
+        dumpers::create_step_index_in_memory_dumper(sym_dependent_steps_indices.clone());
+
     let dumpers_ref = Rc::new(RefCell::new(dumpers));
 
     let manager = core_manager
@@ -208,6 +219,10 @@ pub(crate) fn create_trace_manager(
         .inspected_by(sym_discr_inspectors)
         .filtered_by(|_, c| c.discr.is_symbolic())
         .adapt_value(|discr: BasicValue| discr.value)
+        .inspected_by(sym_dependent_recorder_inspector)
+        .filtered_by(|_, c: Constraint<&BasicValue, &ConstValue>| {
+            c.discr.by.is_some() || c.discr.is_symbolic()
+        })
         .inspected_by(outer_agg_inspector)
         .inspected_by(all_constraints_inspectors)
         .inspected_by(utils::dumping::create_timer_dumper_inspector(
@@ -223,6 +238,7 @@ pub(crate) fn create_trace_manager(
         trace_recorder,
         steps_view,
         constraints_view,
+        sym_dependent_steps_view: RefView::new(sym_dependent_steps_indices),
     }
 }
 

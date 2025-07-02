@@ -33,3 +33,5 @@ pub(crate) use query::default_trace_querier;
     serde::Deserialize,
 )]
 pub(crate) struct Step(BasicBlockLocation);
+
+pub(crate) struct SymDependentMarker;

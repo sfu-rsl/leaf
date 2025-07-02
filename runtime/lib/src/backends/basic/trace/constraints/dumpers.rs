@@ -1,10 +1,9 @@
 use core::borrow::Borrow;
-use core::ops::Deref;
 
 use crate::{
     abs::Constraint,
     trace::{StepInspector, StreamDumperStepInspector},
-    utils::{HasIndex, Indexed, file::FileFormat},
+    utils::{HasIndex, Indexed, alias::RRef, file::FileFormat},
 };
 
 use super::{CurrentSolverCase, CurrentSolverValue, OutputConfig, Step, backend};
@@ -109,6 +108,18 @@ where
                 rec_ser.end()
             })
             .unwrap_or_else(|e| panic!("Could not dump step: {e}"));
+    };
+    inspector
+}
+
+pub(super) fn create_step_index_in_memory_dumper<'ctx, S, V, C>(
+    indices: RRef<Vec<usize>>,
+) -> impl StepInspector<S, V, C>
+where
+    S: HasIndex,
+{
+    let inspector = move |step: &S, _: Constraint<&V, &C>| {
+        indices.borrow_mut().push(step.index());
     };
     inspector
 }

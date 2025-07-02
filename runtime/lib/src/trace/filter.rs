@@ -15,6 +15,7 @@ impl<F, S, V, C, M: TraceManager<S, V, C>> TraceManager<S, V, C>
 where
     F: FnMut(&S, Constraint<&V, &C>) -> bool,
 {
+    #[inline]
     fn notify_step(&mut self, step: S, constraint: Constraint<V, C>) {
         if (self.predicate)(&step, constraint.as_ref()) {
             self.inner.notify_step(step, constraint);
@@ -62,6 +63,7 @@ impl<F, S, V, C, I: StepInspector<S, V, C>> StepInspector<S, V, C>
 where
     F: FnMut(&S, Constraint<&V, &C>) -> bool,
 {
+    #[inline]
     fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
         if (self.predicate)(step, constraint.clone()) {
             self.inner.inspect(step, constraint);

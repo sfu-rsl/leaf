@@ -12,6 +12,7 @@
 #![feature(path_add_extension)]
 #![feature(seek_stream_len)]
 #![feature(try_trait_v2)]
+#![feature(cold_path)]
 
 pub mod abs;
 mod backends;
