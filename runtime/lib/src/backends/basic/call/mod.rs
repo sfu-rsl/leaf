@@ -1,25 +1,48 @@
 mod stack;
 use std::{borrow::Cow, cell::RefMut};
 
-pub(super) use stack::BasicCallStackManager;
+use derive_more as dm;
 
 use crate::abs::{
-    AssignmentId, BasicBlockIndex, CalleeDef, FuncDef, Local, LocalIndex, TypeId,
-    backend::{CallHandler, PhasedCallTraceRecorder},
+    AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local, LocalIndex, TypeId,
+    backend::{ArgsTupling, CallHandler, PhasedCallTraceRecorder},
     utils::BasicBlockLocationExt,
 };
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicValue, BasicVariablesState, CallStackInfo, GenericVariablesState,
-    PlaceValueRef, TypeDatabase, expr::prelude::DeterPlaceValueRef,
+    BasicBackend, BasicValue, BasicVariablesState, CallStackInfo, GenericVariablesState, Implied,
+    PlaceValueRef, TypeDatabase, Value, expr::prelude::DeterPlaceValueRef,
 };
+
+pub(super) use self::stack::BasicCallStackManager;
+use self::stack::EntranceToken;
 
 enum CallFlowSanity {
     Expected,
     /// The stack is broken (e.g., external function in between)
     Broken,
 }
+
+#[derive(dm::Debug)]
+enum ArgsTuplingInfo<'h, 'a> {
+    Normal,
+    Untupled {
+        #[debug(ignore)]
+        tupled_arg_index: LocalIndex,
+        #[debug(ignore)]
+        tupling_helper: LazyTuplingHelper<'h, 'a>,
+    },
+    Tupled {
+        #[debug(ignore)]
+        head_args: Box<dyn FnOnce() -> Vec<BasicValue> + 'a>,
+        #[debug(ignore)]
+        tupling_helper: LazyTuplingHelper<'h, 'a>,
+    },
+}
+
+type LazyTuplingHelper<'h, 'a> =
+    Box<dyn FnOnce() -> Box<dyn tupling::BasicUntupleHelper + 'h> + 'a>;
 
 trait GenericCallStackManager: CallStackInfo {
     type Place = <Self::VariablesState as GenericVariablesState>::PlaceValue;
@@ -40,13 +63,15 @@ trait GenericCallStackManager: CallStackInfo {
 
     fn set_places(&mut self, arg_places: Vec<Self::Place>, ret_val_place: Self::Place);
 
-    fn try_untuple_argument<'a, 'b>(
-        &'a mut self,
-        arg_index: LocalIndex,
-        untuple_helper: &dyn Fn() -> Box<dyn untuple::BasicUntupleHelper + 'b>,
-    );
-
     fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity;
+
+    fn start_enter(&mut self, current_func: FuncDef) -> EntranceToken<Self::Value>;
+
+    fn finalize_enter<'a, 'h>(
+        &'a mut self,
+        token: EntranceToken<Self::Value>,
+        tupling: ArgsTuplingInfo,
+    ) -> CallFlowSanity;
 
     fn pop_stack_frame(&mut self);
 
@@ -105,44 +130,93 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
         def: CalleeDef,
         call_site: BasicBlockIndex,
         func: Self::Operand,
-        args: impl Iterator<Item = Self::Arg>,
+        args: impl IntoIterator<Item = Self::Arg>,
         are_args_tupled: bool,
     ) {
         let call_site = self.current_func().at_basic_block(call_site);
         self.trace_recorder.start_call(call_site);
-        self.call_stack_manager
-            .prepare_for_call(def, func, args.collect(), are_args_tupled);
+        self.call_stack_manager.prepare_for_call(
+            def,
+            func,
+            args.into_iter().collect(),
+            are_args_tupled,
+        );
     }
 
     fn enter(
         mut self,
         def: FuncDef,
-        arg_places: impl Iterator<Item = Self::Place>,
+        arg_places: Vec<Self::Place>,
         ret_val_place: Self::Place,
-        tupled_arg: Option<(Local, TypeId)>,
+        tupling: ArgsTupling,
     ) {
+        let arg_types = matches!(tupling, ArgsTupling::Tupled).then(|| {
+            arg_places
+                .iter()
+                .map(|place| place.type_info().clone())
+                .collect::<Vec<_>>()
+        });
+
         fn ensure_deter_place(place: PlaceValueRef) -> DeterPlaceValueRef {
             debug_assert!(!place.is_symbolic());
             DeterPlaceValueRef::new(place)
         }
         self.call_stack_manager.set_places(
-            arg_places.map(ensure_deter_place).collect(),
+            arg_places.into_iter().map(ensure_deter_place).collect(),
             ensure_deter_place(ret_val_place),
         );
-        if let Some((arg_index, tuple_type_id)) = tupled_arg {
-            let Local::Argument(arg_index) = arg_index else {
-                unreachable!()
-            };
-            self.call_stack_manager
-                .try_untuple_argument(arg_index, &|| {
-                    Box::new(untuple::UntupleHelperImpl::new(
-                        self.type_manager,
-                        tuple_type_id,
-                    ))
-                });
-        }
+        let token = self.call_stack_manager.start_enter(def);
 
-        let sanity = self.call_stack_manager.notify_enter(def);
+        let tupling_info = match tupling {
+            ArgsTupling::Untupled {
+                tupled_arg_index,
+                tuple_type,
+            } => {
+                core::hint::cold_path();
+                let Local::Argument(tupled_arg_index) = tupled_arg_index else {
+                    unreachable!()
+                };
+                ArgsTuplingInfo::Untupled {
+                    tupled_arg_index,
+                    tupling_helper: Box::new(move || {
+                        Box::new(tupling::TuplingHelperImpl::new(
+                            self.type_manager,
+                            tuple_type.into(),
+                        ))
+                    }),
+                }
+            }
+            ArgsTupling::Tupled => {
+                core::hint::cold_path();
+                let (first_arg_type, mut rest_args_types) = {
+                    let mut arg_types = arg_types.unwrap();
+                    let rest_args_types = arg_types.split_off(1);
+                    let first_arg_type = arg_types.remove(0);
+                    (first_arg_type, rest_args_types)
+                };
+                ArgsTuplingInfo::Tupled {
+                    head_args: Box::new(move || {
+                        vec![{
+                            debug_assert_eq!(
+                                first_arg_type.get_size(self.type_manager),
+                                Some(0),
+                                "Expected to happen only in FnOnce implementation of a non-capturing closure",
+                            );
+                            Implied::always(Value::from(Constant::Zst).to_value_ref())
+                        }]
+                    }),
+                    tupling_helper: Box::new(move || {
+                        Box::new(tupling::TuplingHelperImpl::new(
+                            self.type_manager,
+                            rest_args_types.remove(0),
+                        ))
+                    }),
+                }
+            }
+            ArgsTupling::Normal => ArgsTuplingInfo::Normal,
+        };
+        let sanity = self.call_stack_manager.finalize_enter(token, tupling_info);
+
         self.trace_recorder
             .finish_call(def, matches!(sanity, CallFlowSanity::Broken));
     }
@@ -188,18 +262,19 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
     }
 }
 
-mod untuple {
+mod tupling {
     use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo};
 
     use crate::{
         abs::{FieldIndex, RawAddress, TypeId},
+        backends::basic::expr::LazyTypeInfo,
         type_info::{FieldsShapeInfoExt, TypeInfoExt},
     };
 
     use super::{DeterPlaceValueRef, backend};
     use backend::{BasicPlaceInfo, TypeDatabase, expr::prelude::DeterministicPlaceValue};
 
-    pub(super) trait UntupleHelper {
+    pub(super) trait TuplingHelper {
         type PlaceInfo;
         type Place;
 
@@ -213,28 +288,28 @@ mod untuple {
     }
 
     pub(super) trait BasicUntupleHelper:
-        UntupleHelper<PlaceInfo = BasicPlaceInfo, Place = DeterPlaceValueRef>
+        TuplingHelper<PlaceInfo = BasicPlaceInfo, Place = DeterPlaceValueRef>
     {
     }
     impl<T> BasicUntupleHelper for T where
-        T: UntupleHelper<PlaceInfo = BasicPlaceInfo, Place = DeterPlaceValueRef>
+        T: TuplingHelper<PlaceInfo = BasicPlaceInfo, Place = DeterPlaceValueRef>
     {
     }
 
-    pub(crate) struct UntupleHelperImpl<'a> {
+    pub(crate) struct TuplingHelperImpl<'a> {
         pub(crate) type_manager: &'a dyn TypeDatabase,
-        pub(crate) tuple_type_id: TypeId,
-        pub(crate) type_info: Option<&'static TypeInfo>,
-        pub(crate) fields_info: Option<&'static StructShape>,
+        pub(crate) tuple_type: LazyTypeInfo,
+        pub(crate) fields_info: Option<StructShape>,
     }
 
-    impl UntupleHelper for UntupleHelperImpl<'_> {
+    impl TuplingHelper for TuplingHelperImpl<'_> {
         type PlaceInfo = BasicPlaceInfo;
         type Place = DeterPlaceValueRef;
 
         fn make_tupled_arg_pseudo_place(&mut self, addr: RawAddress) -> Self::Place {
             DeterPlaceValueRef::new(
-                DeterministicPlaceValue::from_addr_type(addr, self.tuple_type_id).to_value_ref(),
+                DeterministicPlaceValue::from_addr_type_info(addr, self.tuple_type.clone())
+                    .to_value_ref(),
             )
         }
 
@@ -260,12 +335,11 @@ mod untuple {
         }
     }
 
-    impl<'a> UntupleHelperImpl<'a> {
-        pub(crate) fn new(type_manager: &'a dyn TypeDatabase, tuple_type_id: TypeId) -> Self {
+    impl<'a> TuplingHelperImpl<'a> {
+        pub(crate) fn new(type_manager: &'a dyn TypeDatabase, tuple_type: LazyTypeInfo) -> Self {
             Self {
                 type_manager,
-                tuple_type_id,
-                type_info: None,
+                tuple_type,
                 fields_info: None,
             }
         }
@@ -275,23 +349,23 @@ mod untuple {
             self.type_manager.get_type(&type_id)
         }
 
-        pub(crate) fn type_info(&mut self) -> &'static TypeInfo {
-            if self.type_info.is_none() {
-                self.type_info = Some(self.get_type(self.tuple_type_id));
-            }
-            self.type_info.unwrap()
+        pub(crate) fn type_info(&mut self) -> &TypeInfo {
+            self.tuple_type.fetch(self.type_manager)
         }
 
-        pub(crate) fn fields_info(&mut self) -> &'static StructShape {
-            let type_info = self.type_info();
-            self.fields_info
-                .get_or_insert_with(|| match type_info.expect_single_variant().fields {
-                    FieldsShapeInfo::Struct(ref shape) => shape,
+        pub(crate) fn fields_info(&mut self) -> &StructShape {
+            if self.fields_info.is_none() {
+                let type_info = self.type_info();
+                let info = match type_info.expect_single_variant().fields {
+                    FieldsShapeInfo::Struct(ref shape) => shape.clone(),
                     _ => panic!("Expected tuple type info, got: {:?}", type_info),
-                })
+                };
+                self.fields_info = Some(info);
+            }
+            self.fields_info.as_ref().unwrap()
         }
     }
 }
-use untuple::BasicUntupleHelper;
+use tupling::BasicUntupleHelper;
 
 use super::ImplicationInvestigator;

@@ -263,15 +263,18 @@ pub mod macros {
               args: ($slice_ty!(OperandRef)),
               are_args_tupled: bool
           ) }
-          #[allow(unused_parens)]
           { fn enter_func(def: FuncDef, arg_places: &[PlaceRef], ret_val_place: PlaceRef) }
-          #[allow(unused_parens)]
-          { fn enter_func_tupled(
+          { fn enter_func_untupled_args(
               def: FuncDef,
               arg_places: &[PlaceRef],
               ret_val_place: PlaceRef,
               tupled_arg_index: LocalIndex,
-              tupled_arg_type_id: TypeId,
+              tuple_type_id: TypeId,
+          ) }
+          { fn enter_func_tupled_args(
+              def: FuncDef,
+              arg_places: &[PlaceRef],
+              ret_val_place: PlaceRef,
           ) }
           { fn return_from_func(ret_point: BasicBlockIndex) }
           { fn override_return_value(operand: OperandRef) }
@@ -623,15 +626,17 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn before_call_func(def:CalleeDef,call_site:BasicBlockIndex,func:OperandRef,args:($slice_ty!(OperandRef)),are_args_tupled:bool);
             }$modifier!{
-                #[allow(unused_parens)]fn enter_func(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef);
+                fn enter_func(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef);
             }$modifier!{
-                #[allow(unused_parens)]fn enter_func_tupled(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef,tupled_arg_index:LocalIndex,tupled_arg_type_id:TypeId,);
+                fn enter_func_untupled_args(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef,tupled_arg_index:LocalIndex,tuple_type_id:TypeId,);
+            }$modifier!{
+                fn enter_func_tupled_args(def:FuncDef,arg_places: &[PlaceRef],ret_val_place:PlaceRef,);
             }$modifier!{
                 fn return_from_func(ret_point:BasicBlockIndex);
             }$modifier!{
                 fn override_return_value(operand:OperandRef);
             }$modifier!{
-                fn after_call_func(id: AssignmentId, dest: PlaceRef);
+                fn after_call_func(id:AssignmentId,dest:PlaceRef);
             }$modifier!{
                 fn intrinsic_assign_rotate_left(id:AssignmentId,dest:PlaceRef,x:OperandRef,shift:OperandRef);
             }$modifier!{

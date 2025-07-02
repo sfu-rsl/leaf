@@ -1956,9 +1956,11 @@ mod implementation {
                 let (arg_blocks, tupled_args) = self.make_enter_func_tupled_args(args.as_closure());
                 blocks.extend(arg_blocks);
                 self.make_bb_for_call(
-                    sym::enter_func_tupled,
+                    sym::enter_func_untupled_args,
                     [base_args, tupled_args.to_vec()].concat(),
                 )
+            } else if func::is_fn_trait_call_func(tcx, self.current_func_id()) {
+                self.make_bb_for_call(sym::enter_func_tupled_args, base_args)
             } else {
                 self.make_bb_for_call(sym::enter_func, base_args)
             };
@@ -3516,6 +3518,13 @@ mod implementation {
                     operand::const_from_uint(tcx, def_id.krate.as_u32()),
                     operand::const_from_uint(tcx, def_id.index.as_u32()),
                 )
+            }
+
+            pub fn is_fn_trait_call_func<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {
+                matches!(tcx.def_kind(def_id), rustc_hir::def::DefKind::AssocFn)
+                    && to_trait_associated_item(tcx, def_id)
+                        .trait_container(tcx)
+                        .is_some_and(|trait_id| tcx.is_fn_trait(trait_id))
             }
         }
 

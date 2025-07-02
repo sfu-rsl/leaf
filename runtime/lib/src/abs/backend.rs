@@ -228,6 +228,15 @@ pub(crate) trait SwitchHandler {
     fn take_otherwise(self, non_values: Vec<Self::Constant>);
 }
 
+pub(crate) enum ArgsTupling {
+    Normal,
+    Untupled {
+        tupled_arg_index: Local,
+        tuple_type: TypeId,
+    },
+    Tupled,
+}
+
 pub(crate) trait CallHandler {
     type Place;
     type Operand;
@@ -239,16 +248,16 @@ pub(crate) trait CallHandler {
         def: CalleeDef,
         call_site: BasicBlockIndex,
         func: Self::Operand,
-        args: impl Iterator<Item = Self::Arg>,
+        args: impl IntoIterator<Item = Self::Arg>,
         are_args_tupled: bool,
     );
 
     fn enter(
         self,
         def: FuncDef,
-        arg_places: impl Iterator<Item = Self::Place>,
+        arg_places: Vec<Self::Place>,
         ret_val_place: Self::Place,
-        tupled_arg: Option<(Local, super::TypeId)>,
+        tupling: ArgsTupling,
     );
 
     fn override_return_value(self, value: Self::Operand);

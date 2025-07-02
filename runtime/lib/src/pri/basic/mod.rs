@@ -586,34 +586,23 @@ impl ProgramRuntimeInterface for BasicPri {
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn enter_func(def: FuncDef, arg_places: &[PlaceRef], ret_val_place: PlaceRef) {
-        let arg_places = arg_places
-            .iter()
-            .map(|p| take_place_info_to_read(*p))
-            .collect::<Vec<_>>();
-        let ret_val_place = take_place_info_to_write(ret_val_place);
-        func_control(|h| h.enter(def.into(), arg_places.into_iter(), ret_val_place, None))
+        Self::enter_func_with_tupling(def, arg_places, ret_val_place, ArgsTupling::Normal);
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
-    fn enter_func_tupled(
+    fn enter_func_untupled_args(
         def: FuncDef,
         arg_places: &[PlaceRef],
         ret_val_place: PlaceRef,
         tupled_arg_index: LocalIndex,
         tupled_arg_type_id: TypeId,
     ) {
-        let arg_places = arg_places
-            .iter()
-            .map(|p| take_place_info_to_read(*p))
-            .collect::<Vec<_>>();
-        let ret_val_place = take_place_info_to_write(ret_val_place);
-        func_control(|h| {
-            h.enter(
-                def.into(),
-                arg_places.into_iter(),
-                ret_val_place,
-                Some((Local::Argument(tupled_arg_index), tupled_arg_type_id)),
-            )
+        Self::enter_func_with_tupling(def, arg_places, ret_val_place, ArgsTupling::Untupled {
+            tupled_arg_index: Local::Argument(tupled_arg_index),
+            tuple_type: tupled_arg_type_id,
         })
+    }
+    fn enter_func_tupled_args(def: FuncDef, arg_places: &[PlaceRef], ret_val_place: PlaceRef) {
+        Self::enter_func_with_tupling(def, arg_places, ret_val_place, ArgsTupling::Tupled)
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn return_from_func(ret_point: BasicBlockIndex) {
@@ -889,5 +878,19 @@ impl BasicPri {
         });
 
         assign_to(id, prev_dest, |h| dest_assign_action(h, current.clone()));
+    }
+
+    fn enter_func_with_tupling(
+        def: FuncDef,
+        arg_places: &[PlaceRef],
+        ret_val_place: PlaceRef,
+        tupling: ArgsTupling,
+    ) {
+        let arg_places = arg_places
+            .iter()
+            .map(|p| take_place_info_to_read(*p))
+            .collect::<Vec<_>>();
+        let ret_val_place = take_place_info_to_write(ret_val_place);
+        func_control(|h| h.enter(def.into(), arg_places, ret_val_place, tupling));
     }
 }

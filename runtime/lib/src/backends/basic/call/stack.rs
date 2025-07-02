@@ -1,7 +1,7 @@
 use core::iter;
 
 use crate::{
-    abs::{CalleeDef, Constant, FuncDef, LocalIndex},
+    abs::{CalleeDef, Constant, FieldIndex, FuncDef},
     backends::basic::CallStackInfo,
     utils::InPlaceSelfHierarchical,
 };
@@ -13,9 +13,9 @@ use backend::{
     expr::prelude::DeterPlaceValueRef,
 };
 
-use super::{BasicUntupleHelper, CallFlowSanity, GenericCallStackManager};
+use super::{ArgsTuplingInfo, BasicUntupleHelper, CallFlowSanity, GenericCallStackManager};
 
-use common::{log_debug, log_warn, types::RawAddress};
+use common::{log_debug, log_trace, log_warn, types::RawAddress};
 
 type VariablesStateFactory<VS> = Box<dyn Fn(usize) -> VS>;
 
@@ -198,7 +198,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         let latest_call = self.latest_call.take();
         let symbolic_args = latest_call
             .as_ref()
-            .map(|info| self.inspect_external_call_info(info));
+            .map(|info| self.inspect_external_call_info(&info.args));
         self.latest_returned_val
             .take()
             .inspect(|val| self.inspect_returned_value(val));
@@ -245,10 +245,55 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         }
     }
 
+    fn resolve_tupling(&mut self, args: &mut PassedArgs<VS::Value>, tupling: ArgsTuplingInfo) {
+        match tupling {
+            ArgsTuplingInfo::Untupled {
+                tupled_arg_index: arg_index,
+                tupling_helper,
+            } if args.are_tupled => {
+                core::hint::cold_path();
+                let arg_index = arg_index as usize - 1;
+                log_debug!(target: TAG, "Untupling argument at index {}", arg_index);
+                let tupled_value = args.values.remove(arg_index);
+                let untupled_args = Self::untuple(
+                    tupled_value,
+                    self.arg_places.get(arg_index).map(|m| m.address()),
+                    tupling_helper().as_mut(),
+                    (self.vars_state_factory)(usize::MAX),
+                );
+                // Replace the tupled argument with separate ones.
+                args.values.splice(arg_index..arg_index, untupled_args);
+            }
+            ArgsTuplingInfo::Tupled {
+                head_args,
+                tupling_helper,
+            } if !args.are_tupled => {
+                core::hint::cold_path();
+                log_debug!(target: TAG, "Tupling arguments");
+                // Replace the separate arguments with a tupled one.
+                let separated_args = core::mem::replace(&mut args.values, head_args());
+                args.values.push(Self::tuple(
+                    separated_args,
+                    self.arg_places.get(args.values.len()).map(|m| m.address()),
+                    tupling_helper().as_mut(),
+                    (self.vars_state_factory)(usize::MAX),
+                ));
+            }
+            _ => {
+                log_trace!(
+                    target: TAG,
+                    "No tupling/untupling needed {:?}, {}",
+                    tupling,
+                    args.are_tupled,
+                );
+            }
+        }
+    }
+
     fn untuple(
         tupled_value: VS::Value,
         tupled_arg_addr: Option<RawAddress>,
-        untuple_helper: &mut dyn BasicUntupleHelper,
+        untuple_helper: &mut (impl BasicUntupleHelper + ?Sized),
         isolated_vars_state: VS,
     ) -> Vec<VS::Value> {
         let tupled_pseudo_place = untuple_helper.make_tupled_arg_pseudo_place(
@@ -268,12 +313,40 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
             .collect()
     }
 
+    fn tuple(
+        separate_values: Vec<VS::Value>,
+        tupled_arg_addr: Option<RawAddress>,
+        untuple_helper: &mut (impl BasicUntupleHelper + ?Sized),
+        isolated_vars_state: VS,
+    ) -> VS::Value {
+        let tupled_pseudo_place = untuple_helper.make_tupled_arg_pseudo_place(
+            /* NOTE: The address should not really matter, but let's keep it realistic. */
+            tupled_arg_addr.unwrap_or(core::ptr::null() as RawAddress),
+        );
+
+        // Write the values to the field pseudo places in an isolated state, then read the tuple
+        let mut vars_state = isolated_vars_state;
+        debug_assert_eq!(separate_values.len(), untuple_helper.num_fields() as usize,);
+        separate_values
+            .into_iter()
+            .enumerate()
+            .for_each(|(i, value)| {
+                vars_state.set_place(
+                    untuple_helper
+                        .field_place(tupled_pseudo_place.clone(), i as FieldIndex)
+                        .as_ref(),
+                    value,
+                )
+            });
+        // Read the whole tuple.
+        vars_state.take_place(tupled_pseudo_place.as_ref())
+    }
+
     fn inspect_external_call_info<'a>(
         &self,
-        info: &'a CallInfo<VS::Value>,
+        arg_values: &'a [VS::Value],
     ) -> Vec<(usize, &'a VS::Value)> {
-        let symbolic_args: Vec<_> = info
-            .args
+        let symbolic_args: Vec<_> = arg_values
             .iter()
             .enumerate()
             .filter(|(_, v)| v.is_symbolic())
@@ -368,37 +441,6 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         self.return_val_place = Some(ret_val_place);
     }
 
-    fn try_untuple_argument<'a, 'b>(
-        &'a mut self,
-        arg_index: LocalIndex,
-        untuple_helper: &dyn Fn() -> Box<dyn BasicUntupleHelper + 'b>,
-    ) {
-        let Some(CallInfo {
-            args,
-            are_args_tupled,
-            ..
-        }) = self.latest_call.as_mut()
-        else {
-            return;
-        };
-
-        if !*are_args_tupled {
-            return;
-        }
-
-        let arg_index = arg_index as usize - 1;
-        log_debug!(target: TAG, "Untupling argument at index {}.", arg_index);
-        let tupled_value = args.remove(arg_index);
-        let untupled_args = Self::untuple(
-            tupled_value,
-            self.arg_places.get(arg_index).map(|m| m.address()),
-            untuple_helper().as_mut(),
-            (self.vars_state_factory)(usize::MAX),
-        );
-        // Replace the tupled argument with separate ones.
-        args.splice(arg_index..arg_index, untupled_args);
-    }
-
     fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity {
         let arg_places = core::mem::replace(&mut self.arg_places, Default::default());
         let call_stack_frame = CallStackFrame {
@@ -409,6 +451,11 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
 
         let arg_values_if_not_broken = if let Some(call_info) = self.latest_call.take() {
             if current_func == call_info.expected_func {
+                log_trace!(
+                    target: TAG,
+                    "Entering the function: {} with expected function: {}",
+                    current_func, call_info.expected_func,
+                );
                 let arg_values = call_info.args;
                 assert_eq!(
                     arg_values.len(),
@@ -428,7 +475,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
             }
         } else {
             // NOTE: An example of this case is when an external function calls multiple internal ones.
-            log_debug!("External function call detected with no call information available");
+            log_debug!(target: TAG, "External function call detected with no call information available");
             Err(None)
         };
 
@@ -441,10 +488,102 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
             Ok(arg_values) => arg_values,
             Err(call_info) => {
                 call_info.inspect(|info| {
-                    self.inspect_external_call_info(info);
+                    self.inspect_external_call_info(&info.args);
                 });
                 iter::repeat_n(unknown_value(), arg_places.len()).collect()
             }
+        };
+        self.push_new_stack_frame(arg_places.into_iter().zip(arg_values), call_stack_frame);
+
+        log_debug!(target: TAG, "Entered the function");
+
+        if is_broken {
+            CallFlowSanity::Broken
+        } else {
+            CallFlowSanity::Expected
+        }
+    }
+
+    fn start_enter(&mut self, current_func: FuncDef) -> EntranceToken<Self::Value> {
+        let arg_places = core::mem::replace(&mut self.arg_places, Default::default());
+
+        let arg_values_if_not_broken = if let Some(call_info) = self.latest_call.take() {
+            if current_func == call_info.expected_func {
+                log_trace!(
+                    target: TAG,
+                    "Entering the function: {} with expected function: {}",
+                    current_func, call_info.expected_func,
+                );
+                Ok(PassedArgs {
+                    values: call_info.args,
+                    are_tupled: call_info.are_args_tupled,
+                })
+            } else {
+                log_debug!(
+                    target: TAG,
+                    "External function call detected. Expected: {} but got: {}",
+                    call_info.expected_func,
+                    current_func,
+                );
+                Err(Some(PassedArgs {
+                    values: call_info.args,
+                    are_tupled: call_info.are_args_tupled,
+                }))
+            }
+        } else {
+            // NOTE: An example of this case is when an external function calls multiple internal ones.
+            log_debug!(target: TAG, "External function call detected with no call information available");
+            Err(None)
+        };
+
+        EntranceToken {
+            entered_func_def: current_func,
+            arg_places,
+            return_val_place: self
+                .return_val_place
+                .take()
+                .expect("Return value place must be set for instrumented functions."),
+            passed_args: arg_values_if_not_broken,
+        }
+    }
+
+    fn finalize_enter<'a, 'h>(
+        &'a mut self,
+        EntranceToken {
+            entered_func_def,
+            arg_places,
+            return_val_place,
+            passed_args,
+        }: EntranceToken<Self::Value>,
+        tupling: ArgsTuplingInfo,
+    ) -> CallFlowSanity {
+        let is_broken = passed_args.is_err();
+        if let Some(parent_frame) = self.stack.last_mut() {
+            parent_frame.is_callee_external = Some(is_broken);
+        }
+
+        let arg_values = match passed_args {
+            Ok(mut args) => {
+                self.resolve_tupling(&mut args, tupling);
+                assert_eq!(
+                    args.values.len(),
+                    arg_places.len(),
+                    "Inconsistent number of passed arguments."
+                );
+                args.values
+            }
+            Err(call_info) => {
+                call_info.inspect(|info| {
+                    self.inspect_external_call_info(&info.values);
+                });
+                iter::repeat_n(unknown_value(), arg_places.len()).collect()
+            }
+        };
+
+        let call_stack_frame = CallStackFrame {
+            def: Some(entered_func_def),
+            return_val_place: Some(return_val_place),
+            ..Default::default()
         };
         self.push_new_stack_frame(arg_places.into_iter().zip(arg_values), call_stack_frame);
 
@@ -597,4 +736,16 @@ mod logging {
             .entered();
         }
     }
+}
+
+struct PassedArgs<V> {
+    values: Vec<V>,
+    are_tupled: bool,
+}
+
+pub(super) struct EntranceToken<V> {
+    entered_func_def: FuncDef,
+    arg_places: Vec<DeterPlaceValueRef>,
+    return_val_place: DeterPlaceValueRef,
+    passed_args: Result<PassedArgs<V>, Option<PassedArgs<V>>>,
 }
