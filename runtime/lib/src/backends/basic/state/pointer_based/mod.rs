@@ -327,10 +327,11 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         whole_size: TypeSize,
     ) -> Precondition {
         let constraints = match sub_preconditions.as_slice() {
+            [] => None,
             [(0, size, _)] if *size == NonZero::new(whole_size).unwrap() => Some(
                 PreconditionConstraints::Whole(sub_preconditions.into_iter().next().unwrap().2),
             ),
-            [..] => PreconditionConstraints::refined(
+            _ => PreconditionConstraints::refined(
                 sub_preconditions
                     .into_iter()
                     .map(|(offset, size, antecedents)| (offset, size, antecedents)),

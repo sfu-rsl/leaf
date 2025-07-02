@@ -8,6 +8,7 @@ use std::{
 
 use common::building::utils::*;
 
+const COMMON_LIB_PROJECT_DIR: [&str; 1] = ["common"];
 const SHIM_LIB_PROJECT_DIR: [&str; 2] = ["runtime", "shim"];
 const SHIM_LIB_FILE_NAME: &str = "libleafrtsh.rlib";
 
@@ -53,7 +54,9 @@ mod runtime_shim {
         use runtime_shim::*;
 
         let shim_lib_proj_path = workspace_dir.join(PathBuf::from_iter(SHIM_LIB_PROJECT_DIR));
+        let common_lib_proj_path = workspace_dir.join(PathBuf::from_iter(COMMON_LIB_PROJECT_DIR));
         println!("cargo:rerun-if-changed={}", shim_lib_proj_path.display());
+        println!("cargo:rerun-if-changed={}", common_lib_proj_path.display());
 
         let target_output_dir = build_lib(&shim_lib_proj_path);
 

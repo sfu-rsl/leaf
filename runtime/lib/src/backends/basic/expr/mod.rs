@@ -1063,6 +1063,13 @@ mod convert {
         }
     }
 
+    impl From<abs::Constant> for Value {
+        #[inline]
+        fn from(val: abs::Constant) -> Self {
+            ConcreteValue::from(val).into()
+        }
+    }
+
     macro_rules! impl_from_int_type {
         ($signed:expr, $($ty:ty),*) => {
             $(

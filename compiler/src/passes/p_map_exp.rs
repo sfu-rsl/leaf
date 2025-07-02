@@ -3,9 +3,12 @@ use rustc_middle::{
     ty::{InstanceKind, TyCtxt},
 };
 
-use common::directed::{
-    BasicBlockIndex, CallDebugInfo, CallGraphEdgeDestination, CfgConstraint, CfgEdgeDestination,
-    ControlFlowGraph, ProgramMap,
+use common::{
+    directed::{
+        BasicBlockIndex, CallDebugInfo, CallGraphEdgeDestination, CfgConstraint,
+        CfgEdgeDestination, ControlFlowGraph, ProgramMap,
+    },
+    log_info,
 };
 
 use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
@@ -42,6 +45,8 @@ impl CompilationPass for ProgramMapExporter {
     }
 
     fn visit_tcx_at_codegen_after(&mut self, tcx: TyCtxt, storage: &mut dyn Storage) {
+        log_info!("Exporting program map");
+
         let mut p_map = storage.get_or_default::<ProgramMap>(KEY_MAP.to_owned());
 
         tcx.collect_and_partition_mono_items(())

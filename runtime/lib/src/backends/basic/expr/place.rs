@@ -48,16 +48,17 @@ pub(crate) struct DeterministicPlaceValue {
 
 impl DeterministicPlaceValue {
     pub(crate) fn new(metadata: &PlaceMetadata) -> Self {
-        Self {
-            addr: metadata.address(),
-            ty_info: LazyTypeInfo::from(metadata),
-        }
+        Self::from_addr_type_info(metadata.address(), LazyTypeInfo::from(metadata))
     }
 
     pub(crate) fn from_addr_type(addr: RawAddress, ty: TypeId) -> Self {
+        Self::from_addr_type_info(addr, LazyTypeInfo::from(ty))
+    }
+
+    pub(crate) fn from_addr_type_info(addr: RawAddress, ty_info: LazyTypeInfo) -> Self {
         Self {
             addr,
-            ty_info: LazyTypeInfo::from(ty),
+            ty_info: ty_info,
         }
     }
 

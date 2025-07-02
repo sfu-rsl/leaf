@@ -103,27 +103,45 @@ mod retrieval {
     }
 
     impl LazyTypeInfo {
+        pub(crate) fn fetch<'a>(&'a mut self, type_manager: &dyn TypeDatabase) -> &'a TypeInfo {
+            match self {
+                Self::Id(ty_id) => {
+                    *self = Self::Fetched(type_manager.get_type(ty_id));
+                }
+                Self::IdPrimitive(ty_id, _) => {
+                    *self = Self::Fetched(type_manager.get_type(ty_id));
+                }
+                Self::Fetched(..) | Self::Forced(..) | Self::None => {}
+            }
+            match self {
+                Self::Fetched(ty) => *ty,
+                Self::Forced(ref ty) => ty.as_ref(),
+                Self::None => panic!("Type info is not available."),
+                Self::Id(..) | Self::IdPrimitive(..) => unreachable!(),
+            }
+        }
+
         #[inline]
         pub(crate) fn get_type(&self, type_manager: &dyn TypeDatabase) -> Option<&TypeInfo> {
             match self {
-                LazyTypeInfo::Id(ty_id) | LazyTypeInfo::IdPrimitive(ty_id, _) => {
+                Self::Id(ty_id) | Self::IdPrimitive(ty_id, _) => {
                     Some(type_manager.get_type(&ty_id))
                 }
-                LazyTypeInfo::Fetched(ty) => Some(*ty),
-                LazyTypeInfo::Forced(ty) => Some(ty.as_ref()),
-                LazyTypeInfo::None => None,
+                Self::Fetched(ty) => Some(*ty),
+                Self::Forced(ty) => Some(ty.as_ref()),
+                Self::None => None,
             }
         }
 
         #[inline]
         pub(crate) fn get_size(&self, type_manager: &dyn TypeDatabase) -> Option<TypeSize> {
             match self {
-                LazyTypeInfo::None => None,
-                LazyTypeInfo::IdPrimitive(_, ty) => Some(ty.size().into()),
+                Self::None => None,
+                Self::IdPrimitive(_, ty) => Some(ty.size().into()),
                 _ => match self {
-                    LazyTypeInfo::Id(ty_id) => type_manager.get_type(&ty_id),
-                    LazyTypeInfo::Fetched(ty) => *ty,
-                    LazyTypeInfo::Forced(ty) => ty.as_ref(),
+                    Self::Id(ty_id) => type_manager.get_type(&ty_id),
+                    Self::Fetched(ty) => *ty,
+                    Self::Forced(ty) => ty.as_ref(),
                     _ => unreachable!(),
                 }
                 .size(),

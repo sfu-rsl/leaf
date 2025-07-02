@@ -61,20 +61,15 @@ mod empty_guarded {
     );
 
     impl NonEmptyRefinedConstraints {
-        pub fn new(
-            constraints: Vec<(PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)>,
-        ) -> Option<Self> {
-            if constraints.is_empty() {
-                None
-            } else {
-                Some(Self(constraints))
-            }
-        }
-
         pub fn from_iter(
             iter: impl IntoIterator<Item = (PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)>,
         ) -> Option<Self> {
-            Self::new(iter.into_iter().collect())
+            let iter = iter.into_iter();
+            if iter.size_hint().1 == Some(0) {
+                return None;
+            }
+            let constraints: Vec<_> = iter.collect();
+            (!constraints.is_empty()).then_some(Self(constraints))
         }
 
         pub fn get(self) -> Vec<(PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)> {

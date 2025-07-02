@@ -1,4 +1,3 @@
-#![cfg_attr(not(core_build), feature(const_float_bits_conv))]
 #![cfg_attr(not(core_build), feature(concat_idents))]
 #![cfg_attr(not(core_build), feature(const_eval_select))]
 #![cfg_attr(not(core_build), feature(core_intrinsics))]
