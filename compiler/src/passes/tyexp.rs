@@ -1,26 +1,24 @@
 use rustc_abi::{FieldsShape, LayoutData, Scalar, TagEncoding, Variants};
 use rustc_middle::mir::{self, visit::Visitor};
-use rustc_middle::ty::layout::HasTypingEnv;
-use rustc_middle::ty::{EarlyBinder, TypingEnv};
 use rustc_middle::ty::{
-    GenericArgsRef, Ty, TyCtxt, TyKind,
-    layout::{HasTyCtxt, LayoutCx, TyAndLayout},
+    EarlyBinder, GenericArgsRef, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
+    TypeVisitableExt, TypeVisitor, TypingEnv,
+    layout::{HasTyCtxt, HasTypingEnv, LayoutCx, TyAndLayout},
 };
 use rustc_target::abi::{FieldIdx, Layout, VariantIdx};
+use rustc_type_ir::inherent::AdtDef;
 
 use std::collections::HashMap;
 use std::env::{self};
-use std::ops::DerefMut;
 
 use common::{
-    log_debug, log_warn,
+    log_debug, log_info, log_warn,
     type_info::{self, *},
 };
 
-use super::{CompilationPass, Storage, StorageExt};
 use crate::utils::file::TyCtxtFileExt;
 
-const KEY_TYPE_MAP: &str = "type_ids";
+use super::{CompilationPass, Storage};
 
 const TAG_TYPE_EXPORT: &str = "type_export";
 
@@ -35,9 +33,11 @@ impl CompilationPass for TypeExporter {
     fn visit_tcx_at_codegen_after(
         &mut self,
         tcx: rustc_middle::ty::TyCtxt,
-        storage: &mut dyn Storage,
+        _storage: &mut dyn Storage,
     ) {
-        let type_map = capture_all_types(storage, tcx);
+        log_info!("Exporting type info");
+
+        let type_map = capture_all_types(tcx);
 
         let out_dir = tcx.output_dir();
         let is_single_file_program =
@@ -64,11 +64,8 @@ impl CompilationPass for TypeExporter {
     }
 }
 
-fn capture_all_types<'s>(
-    storage: &'s mut dyn Storage,
-    tcx: TyCtxt,
-) -> impl DerefMut<Target = HashMap<TypeId, TypeInfo>> + 's {
-    let mut type_map = storage.get_or_default::<HashMap<TypeId, TypeInfo>>(KEY_TYPE_MAP.to_owned());
+fn capture_all_types<'s>(tcx: TyCtxt) -> HashMap<TypeId, TypeInfo> {
+    let mut type_map = Default::default();
 
     tcx.collect_and_partition_mono_items(())
         .codegen_units
@@ -78,7 +75,7 @@ fn capture_all_types<'s>(
                 mir::mono::MonoItem::Fn(instance) => {
                     let body = tcx.instance_mir(instance.def);
                     log_debug!(target: TAG_TYPE_EXPORT, "Exporting types in {:?}", instance);
-                    let mut place_visitor = PlaceVisitor {
+                    let mut place_visitor = TyVisitor {
                         tcx,
                         type_map: &mut type_map,
                         args: instance.args,
@@ -147,7 +144,7 @@ fn type_id<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> TypeId {
     TypeId::new(tcx.type_id_hash(ty).as_u128()).unwrap()
 }
 
-struct PlaceVisitor<'tcx, 's, 'b> {
+struct TyVisitor<'tcx, 's, 'b> {
     tcx: TyCtxt<'tcx>,
     type_map: &'s mut HashMap<TypeId, TypeInfo>,
     args: GenericArgsRef<'tcx>,
@@ -155,29 +152,9 @@ struct PlaceVisitor<'tcx, 's, 'b> {
     local_decls: &'b mir::LocalDecls<'tcx>,
 }
 
-impl<'tcx, 's, 'b> Visitor<'tcx> for PlaceVisitor<'tcx, 's, 'b> {
-    fn visit_ty(&mut self, ty: Ty<'tcx>, context: mir::visit::TyContext) {
-        let normalized_ty = self.tcx.instantiate_and_normalize_erasing_regions(
-            self.args,
-            self.typing_env,
-            EarlyBinder::bind(ty),
-        );
-        if normalized_ty != ty {
-            log_debug!(target: TAG_TYPE_EXPORT, "Normalized ty with param: {} -> {}", ty, normalized_ty);
-        }
-
-        if self
-            .type_map
-            .contains_key(&type_id(self.tcx, normalized_ty))
-        {
-            return;
-        }
-
-        add_type_information_to_map(self.type_map, self.tcx, normalized_ty, self.typing_env);
-
-        // For pointee
-        ty.builtin_deref(true)
-            .inspect(|t| self.visit_ty(*t, context));
+impl<'tcx, 's, 'b> Visitor<'tcx> for TyVisitor<'tcx, 's, 'b> {
+    fn visit_ty(&mut self, ty: Ty<'tcx>, _context: mir::visit::TyContext) {
+        ty.visit_with(self);
     }
 
     fn visit_place(
@@ -192,10 +169,47 @@ impl<'tcx, 's, 'b> Visitor<'tcx> for PlaceVisitor<'tcx, 's, 'b> {
             mir::tcx::PlaceTy::from_ty(self.local_decls[place.local].ty),
             |p_ty, x| {
                 let p_ty = p_ty.projection_ty(self.tcx, x.1);
-                self.visit_ty(p_ty.ty, mir::visit::TyContext::Location(location));
+                p_ty.visit_with(self);
                 p_ty
             },
         );
+    }
+}
+
+impl<'tcx, 's, 'b> TypeVisitor<TyCtxt<'tcx>> for TyVisitor<'tcx, 's, 'b> {
+    fn visit_ty(&mut self, ty: Ty<'tcx>) -> Self::Result {
+        if ty.has_escaping_bound_vars() {
+            return;
+        }
+
+        let normalized_ty = self.tcx.instantiate_and_normalize_erasing_regions(
+            self.args,
+            self.typing_env,
+            EarlyBinder::bind(ty),
+        );
+        if normalized_ty != ty {
+            log_debug!(target: TAG_TYPE_EXPORT, "Normalized ty with param: {} -> {}", ty, normalized_ty);
+        }
+        let ty = normalized_ty;
+
+        if self
+            .type_map
+            .contains_key(&type_id(self.tcx, normalized_ty))
+        {
+            return;
+        }
+
+        add_type_information_to_map(self.type_map, self.tcx, normalized_ty, self.typing_env);
+
+        ty.super_visit_with(self);
+        // Additional recursions
+        match ty.kind() {
+            TyKind::Adt(adt, args) => adt
+                .all_field_tys(self.tcx)
+                .iter_instantiated(self.tcx, args)
+                .for_each(|t| t.visit_with(self)),
+            _ => {}
+        }
     }
 }
 
