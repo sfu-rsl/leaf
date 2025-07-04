@@ -441,69 +441,6 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
         self.return_val_place = Some(ret_val_place);
     }
 
-    fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity {
-        let arg_places = core::mem::replace(&mut self.arg_places, Default::default());
-        let call_stack_frame = CallStackFrame {
-            def: Some(current_func),
-            return_val_place: self.return_val_place.take(),
-            ..Default::default()
-        };
-
-        let arg_values_if_not_broken = if let Some(call_info) = self.latest_call.take() {
-            if current_func == call_info.expected_func {
-                log_trace!(
-                    target: TAG,
-                    "Entering the function: {} with expected function: {}",
-                    current_func, call_info.expected_func,
-                );
-                let arg_values = call_info.args;
-                assert_eq!(
-                    arg_values.len(),
-                    arg_places.len(),
-                    "Inconsistent number of passed arguments."
-                );
-
-                Ok(arg_values)
-            } else {
-                log_debug!(
-                    target: TAG,
-                    "External function call detected. Expected: {} but got: {}",
-                    call_info.expected_func,
-                    current_func,
-                );
-                Err(Some(call_info))
-            }
-        } else {
-            // NOTE: An example of this case is when an external function calls multiple internal ones.
-            log_debug!(target: TAG, "External function call detected with no call information available");
-            Err(None)
-        };
-
-        let is_broken = arg_values_if_not_broken.is_err();
-        if let Some(parent_frame) = self.stack.last_mut() {
-            parent_frame.is_callee_external = Some(is_broken);
-        }
-
-        let arg_values = match arg_values_if_not_broken {
-            Ok(arg_values) => arg_values,
-            Err(call_info) => {
-                call_info.inspect(|info| {
-                    self.inspect_external_call_info(&info.args);
-                });
-                iter::repeat_n(unknown_value(), arg_places.len()).collect()
-            }
-        };
-        self.push_new_stack_frame(arg_places.into_iter().zip(arg_values), call_stack_frame);
-
-        log_debug!(target: TAG, "Entered the function");
-
-        if is_broken {
-            CallFlowSanity::Broken
-        } else {
-            CallFlowSanity::Expected
-        }
-    }
-
     fn start_enter(&mut self, current_func: FuncDef) -> EntranceToken<Self::Value> {
         let arg_places = core::mem::replace(&mut self.arg_places, Default::default());
 

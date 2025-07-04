@@ -63,8 +63,6 @@ trait GenericCallStackManager: CallStackInfo {
 
     fn set_places(&mut self, arg_places: Vec<Self::Place>, ret_val_place: Self::Place);
 
-    fn notify_enter(&mut self, current_func: FuncDef) -> CallFlowSanity;
-
     fn start_enter(&mut self, current_func: FuncDef) -> EntranceToken<Self::Value>;
 
     fn finalize_enter<'a, 'h>(
