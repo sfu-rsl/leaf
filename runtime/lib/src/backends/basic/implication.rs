@@ -11,7 +11,10 @@ use common::program_dep::{
 };
 use derive_more as dm;
 
-use crate::abs::{BasicBlockLocation, PointerOffset, TypeSize};
+use crate::{
+    abs::{BasicBlockLocation, PointerOffset, TypeSize},
+    utils::HasIndex,
+};
 
 use super::{
     AssignmentId, BasicConstraint, EnumAntecedentsResult, ImplicationInvestigator, InstanceKindId,
@@ -373,8 +376,7 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
         let mut controllers = get_controllers(loc.index)?;
         let (controller_step, found) =
             self.trace_querier
-                .find_map_in_current_func(loc.body, move |r, c| {
-                    let block = r.location().index;
+                .find_map_in_current_func(loc.body, move |block, c| {
                     if controllers.contains(&block) {
                         if c.discr.is_symbolic() || c.discr.by.is_some() {
                             Some(true)
@@ -395,8 +397,7 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
         found.then(|| {
             let constraint: &BasicConstraint = controller_step.as_ref();
             if constraint.discr.is_symbolic() {
-                let record: &Record = controller_step.as_ref();
-                Antecedents::from_constraint(record.index)
+                Antecedents::from_constraint(controller_step.index())
             } else if let Precondition::Constraints(constraints) = &constraint.discr.by {
                 // Discriminant is always a primitive, so it won't be refined.
                 constraints.expect_whole().clone()

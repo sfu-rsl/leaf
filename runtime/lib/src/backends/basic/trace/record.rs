@@ -4,7 +4,11 @@ use derive_more as dm;
 use serde::{Serialize, Serializer};
 use serde_json::Serializer as JsonSerializer;
 
-use common::{directed::RawCaseValue, log_debug, types::trace::BranchRecord};
+use common::{
+    directed::RawCaseValue,
+    log_debug, log_warn,
+    types::{InstanceKindId, trace::BranchRecord},
+};
 
 use crate::{
     abs::{
@@ -107,6 +111,9 @@ impl CallTraceRecorder for BasicExeTraceRecorder {
 impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self))]
     fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>) {
+        let last_ret_point = self.last_ret_point.take();
+        self.handle_maybe_unfinished_return(last_ret_point);
+
         *self
             .stack
             .last_mut()
@@ -138,7 +145,8 @@ impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self))]
     fn start_return(&mut self, ret_point: BasicBlockLocation<FuncDef>) {
         self.stack.pop().expect("Inconsistent stack info");
-        self.last_ret_point = Some(ret_point);
+        let unfinished = self.last_ret_point.replace(ret_point);
+        self.handle_maybe_unfinished_return(unfinished);
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -169,7 +177,7 @@ impl DecisionTraceRecorder for BasicExeTraceRecorder {
         kind: &ConstraintKind<Self::Case>,
     ) -> usize {
         self.notify_step(ExeTraceRecord::Branch(BranchRecord {
-            location: node_location,
+            location: self.ensure_in_current_body(node_location),
             decision: kind.clone(),
         }))
     }
@@ -209,11 +217,54 @@ impl BasicExeTraceRecorder {
         let _ = serialize_rec(self.records.as_ref().borrow().last().unwrap(), serializer)
             .inspect_err(|e| log_debug!("Failed to dump trace: {}", e));
     }
+
+    #[inline]
+    fn handle_maybe_unfinished_return(
+        &mut self,
+        last_ret_point: Option<BasicBlockLocation<FuncDef>>,
+    ) {
+        // NOTE: This happens when an external function calls internal ones.
+        if let Some(unfinished) = last_ret_point {
+            core::hint::cold_path();
+            self.notify_return(
+                unfinished,
+                common::types::FuncDef {
+                    body_id: InstanceKindId::INVALID,
+                    static_addr: core::ptr::null(),
+                    as_dyn_method: None,
+                }
+                .into(),
+                true,
+            );
+        }
+    }
+
+    fn ensure_in_current_body(&self, mut location: BasicBlockLocation) -> BasicBlockLocation {
+        let current = if let Some(current) = self.stack.last() {
+            current.body.body_id
+        } else {
+            core::hint::cold_path();
+            return location;
+        };
+
+        if cfg!(debug_assertions) {
+            if location.body != current {
+                log_warn!(
+                    "Unexpected location in trace: {:?}, expected: {:?}",
+                    location,
+                    current
+                );
+            }
+        }
+
+        location.body = current;
+        location
+    }
 }
 
 fn serialize_rec<S: Serializer>(record: &Record, serializer: S) -> Result<S::Ok, S::Error> {
     let Record {
-        record: Indexed {
+        record: record @ Indexed {
             ref value,
             ref index,
         },

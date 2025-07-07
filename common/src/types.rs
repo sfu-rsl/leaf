@@ -54,6 +54,9 @@ impl core::fmt::Display for DefId {
     compare(PartialEq),
 ))]
 pub struct InstanceKindId(pub InstanceKindDiscr, pub DefId);
+impl InstanceKindId {
+    pub const INVALID: Self = InstanceKindId(InstanceKindDiscr::MAX, DefId(u32::MAX, u32::MAX));
+}
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 impl core::fmt::Display for InstanceKindId {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -78,6 +81,12 @@ impl<B: core::fmt::Display> core::fmt::Display for BasicBlockLocation<B> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "{}[{}]", self.body, self.index)
     }
+}
+impl BasicBlockLocation<InstanceKindId> {
+    pub const INVALID: Self = BasicBlockLocation {
+        body: InstanceKindId::INVALID,
+        index: BasicBlockIndex::MAX,
+    };
 }
 impl<B> BasicBlockLocation<B> {
     pub fn into<BTo>(self) -> BasicBlockLocation<BTo>
@@ -318,17 +327,6 @@ pub mod trace {
             broken: bool,
         },
         Branch(BranchRecord<C>),
-    }
-
-    impl<C> ExeTraceRecord<C> {
-        #[inline]
-        pub fn location(&self) -> &BasicBlockLocation {
-            match self {
-                ExeTraceRecord::Call { from, .. } => from,
-                ExeTraceRecord::Return { from, .. } => from,
-                ExeTraceRecord::Branch(BranchRecord { location, .. }) => location,
-            }
-        }
     }
 
     mod fmt {

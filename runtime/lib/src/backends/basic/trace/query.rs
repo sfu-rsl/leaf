@@ -1,6 +1,9 @@
-use std::{borrow::Borrow, ops::Deref};
+use std::{assert_matches::debug_assert_matches, borrow::Borrow, ops::Deref};
 
-use common::types::{InstanceKindId, trace::ExeTraceRecord};
+use common::{
+    pri::BasicBlockIndex,
+    types::{InstanceKindId, trace::ExeTraceRecord},
+};
 
 use crate::utils::{HasIndex, Indexed, RefView};
 
@@ -54,11 +57,14 @@ impl GenericTraceQuerier for BasicTraceQuerier {
 
     fn any_sym_dependent_in_current_call(&self, body_id: InstanceKindId) -> bool {
         let records = self.exe_records.borrow();
-        let Some(current_depth) = records
-            .last()
-            // We assume that the last record is always in the current body
-            .inspect(|r| debug_assert!(r.is_in(body_id)))
-            .map(|r| r.depth())
+        let Some((diverged_count, current_depth)) = records
+            .iter()
+            .rev()
+            .enumerate()
+            // Except with external calls in between, the last record is always in the current body
+            .filter(|(_, r)| r.is_in(body_id))
+            .map(|(i, r)| (i, r.depth()))
+            .next()
         else {
             return false;
         };
@@ -69,6 +75,7 @@ impl GenericTraceQuerier for BasicTraceQuerier {
         let records = records.iter();
         let latest_records_in_body = records
             .rev()
+            .skip(diverged_count)
             .take_while(|r| r.depth() >= current_depth)
             .filter(|r| r.depth() == current_depth);
         let latest_records_before_latest =
@@ -85,8 +92,11 @@ impl GenericTraceQuerier for BasicTraceQuerier {
     fn find_map_in_current_func<'a, T>(
         &'a self,
         body_id: InstanceKindId,
-        mut f: impl FnMut(&Self::Record, &Self::Constraint) -> Option<T>,
-    ) -> Option<(impl AsRef<Self::Record> + AsRef<Self::Constraint>, T)> {
+        mut f: impl FnMut(BasicBlockIndex, &Self::Constraint) -> Option<T>,
+    ) -> Option<(
+        impl AsRef<BasicBlockIndex> + HasIndex + AsRef<Self::Constraint>,
+        T,
+    )> {
         // (Indexed<...>s, Constraints) -> (Indexed<Constraint>s)
         let constraint_steps = self.constraint_steps.borrow();
         let constraint_indices = constraint_steps.iter().map(HasIndex::index);
@@ -98,10 +108,13 @@ impl GenericTraceQuerier for BasicTraceQuerier {
             .enumerate();
 
         let records = self.exe_records.borrow();
-        let current_depth = records
-            .last()
-            .inspect(|r| debug_assert!(r.is_in(body_id)))
-            .map(|r| r.depth())?;
+        let (diverged_count, current_depth) = records
+            .iter()
+            .rev()
+            .enumerate()
+            .filter(|(_, r)| r.is_in(body_id))
+            .map(|(i, r)| (i, r.depth()))
+            .next()?;
         let records = records.iter().enumerate();
         let records_with_constraints = itertools::merge_join_by(
             records.rev(),
@@ -114,13 +127,16 @@ impl GenericTraceQuerier for BasicTraceQuerier {
         });
 
         let latest_records_in_body = records_with_constraints
+            .skip(diverged_count)
             .take_while(|((_, r), _)| r.depth() >= current_depth)
             .filter(|((_, r), _)| r.depth() == current_depth);
 
         let record_of_interest = latest_records_in_body
             .filter_map(|(r, opt_c)| opt_c.map(|c| (r, c)))
-            .inspect(|((_, r), _)| debug_assert!(r.is_in(body_id)))
-            .find_map(|pair @ ((_, r), (_, c))| f(r, &c).map(|v| (pair, v)));
+            .filter(|((_, r), _)| r.is_in(body_id))
+            .find_map(|pair @ ((_, r), (_, c))| {
+                f(*helpers::branch_rec_block_index(r), &c).map(|v| (pair, v))
+            });
 
         record_of_interest.map(|(((r_i, _), (c_i, _)), v)| (self.create_view(r_i, c_i), v))
     }
@@ -131,15 +147,22 @@ impl BasicTraceQuerier {
         &'a self,
         record_index: usize,
         constraint_index: usize,
-    ) -> impl AsRef<BasicExeTraceRecord> + AsRef<BasicConstraint> + 'a {
-        QuerierStepView {
+    ) -> impl AsRef<BasicBlockIndex> + HasIndex + AsRef<BasicConstraint> + 'a {
+        let view = QuerierStepView {
             record: self.exe_records.borrow_map(move |rs| &rs[record_index]),
             constraint: self.constraints.borrow_map(move |cs| &cs[constraint_index]),
-        }
+        };
+        debug_assert_matches!(view.record.value, ExeTraceRecord::Branch(..));
+        view
     }
 }
 
 mod helpers {
+    use common::{
+        pri::{BasicBlockIndex, BasicBlockLocation},
+        types::trace::BranchRecord,
+    };
+
     use super::*;
 
     pub(super) struct QuerierStepView<R, C> {
@@ -147,12 +170,21 @@ mod helpers {
         pub constraint: C,
     }
 
-    impl<R, C> AsRef<BasicExeTraceRecord> for QuerierStepView<R, C>
+    impl<R, C> AsRef<BasicBlockIndex> for QuerierStepView<R, C>
     where
         R: Deref<Target = BasicExeTraceRecord>,
     {
-        fn as_ref(&self) -> &BasicExeTraceRecord {
-            self.record.deref()
+        fn as_ref(&self) -> &BasicBlockIndex {
+            branch_rec_block_index(self.record.deref())
+        }
+    }
+
+    impl<R, C> HasIndex for QuerierStepView<R, C>
+    where
+        R: Deref<Target = BasicExeTraceRecord>,
+    {
+        fn index(&self) -> usize {
+            self.record.index
         }
     }
 
@@ -174,11 +206,29 @@ mod helpers {
         }
 
         fn is_in(&self, body_id: InstanceKindId) -> bool {
-            ExeTraceRecord::location(self.borrow()).body == body_id
+            match self.borrow() {
+                ExeTraceRecord::Call { to, .. } => to,
+                ExeTraceRecord::Return { to, .. } => to,
+                ExeTraceRecord::Branch(BranchRecord {
+                    location: BasicBlockLocation { body, .. },
+                    ..
+                }) => body,
+            }
+            .eq(&body_id)
         }
 
         fn depth(&self) -> usize {
             self.depth
+        }
+    }
+
+    pub(super) fn branch_rec_block_index(record: &BasicExeTraceRecord) -> &BasicBlockIndex {
+        match record.borrow() {
+            ExeTraceRecord::Branch(BranchRecord {
+                location: BasicBlockLocation { ref index, .. },
+                ..
+            }) => index,
+            _ => unreachable!("Expected a branch record"),
         }
     }
 }

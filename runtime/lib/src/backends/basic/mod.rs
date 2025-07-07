@@ -28,7 +28,7 @@ use crate::{
         FuncDef, PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex,
         backend::*,
     },
-    utils::{RefView, alias::RRef},
+    utils::{HasIndex, RefView, alias::RRef},
 };
 
 use self::{
@@ -302,8 +302,11 @@ trait GenericTraceQuerier {
     fn find_map_in_current_func<'a, T>(
         &'a self,
         body_id: InstanceKindId,
-        f: impl FnMut(&Self::Record, &Self::Constraint) -> Option<T>,
-    ) -> Option<(impl AsRef<Self::Record> + AsRef<Self::Constraint>, T)>;
+        f: impl FnMut(BasicBlockIndex, &Self::Constraint) -> Option<T>,
+    ) -> Option<(
+        impl AsRef<BasicBlockIndex> + HasIndex + AsRef<Self::Constraint>,
+        T,
+    )>;
 }
 
 #[derive(Debug)]
