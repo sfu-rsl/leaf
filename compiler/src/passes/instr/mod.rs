@@ -720,11 +720,14 @@ where
             Atomic(ordering, kind) => {
                 self.instrument_atomic_intrinsic_call(&params, ordering, kind);
             }
-            NoOp | ConstEvaluated | Contract => {
+            NoOp => {
+                self.instrument_noop_intrinsic_call(params);
+            }
+            Contract => {
                 // Currently, no instrumentation
                 Default::default()
             }
-            ToDo => {
+            ToDo | ConstEvaluated => {
                 log_warn!(
                     target: TAG_INSTR,
                     "Intrinsic call to {:?} observed.",
@@ -814,6 +817,11 @@ where
 
     fn instrument_regular_call(&mut self, params: CallParams<'_, 'tcx>) {
         self.instrument_call_general(params, false);
+    }
+
+    fn instrument_noop_intrinsic_call(&mut self, params: CallParams<'_, 'tcx>) {
+        // Although ineffective in runtime, we still report it.
+        self.instrument_call_general(params, true);
     }
 
     fn instrument_unsupported_call(&mut self, params: CallParams<'_, 'tcx>) {

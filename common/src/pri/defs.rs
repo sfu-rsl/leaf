@@ -281,6 +281,7 @@ pub mod macros {
           { fn after_call_func(id: AssignmentId, dest: PlaceRef) }
 
           // ----- Atomic -----
+          { fn intrinsic_assign_identity(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_rotate_left(id: AssignmentId, dest: PlaceRef, x: OperandRef, shift: OperandRef) }
           { fn intrinsic_assign_rotate_right(id: AssignmentId, dest: PlaceRef, x: OperandRef, shift: OperandRef) }
           { fn intrinsic_assign_saturating_add(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
@@ -637,6 +638,8 @@ pub mod macros {
                 fn override_return_value(operand:OperandRef);
             }$modifier!{
                 fn after_call_func(id:AssignmentId,dest:PlaceRef);
+            }$modifier!{
+                fn intrinsic_assign_identity(id:AssignmentId,dest:PlaceRef,x:OperandRef);
             }$modifier!{
                 fn intrinsic_assign_rotate_left(id:AssignmentId,dest:PlaceRef,x:OperandRef,shift:OperandRef);
             }$modifier!{

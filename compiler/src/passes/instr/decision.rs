@@ -351,7 +351,6 @@ mod intrinsics {
                 prefetch_read_data,
                 // const_deallocate,
                 breakpoint,
-                black_box,
                 assert_inhabited,
                 cold_path,
             )
@@ -733,6 +732,7 @@ mod intrinsics {
                 ctlz_nonzero,
                 ctlz,
                 // disjoint_bitor,
+                black_box,
             )
         };
     }
@@ -818,6 +818,7 @@ mod intrinsics {
             rsym::ctpop => psym::intrinsic_assign_ctpop,
             rsym::ctlz_nonzero => psym::intrinsic_assign_ctlz_nonzero,
             rsym::ctlz => psym::intrinsic_assign_ctlz,
+            rsym::black_box => psym::intrinsic_assign_identity,
             _ => unreachable!(),
         };
         IntrinsicDecision::OneToOneAssign(pri_sym)

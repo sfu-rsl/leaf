@@ -2030,16 +2030,11 @@ mod implementation {
             pri_func: LeafIntrinsicSymbol,
             args: impl Iterator<Item = OperandRef>,
         ) {
-            let has_return_value = !self.context.dest_ty().is_unit();
-            self.assert_pri_intrinsic_consistency(intrinsic_func, pri_func, has_return_value);
+            self.assert_pri_intrinsic_consistency(intrinsic_func, pri_func);
 
             let pri_name = *pri_func;
             let args = args.map(Into::into).map(operand::move_for_local).collect();
-            let block = if has_return_value {
-                self.make_bb_for_assign_call(pri_name, args)
-            } else {
-                self.make_bb_for_call(pri_name, args)
-            };
+            let block = self.make_bb_for_assign_call(pri_name, args);
             self.insert_blocks([block]);
         }
     }
@@ -2052,7 +2047,6 @@ mod implementation {
             &mut self,
             intrinsic_func: DefId,
             pri_func: LeafIntrinsicSymbol,
-            has_return_value: bool,
         ) {
             let tcx = self.tcx();
             let arg_num = |def_id| {
@@ -2068,8 +2062,8 @@ mod implementation {
             let intrinsic_arg_num = arg_num(intrinsic_func);
 
             assert_eq!(
-                pri_func_arg_num - 1, /* assignment_id */
-                intrinsic_arg_num + if has_return_value { 1 } else { 0 },
+                pri_func_arg_num - (1/* assignment_id */) - (1/* dest */),
+                intrinsic_arg_num,
                 "Inconsistent number of arguments between intrinsic and its corresponding PRI function. {:?} -x-> {:?}",
                 intrinsic_func,
                 pri_func_info.def_id

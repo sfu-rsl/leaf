@@ -74,7 +74,7 @@ pub mod sym {
 
         common::pri::pass_func_names_to!(symbols_in_pri, all_comma_separated);
 
-        pub(crate) const ALL_MAINS: [LeafSymbol; 103] =
+        pub(crate) const ALL_MAINS: [LeafSymbol; 104] =
             common::pri::pass_func_names_to!(bracket, all_comma_separated);
 
         pub(crate) mod intrinsics {
@@ -97,6 +97,7 @@ pub mod sym {
             }
 
             symbols_for_intrinsics! {
+                intrinsic_assign_identity,
                 intrinsic_assign_rotate_left,
                 intrinsic_assign_rotate_right,
                 intrinsic_assign_saturating_add,

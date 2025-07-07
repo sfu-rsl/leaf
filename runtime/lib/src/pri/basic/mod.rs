@@ -621,6 +621,10 @@ impl ProgramRuntimeInterface for BasicPri {
         func_control(|h| h.after_call(id, dest_place))
     }
 
+    fn intrinsic_assign_identity(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_use(id, dest, x)
+    }
+
     fn intrinsic_assign_rotate_left(
         id: AssignmentId,
         dest: PlaceRef,
