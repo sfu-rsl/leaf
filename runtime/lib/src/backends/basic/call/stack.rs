@@ -492,7 +492,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
             return_val_place,
             passed_args,
         }: EntranceToken<Self::Value>,
-        tupling: ArgsTuplingInfo,
+        tupling: Box<dyn FnOnce() -> ArgsTuplingInfo<'h, 'a> + 'a>,
     ) -> CallFlowSanity {
         let is_broken = passed_args.is_err();
         if let Some(parent_frame) = self.stack.last_mut() {
@@ -501,7 +501,7 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
 
         let arg_values = match passed_args {
             Ok(mut args) => {
-                self.resolve_tupling(&mut args, tupling);
+                self.resolve_tupling(&mut args, tupling());
                 assert_eq!(
                     args.values.len(),
                     arg_places.len(),

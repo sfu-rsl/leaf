@@ -68,7 +68,7 @@ trait GenericCallStackManager: CallStackInfo {
     fn finalize_enter<'a, 'h>(
         &'a mut self,
         token: EntranceToken<Self::Value>,
-        tupling: ArgsTuplingInfo,
+        tupling: Box<dyn FnOnce() -> ArgsTuplingInfo<'h, 'a> + 'a>,
     ) -> CallFlowSanity;
 
     fn pop_stack_frame(&mut self);
@@ -165,7 +165,7 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
         );
         let token = self.call_stack_manager.start_enter(def);
 
-        let tupling_info = match tupling {
+        let tupling_info = || match tupling {
             ArgsTupling::Untupled {
                 tupled_arg_index,
                 tuple_type,
@@ -213,7 +213,9 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
             }
             ArgsTupling::Normal => ArgsTuplingInfo::Normal,
         };
-        let sanity = self.call_stack_manager.finalize_enter(token, tupling_info);
+        let sanity = self
+            .call_stack_manager
+            .finalize_enter(token, Box::new(tupling_info));
 
         self.trace_recorder
             .finish_call(def, matches!(sanity, CallFlowSanity::Broken));
