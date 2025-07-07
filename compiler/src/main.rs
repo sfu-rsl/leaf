@@ -113,7 +113,7 @@ fn is_ineffective_crate(opts: &driver_args::CrateOptions) -> bool {
     if opts
         .crate_name
         .as_ref()
-        .is_some_and(|name| name == CRATE_NAME_BUILD_SCRIPT)
+        .is_some_and(|name| name.starts_with(CRATE_NAME_PREFIX_BUILD_SCRIPT))
     {
         return true;
     }
@@ -493,7 +493,7 @@ mod driver_callbacks {
 pub mod constants {
     use const_format::concatcp;
 
-    pub(super) const CRATE_NAME_BUILD_SCRIPT: &str = "build_script_build";
+    pub(super) const CRATE_NAME_PREFIX_BUILD_SCRIPT: &str = "build_script_";
 
     // The instrumented code is going to call the shim.
     pub(super) const CRATE_RUNTIME_SHIM: &str = "leafrtsh";
