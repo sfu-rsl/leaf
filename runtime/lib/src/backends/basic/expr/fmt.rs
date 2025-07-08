@@ -238,7 +238,7 @@ impl Display for super::OverflowingBinaryOp {
 
 impl Display for PorterValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{{S({})}}", self.sym_values.len())
+        write!(f, "{{S({})/{}}}", self.sym_values.len(), self.as_concrete)
     }
 }
 

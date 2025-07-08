@@ -1,4 +1,4 @@
-use common::log_debug;
+use common::{log_debug, log_info};
 
 use crate::{abs::ConstraintKind, utils::alias::RRef};
 
@@ -27,8 +27,8 @@ impl<EB: ValueRefBinaryExprBuilder> BasicConcretizer<EB> {
 }
 
 impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
+    #[tracing::instrument(level = "debug", skip(self))]
     fn stamp(&mut self, value: SymValueRef, concrete_value: ConcreteValueRef) {
-        log_debug!("Stamping symbolic value {} == {}", value, concrete_value);
         let eq_expr = self
             .expr_builder
             .borrow_mut()

@@ -37,7 +37,6 @@ use self::logging::TAG;
  * +--------------------+---------------------------+--------------------------------+
  * | prepare_for_call() |                           | depth = n, trans: dir = "call" |
  * |                    | set_places()              |                                |
- * |                    | [try_untuple_argument()]  |                                |
  * |                    | notify_enter()            | __                             |
  * |                    | [override_return_value()] | depth = n + 1                  |
  * |                    | pop_stack_frame()         | depth = n, trans: dir = "ret"  |
@@ -50,13 +49,14 @@ use self::logging::TAG;
  * |                           | __ depth = n                   |
  * | prepare_for_call()        | depth = n, trans: dir = "call" |
  * | set_places()              |                                |
- * | [try_untuple_argument()]  |                                |
  * | notify_enter()            | __                             |
  * |                           | depth = n + 1                  |
  * | [override_return_value()] | __                             |
  * | pop_stack_frame()         | depth = n, trans: dir = "ret"  |
  * | finalize_call()           | depth = n                      |
  * +---------------------------+--------------------------------+
+ *
+ * where `notify_enter()` corresponds to the consecutive calls to `start_enter` and `finalize_enter`.
  */
 
 /* Functionality Specification:
@@ -354,7 +354,11 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         if !symbolic_args.is_empty() {
             log_warn!(
                 target: TAG,
-                "Possible loss of symbolic arguments in external function call",
+                concat!(
+                    "Possible loss of symbolic arguments in external function call, ",
+                    "current internal function: {:?}",
+                ),
+                self.current_func(),
             );
             log_debug!(
                 target: TAG,
@@ -369,7 +373,11 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         if returned_value.is_symbolic() {
             log_warn!(
                 target: TAG,
-                "Possible loss of symbolic return value in external function call",
+                concat!(
+                    "Possible loss of symbolic return value in external function call",
+                    "current internal function: {:?}",
+                ),
+                self.current_func(),
             );
             log_debug!(
                 target: TAG,

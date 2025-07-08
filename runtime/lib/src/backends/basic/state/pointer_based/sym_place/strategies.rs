@@ -3,7 +3,7 @@ use crate::backends::basic::{
 };
 
 use super::{ConcreteValueRef, SymValueRef, ValueRef};
-use common::log_debug;
+use common::{log_debug, log_info};
 
 pub(crate) fn make_sym_place_handler(
     config: SymbolicPlaceStrategy,
@@ -61,6 +61,7 @@ impl SymPlaceHandler for ConcretizerSymPlaceHandler {
         sym_value: Self::SymEntity,
         get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
     ) -> Self::Entity {
+        log_info!("Concretizing symbolic value: {}", sym_value);
         get_conc(&sym_value).into()
     }
 }
@@ -78,11 +79,7 @@ impl SymPlaceHandler for StamperSymPlaceHandler {
     ) -> Self::Entity {
         let conc_value = get_conc(&sym_value);
 
-        log_debug!(
-            "Stamping symbolic value {} with concrete value {}",
-            sym_value,
-            conc_value,
-        );
+        log_info!("Stamping {} == {}", sym_value, conc_value,);
 
         self.concretizer
             .stamp(sym_value.clone(), conc_value.clone());
