@@ -101,6 +101,11 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
     }
 
     fn cast_of(mut self, operand: Self::Operand, target: CastKind) {
+        let target = match target {
+            // Pointer to pointer casts will not change the value.
+            CastKind::ToPointer(ty_id) => CastKind::Transmute(ty_id),
+            _ => target,
+        };
         let cast_value = self
             .expr_builder()
             .cast(operand, target, self.dest.type_info().clone());
