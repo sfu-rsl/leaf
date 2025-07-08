@@ -9,6 +9,10 @@ edition = "2021"
 name = "leafrt"
 crate-type = ["rlib"]
 
+[profile.release]
+debug = true
+
+
 [dependencies]
 common = { workspace = true, features = [
     "type_info",
@@ -50,6 +54,9 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(abs_concrete)',
 ] }
 [features]
+default = []
+release_sym_value_loss_checks = []
+
 profile_flame = ["dep:tracing-flame"]
 profile_tracy = ["dep:tracing-tracy"]
 profile_full = ["profile_flame", "profile_tracy"]

@@ -3,16 +3,33 @@ use serde::Deserialize;
 
 use std::{collections::HashMap, num::NonZero};
 
-use common::log_debug;
+use common::{log_debug, log_warn};
 
-use crate::utils::file::FileGenConfig;
+use crate::utils::{alias::check_sym_value_loss, file::FileGenConfig};
 
 impl TryFrom<::config::Config> for super::BasicBackend {
     type Error = ::config::ConfigError;
 
     fn try_from(value: ::config::Config) -> Result<Self, Self::Error> {
-        let config = value.try_deserialize()?;
+        let config: BasicBackendConfig = value.try_deserialize()?;
         log_debug!("Loaded configurations: {:?}", config);
+
+        use ExternalCallStrategy::*;
+        if !check_sym_value_loss!()
+            && matches!(
+                config.call.external_call,
+                OptimisticConcretization | OverApproximation
+            )
+        {
+            log_warn!(
+                concat!(
+                    "Using {} for external calls handling requires symbolic value loss checks to be enabled, ",
+                    "which is disabled in this build of the library.",
+                ),
+                config.call.external_call,
+            );
+        }
+
         Ok(Self::new(config))
     }
 }
@@ -42,7 +59,9 @@ pub(crate) struct CallConfig {
 }
 
 /* NOTE: Aliases don't work at the moment. */
-#[derive(Debug, Default, Clone, Deserialize, serde::Serialize)]
+#[derive(
+    Debug, dm::Display, Default, Clone, Copy, PartialEq, Eq, Deserialize, serde::Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ExternalCallStrategy {
     #[serde(alias = "panic")]

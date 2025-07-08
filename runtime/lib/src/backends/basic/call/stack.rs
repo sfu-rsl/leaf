@@ -3,7 +3,7 @@ use core::iter;
 use crate::{
     abs::{CalleeDef, Constant, FieldIndex, FuncDef},
     backends::basic::CallStackInfo,
-    utils::InPlaceSelfHierarchical,
+    utils::{InPlaceSelfHierarchical, alias::check_sym_value_loss},
 };
 
 use crate::backends::basic as backend;
@@ -148,7 +148,6 @@ pub(super) struct CallInfo<V> {
 
 impl<VS: VariablesState> BasicCallStackManager<VS> {
     pub(crate) fn new(vars_state_factory: VariablesStateFactory<VS>, config: &CallConfig) -> Self {
-        let log_span = tracing::Span::none().entered();
         Self {
             stack: vec![],
             vars_state: vars_state_factory(0),
@@ -158,7 +157,7 @@ impl<VS: VariablesState> BasicCallStackManager<VS> {
             return_val_place: None,
             latest_returned_val: None,
             config: config.clone(),
-            log_span,
+            log_span: tracing::Span::none().entered(),
         }
     }
 }
@@ -342,10 +341,16 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
         vars_state.take_place(tupled_pseudo_place.as_ref())
     }
 
+    /// # Remarks
+    /// Returns an empty vector if symbolic value loss checks are disabled.
     fn inspect_external_call_info<'a>(
         &self,
         arg_values: &'a [VS::Value],
     ) -> Vec<(usize, &'a VS::Value)> {
+        if !check_sym_value_loss!() {
+            return vec![];
+        }
+
         let symbolic_args: Vec<_> = arg_values
             .iter()
             .enumerate()
@@ -370,6 +375,10 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> BasicCallStackManager<VS> {
     }
 
     fn inspect_returned_value<'a>(&self, returned_value: &VS::Value) {
+        if !check_sym_value_loss!() {
+            return;
+        }
+
         if returned_value.is_symbolic() {
             log_warn!(
                 target: TAG,
@@ -417,12 +426,12 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
     ) {
         self.log_span_start_trans(logging::TransitionDirection::Call);
 
-        // Some sanity checks
-        let is_currently_clean = self.latest_call.is_none()
-            && self.arg_places.is_empty()
-            && self.return_val_place.is_none();
         debug_assert!(
-            is_currently_clean,
+            {
+                self.latest_call.is_none()
+                    && self.arg_places.is_empty()
+                    && self.return_val_place.is_none()
+            },
             concat!(
                 "The call information is not consumed or cleaned correctly. ",
                 "This is due to a problem in external function handling or instrumentation. ",
@@ -430,7 +439,9 @@ impl<VS: VariablesState + InPlaceSelfHierarchical> GenericCallStackManager
                 "`args_metadata`: {:?}, ",
                 "`return_val_place`: {:?}",
             ),
-            self.latest_call, self.arg_places, self.return_val_place,
+            self.latest_call,
+            self.arg_places,
+            self.return_val_place,
         );
 
         if func.is_symbolic() {
@@ -658,7 +669,7 @@ mod logging {
     }
 
     impl<VS: VariablesState> BasicCallStackManager<VS> {
-        #[inline]
+        #[inline(always)]
         pub(super) fn log_span_reset(&mut self) {
             // We avoid the hierarchical structure of log spans as they don't suit our purpose.
             self.log_span = debug_span!(
@@ -670,7 +681,7 @@ mod logging {
             .entered();
         }
 
-        #[inline]
+        #[inline(always)]
         pub(super) fn log_span_start_trans(&mut self, direction: TransitionDirection) {
             self.log_span = debug_span!(
                 target: TAG_STACK,
