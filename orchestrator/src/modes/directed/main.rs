@@ -11,12 +11,14 @@
 
 mod outgen;
 mod reachability;
+mod scoring;
 mod solve;
 mod trace;
 mod two_level;
 mod utils;
 
 use std::{
+    collections::HashMap,
     fs,
     io::Read,
     path::{Path, PathBuf},
@@ -41,6 +43,7 @@ use two_level::DirectedEdge;
 #[derive(ValueEnum, Debug, Clone, Copy)]
 enum Scoring {
     PrefixLen,
+    Ultimate,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy, Default)]
@@ -98,6 +101,8 @@ fn main() -> ExitCode {
         Err(value) => return value,
     };
 
+    let director = two_level::Director::new(&trace);
+
     let mut solver = solve::Solver::new(
         &trace,
         &input,
@@ -105,7 +110,10 @@ fn main() -> ExitCode {
         &reachability,
         args.antecedents.unwrap_or_default(),
     );
-    let director = two_level::Director::new(&trace);
+
+    let scorer = scoring::Scorer::new(&trace);
+    let mut max_scores = HashMap::new();
+
     let mut next_input_dumper = NextInputGenerator::new(
         &args.outdir,
         &args.output_format.unwrap_or_default(),
@@ -117,14 +125,17 @@ fn main() -> ExitCode {
         let prefix_len = trace
             .element_offset(edge.src)
             .expect("Inconsistent referencing");
-        process_edge(
-            &p_map,
-            &mut solver,
-            &mut next_input_dumper,
-            edge,
-            prefix_len,
-            args.scoring.as_ref(),
-        );
+        for result in satisfy_edge(&p_map, &mut solver, edge.clone_no_metadata()) {
+            process_solve_result(
+                &args,
+                &scorer,
+                &mut next_input_dumper,
+                &edge,
+                prefix_len,
+                result,
+                &mut max_scores,
+            );
+        }
     }
 
     log_info!("Generated {} new inputs", next_input_dumper.total_count());
@@ -298,44 +309,57 @@ fn load_trace(
     skip_all,
     fields(edge = format!("{} @ {}", edge.src.trace_index, edge.src.location), toward = edge.dst)
 )]
-fn process_edge(
-    p_map: &ProgramMap,
-    solver: &mut solve::Solver,
-    next_input_dumper: &mut NextInputGenerator,
-    edge: DirectedEdge,
-    prefix_len: usize,
-    scoring: Option<&Scoring>,
-) {
-    let edge = DirectedEdge {
-        metadata: p_map.cfgs[&edge.src.location.body][&edge.src.location.index].as_slice(),
-        src: edge.src,
-        dst: edge.dst,
-    };
-    if let Some(results) = solver.try_satisfy_edge(&edge) {
-        info_span!("input_gen").in_scope(|| {
-            for result in results {
-                log_debug!(
-                    "Result: {:?} for {}",
-                    result.solver_result,
-                    result.step_index,
-                );
+fn satisfy_edge<'a, 'b, 'ctx>(
+    p_map: &'a ProgramMap,
+    solver: &'b mut solve::Solver<'ctx, 'a>,
+    edge: DirectedEdge<'a>,
+) -> impl Iterator<Item = solve::SolveResult<'ctx>> + 'b {
+    let cfg_info = p_map.cfgs[&edge.src.location.body][&edge.src.location.index].as_slice();
+    let edge = edge.with_metadata(cfg_info);
 
-                if matches!(result.solver_result, z3::SatResult::Sat) {
-                    let input_path = next_input_dumper.dump_as_next_input(
-                        &result.answers,
-                        scoring.map(|s| match s {
-                            Scoring::PrefixLen => prefix_len as f64,
-                        }),
-                    );
-                    if let Some(input_path) = input_path {
-                        log_info!(
-                            "Changed step {} and generated: {}",
-                            result.step_index,
-                            input_path.display(),
-                        )
-                    }
-                }
-            }
-        });
+    solver
+        .try_satisfy_edge(&edge)
+        .into_iter()
+        .flatten()
+        .inspect(|result| {
+            log_debug!("Result: {:?} for {}", result.solver_result, result.id,);
+        })
+        .filter_map(|r| match r.solver_result {
+            z3::SatResult::Sat => Some(r),
+            _ => None,
+        })
+}
+
+fn process_solve_result(
+    args: &Args,
+    scorer: &scoring::Scorer<'_>,
+    next_input_dumper: &mut NextInputGenerator,
+    edge: &DirectedEdge<'_, two_level::SearchResultInfo>,
+    prefix_len: usize,
+    result: solve::SolveResult<'_>,
+    max_scores: &mut HashMap<solve::ResultId, f64>,
+) {
+    let score = args.scoring.as_ref().map(|s| match s {
+        Scoring::PrefixLen => prefix_len as f64,
+        Scoring::Ultimate => scorer.score(edge, (), ()),
+    });
+
+    if let Some(score) = score {
+        if max_scores.get(&result.id).is_some_and(|&max| score <= max) {
+            log_debug!("Skipping dumping result with lower score");
+            return;
+        }
+
+        max_scores.insert(result.id.clone(), score);
     }
+
+    let _span = info_span!("input_gen").entered();
+    let input_path = next_input_dumper.dump_as_next_input(&result.answers, score);
+    if let Some(input_path) = input_path {
+        log_info!(
+            "Satisfied {} and generated: {}",
+            result.id,
+            input_path.display(),
+        )
+    };
 }

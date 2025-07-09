@@ -14,17 +14,65 @@ use crate::{ProgramReachability, SwitchStep, utils::from_pinned_coroutine};
 type Function = InstanceKindId;
 type BasicBlock = BasicBlockIndex;
 
-#[derive(Debug, dm::From)]
+#[derive(Debug, dm::From, Clone)]
 pub(crate) struct DirectedEdge<'a, M = ()> {
     pub src: &'a SwitchStep,
     pub dst: BasicBlock,
     pub metadata: M,
 }
 
+impl<'a, M> DirectedEdge<'a, M> {
+    pub(crate) fn map_metadata<MTo>(self, f: impl FnOnce(M) -> MTo) -> DirectedEdge<'a, MTo> {
+        DirectedEdge {
+            src: self.src,
+            dst: self.dst,
+            metadata: f(self.metadata),
+        }
+    }
+
+    pub(crate) fn clone_no_metadata(&self) -> DirectedEdge<'a> {
+        DirectedEdge {
+            src: self.src,
+            dst: self.dst,
+            metadata: (),
+        }
+    }
+}
+
+impl<'a> DirectedEdge<'a, ()> {
+    pub(crate) fn with_metadata<M>(self, metadata: M) -> DirectedEdge<'a, M> {
+        self.map_metadata(|_| metadata)
+    }
+}
+
 impl<'a> From<(&'a SwitchStep, BasicBlock)> for DirectedEdge<'a> {
     fn from((step, toward): (&'a SwitchStep, BasicBlock)) -> Self {
         Self::from((step, toward, ()))
     }
+}
+
+#[derive(Debug)]
+pub(crate) enum IntermediateTargetKind {
+    TargetBody,
+    CallSite,
+    ReturnPoint,
+}
+
+#[derive(Debug)]
+pub(crate) struct IntermediateTargetInfo {
+    pub(crate) index: BasicBlock,
+    pub(crate) kind: IntermediateTargetKind,
+}
+
+impl IntermediateTargetKind {
+    fn at(self, index: BasicBlock) -> IntermediateTargetInfo {
+        IntermediateTargetInfo { index, kind: self }
+    }
+}
+
+#[derive(Debug, dm::AsRef)]
+pub(crate) struct SearchResultInfo {
+    pub(crate) inter_target: IntermediateTargetInfo,
 }
 
 pub(crate) struct Director<'a> {
@@ -41,7 +89,7 @@ impl<'a> Director<'a> {
         p_map: &ProgramMap,
         reachability: &impl ProgramReachability,
         target: &BasicBlockLocation,
-    ) -> impl Iterator<Item = DirectedEdge<'a>> {
+    ) -> impl Iterator<Item = DirectedEdge<'a, SearchResultInfo>> {
         let mut trace: &'a [SwitchStep] = self.trace;
         from_pinned_coroutine(
             #[coroutine]
@@ -66,15 +114,19 @@ impl<'a> Director<'a> {
                                 &next_bb_finder,
                                 intra_trace,
                                 &mut proposed_edges,
-                                $target,
+                                ($target).index,
                             ) {
-                                yield edge;
+                                yield edge.with_metadata(SearchResultInfo {
+                                    inter_target: $target,
+                                });
                             }
                         };
                     }
 
+                    use IntermediateTargetKind::*;
+
                     if current_fn == target_fn {
-                        yield_all_search_intra!(target.index);
+                        yield_all_search_intra!(TargetBody.at(target.index));
                     }
                     // We continue anyway because of recursive (target) functions.
 
@@ -82,7 +134,7 @@ impl<'a> Director<'a> {
                         log_trace!("Next function: {}", next_fn);
 
                         for call_site in get_call_sites(&p_map.call_graph, &current_fn, &next_fn) {
-                            yield_all_search_intra!(call_site);
+                            yield_all_search_intra!(CallSite.at(call_site));
                         }
                     }
 
@@ -99,7 +151,7 @@ impl<'a> Director<'a> {
                      * NOTE: This logic could be improved by considering whether there is a dependency
                      * on the return value. */
                     for ret_point in get_return_points(p_map, &current_fn) {
-                        yield_all_search_intra!(ret_point);
+                        yield_all_search_intra!(ReturnPoint.at(ret_point));
                     }
 
                     fn_trace.pop();
@@ -135,7 +187,7 @@ fn search_intra<'a, 'b, 'c, F: NextStepFinder<Node = BasicBlock>>(
                     yield edge.into();
                 }
 
-                let Some((last, rest)) = trace.split_last() else {
+                let Some((_last, rest)) = trace.split_last() else {
                     unreachable!();
                 };
                 trace = rest;
