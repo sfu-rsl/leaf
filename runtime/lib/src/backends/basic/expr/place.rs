@@ -11,6 +11,7 @@ use super::prelude::*;
 pub(crate) type PlaceValueRef = Rc<PlaceValue>;
 pub(crate) type DeterPlaceValueRef = guards::DeterPlaceValueGuard<PlaceValueRef>;
 pub(crate) type SymPlaceValueRef = guards::SymPlaceValueGuard<PlaceValueRef>;
+pub(crate) type SymIndexPlaceValueRef = guards::SymIndexPlaceValueGuard<PlaceValueRef>;
 
 #[derive(Clone, Debug, PartialEq, Eq, dm::From)]
 pub(crate) enum PlaceValue {
@@ -187,6 +188,16 @@ mod guards {
         SymPlaceValueGuard,
         PlaceValue::Symbolic(place),
         place
+    );
+
+    define_place_value_guard!(
+        SymbolicPlaceBase,
+        SymIndexPlaceValueGuard,
+        PlaceValue::Symbolic(SymbolicPlaceValue {
+            base: base @ SymbolicPlaceBase::SymIndex(..),
+            ..
+        }),
+        base
     );
 }
 

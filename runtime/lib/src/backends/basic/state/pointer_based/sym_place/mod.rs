@@ -1,7 +1,7 @@
 mod resolution;
 pub(crate) mod strategies;
 
-use core::{cell::RefMut, iter, ops::Bound};
+use core::{iter, ops::Bound};
 
 use common::log_debug;
 
@@ -27,13 +27,13 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     pub(super) fn get_place<'a, 'b>(
         &'a self,
         place: &'b Place,
-        mut sym_place_handler: RefMut<'a, SymPlaceHandlerDyn>,
+        usage: PlaceUsage,
     ) -> PlaceValueRef {
         self.get_place_iter_raw(
             place.local().metadata(),
             place.projections(),
             place.projs_metadata(),
-            sym_place_handler.deref_mut(),
+            self.sym_place_handler_for(usage),
         )
     }
 
@@ -42,7 +42,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         mut host_metadata: &'b PlaceMetadata,
         mut projs: &'b [Projection],
         mut projs_metadata: I,
-        sym_place_handler: &mut SymPlaceHandlerDyn,
+        sym_place_handler: &SymPlaceHandlerObject,
     ) -> PlaceValueRef {
         /* NOTE: How does this work?
          * The main responsibility of this is function is to check if any non-determinism
@@ -112,7 +112,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         &self,
         ptr_val: ValueRef,
         ptr_type_id: TypeId,
-        mut sym_place_handler: RefMut<'a, SymPlaceHandlerDyn>,
+        usage: PlaceUsage,
     ) -> PlaceValueRef {
         let ptr_val = self.retrieve_value(ptr_val, ptr_type_id);
         let pointee_ty = self
@@ -126,8 +126,8 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 DeterministicPlaceValue::from_addr_type(*addr, pointee_ty).to_value_ref()
             }
             Value::Symbolic(..) => {
-                let ptr_val = sym_place_handler.handle(
-                    SymValueRef::new(ptr_val),
+                let ptr_val = self.sym_place_handler_for(usage).handle(
+                    SymPlaceSymEntity::of_deref(SymValueRef::new(ptr_val)),
                     Box::new(|_| unimplemented!("#480: Concrete value is not available")),
                 );
                 if ptr_val.is_symbolic() {
@@ -136,7 +136,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                     })
                     .into()
                 } else {
-                    self.get_deref_of_ptr(ptr_val, ptr_type_id, sym_place_handler)
+                    self.get_deref_of_ptr(ptr_val, ptr_type_id, usage)
                 }
             }
             _ => panic!("Unexpected value for dereference: {:?}", ptr_val),
@@ -147,13 +147,14 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         &self,
         host_metadata: &PlaceMetadata,
         host_deref_metadata: &PlaceMetadata,
-        sym_place_handler: &mut SymPlaceHandlerDyn,
+        mut sym_place_handler: &SymPlaceHandlerObject,
     ) -> Option<SymPlaceValueRef> {
         let host_place = DeterministicPlaceValue::new(host_metadata);
+        // FIXME: retain antecedents
         let host = self.copy_deterministic_place(&host_place).value;
         if host.is_symbolic() {
             let host = sym_place_handler.handle(
-                SymValueRef::new(host.to_value_ref()),
+                SymPlaceSymEntity::of_deref(SymValueRef::new(host.to_value_ref())),
                 Box::new(|_| ConcreteValueRef::new(host_place.to_raw_value().to_value_ref())),
             );
             if host.is_symbolic() {
@@ -175,19 +176,17 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         host_type_id: TypeId,
         get_pointee_ty_info: impl FnOnce() -> LazyTypeInfo,
     ) -> SymPlaceValueRef {
-        match host.as_ref() {
-            SymValue::Expression(Expr::Ref(place)) => place.clone(),
+        SymPlaceValueRef::new(match host.as_ref() {
+            SymValue::Expression(Expr::Ref(place)) => place.clone().into(),
             _ => {
                 log_debug!("Deref of symbolic value observed: {}", host);
-                SymPlaceValueRef::new(
-                    SymbolicPlaceValue::from_base(
-                        DerefSymHostPlace { host, host_type_id },
-                        get_pointee_ty_info(),
-                    )
-                    .to_value_ref(),
+                SymbolicPlaceValue::from_base(
+                    DerefSymHostPlace { host, host_type_id },
+                    get_pointee_ty_info(),
                 )
+                .to_value_ref()
             }
-        }
+        })
     }
 
     fn opt_sym_index<'b>(
@@ -195,15 +194,16 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         host: &PlaceValueRef,
         proj: &'b Projection,
         proj_meta: &'b PlaceMetadata,
-        sym_place_handler: &mut SymPlaceHandlerDyn,
+        mut sym_place_handler: &SymPlaceHandlerObject,
     ) -> Option<SymPlaceValueRef> {
         let opt_sym_index_val = match proj {
             Projection::Index(index_place) => {
+                // FIXME: retain antecedents
                 Some(self.copy_deterministic_place(index_place).value)
                     .take_if(|index| index.is_symbolic())
                     .map(|index| {
                         sym_place_handler.handle(
-                            SymValueRef::new(index.to_value_ref()),
+                            SymPlaceSymEntity::of_index(SymValueRef::new(index.to_value_ref())),
                             Self::conc_value_obtainer(index_place.as_ref()),
                         )
                     })
@@ -281,10 +281,34 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         }
     }
 
+    fn sym_place_handler_for<'a>(&'a self, usage: PlaceUsage) -> &'a SymPlaceHandlerObject {
+        match usage {
+            PlaceUsage::Read => &self.sym_read_handler,
+            PlaceUsage::Write => &self.sym_write_handler,
+            PlaceUsage::Ref => &self.sym_ref_handler,
+        }
+    }
+
     fn conc_value_obtainer<'a>(
         deter_place: &'a DeterministicPlaceValue,
-    ) -> Box<dyn FnOnce(&SymValueRef) -> ConcreteValueRef + 'a> {
+    ) -> Box<dyn FnOnce(&SymPlaceSymEntity) -> ConcreteValueRef + 'a> {
         Box::new(|_| ConcreteValueRef::new(deter_place.to_raw_value().to_value_ref()))
+    }
+}
+
+impl SymPlaceSymEntity {
+    fn of_index(value: SymValueRef) -> Self {
+        Self {
+            value,
+            is_index: true,
+        }
+    }
+
+    fn of_deref(value: SymValueRef) -> Self {
+        Self {
+            value,
+            is_index: false,
+        }
     }
 }
 
@@ -519,6 +543,8 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             .to_value_ref(),
             SymValue::Expression(Expr::Transmutation { .. })
             | SymValue::Expression(Expr::Partial(..)) => {
+                /* NOTE: Straight forward resolution of metadata from partial values should be handled in
+                 * expression builders. The value here should be something with an exceptional shape. */
                 todo!(
                     "#443, #454: PtrMetadata from transmuted and partial values is not supported yet."
                 )

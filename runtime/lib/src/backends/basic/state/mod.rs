@@ -1,4 +1,7 @@
 mod pointer_based;
+mod utils;
+
+use derive_more as dm;
 
 use crate::abs::backend::MemoryHandler;
 
@@ -10,8 +13,15 @@ use backend::{
     BasicBackend, CallStackInfo, ConcreteValueRef, PlaceValueRef, SymValueRef, VariablesState,
 };
 
+#[derive(Debug, dm::Deref)]
+pub(super) struct SymPlaceSymEntity {
+    #[deref]
+    value: SymValueRef,
+    is_index: bool,
+}
+
 pub(super) trait SymPlaceHandler {
-    type SymEntity = SymValueRef;
+    type SymEntity = SymPlaceSymEntity;
     type ConcEntity = ConcreteValueRef;
     type Entity: From<Self::SymEntity> + From<Self::ConcEntity>;
 
@@ -20,22 +30,6 @@ pub(super) trait SymPlaceHandler {
         sym_entity: Self::SymEntity,
         get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
     ) -> Self::Entity;
-}
-
-impl<SE, CE, E: From<SE> + From<CE>> SymPlaceHandler
-    for Box<dyn SymPlaceHandler<SymEntity = SE, ConcEntity = CE, Entity = E>>
-{
-    type SymEntity = SE;
-    type ConcEntity = CE;
-    type Entity = E;
-
-    fn handle<'a>(
-        &mut self,
-        sym_entity: Self::SymEntity,
-        get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
-    ) -> Self::Entity {
-        self.as_mut().handle(sym_entity, get_conc)
-    }
 }
 
 pub(crate) struct BasicMemoryHandler<'s> {

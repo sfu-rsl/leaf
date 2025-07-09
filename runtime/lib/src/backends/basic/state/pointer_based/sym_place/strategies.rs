@@ -1,15 +1,21 @@
 use crate::backends::basic::{
-    concrete::Concretizer, config::SymbolicPlaceStrategy, state::SymPlaceHandler,
+    concrete::Concretizer,
+    config::SymbolicPlaceStrategy,
+    state::{SymPlaceHandler, SymPlaceSymEntity},
 };
 
-use super::{ConcreteValueRef, SymValueRef, ValueRef};
+use super::{ConcreteValueRef, ValueRef};
 use common::{log_debug, log_info};
 
 pub(crate) fn make_sym_place_handler(
     config: SymbolicPlaceStrategy,
     concretizer_factory: impl FnOnce() -> Box<dyn Concretizer>,
 ) -> Box<
-    dyn SymPlaceHandler<SymEntity = SymValueRef, ConcEntity = ConcreteValueRef, Entity = ValueRef>,
+    dyn SymPlaceHandler<
+            SymEntity = SymPlaceSymEntity,
+            ConcEntity = ConcreteValueRef,
+            Entity = ValueRef,
+        >,
 > {
     log_debug!(
         "Creating a symbolic place handler for strategy {:?}",
@@ -61,7 +67,7 @@ impl SymPlaceHandler for ConcretizerSymPlaceHandler {
         sym_value: Self::SymEntity,
         get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
     ) -> Self::Entity {
-        log_info!("Concretizing symbolic value: {}", sym_value);
+        log_info!("Concretizing symbolic value: {}", sym_value.value);
         get_conc(&sym_value).into()
     }
 }
@@ -79,11 +85,40 @@ impl SymPlaceHandler for StamperSymPlaceHandler {
     ) -> Self::Entity {
         let conc_value = get_conc(&sym_value);
 
-        log_info!("Stamping {} == {}", sym_value, conc_value,);
+        log_info!("Stamping {} == {}", sym_value.value, conc_value,);
 
         self.concretizer
             .stamp(sym_value.clone(), conc_value.clone());
 
         ConcretizerSymPlaceHandler.handle(sym_value, Box::new(|_| conc_value))
+    }
+}
+
+pub(in super::super) struct IndexOnlySymPlaceHandler<H>(pub H);
+impl<H> SymPlaceHandler for IndexOnlySymPlaceHandler<H>
+where
+    H: SymPlaceHandler<SymEntity = SymPlaceSymEntity>,
+{
+    type SymEntity = SymPlaceSymEntity;
+    type ConcEntity = H::ConcEntity;
+    type Entity = H::Entity;
+
+    fn handle<'a>(
+        &mut self,
+        sym_entity: Self::SymEntity,
+        get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+    ) -> Self::Entity {
+        if !sym_entity.is_index {
+            sym_entity.into()
+        } else {
+            self.0.handle(sym_entity, get_conc)
+        }
+    }
+}
+
+impl From<SymPlaceSymEntity> for ValueRef {
+    #[inline]
+    fn from(value: SymPlaceSymEntity) -> Self {
+        value.value.into()
     }
 }

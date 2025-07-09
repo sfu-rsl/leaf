@@ -252,28 +252,19 @@ impl ProgramRuntimeInterface for BasicPri {
     }
     fn assign_ref(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
         // FIXME: Mutability does not necessarily mean writing.
-        let place = if !is_mutable {
-            take_place_info_to_read(place)
-        } else {
-            take_place_info_to_write(place)
-        };
+        let place = take_place_info_to_ref(place);
         assign_to(id, dest, |h| h.ref_to(place, is_mutable))
     }
     fn assign_thread_local_ref(id: AssignmentId, dest: PlaceRef /* TODO: #365 */) {
         assign_to(id, dest, |h| h.thread_local_ref_to())
     }
     fn assign_raw_ptr_of(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
-        // FIXME: Mutability does not necessarily mean writing.
-        let place = if !is_mutable {
-            take_place_info_to_read(place)
-        } else {
-            take_place_info_to_write(place)
-        };
+        let place = take_place_info_to_ref(place);
         assign_to(id, dest, |h| h.address_of(place, is_mutable))
     }
     fn assign_len(id: AssignmentId, dest: PlaceRef, place: PlaceRef) {
         // To be investigated. Not obvious whether it appears at all in the later stages.
-        let place = take_place_info_to_read(place);
+        let place = take_place_info_to_ref(place);
         assign_to(id, dest, |h| h.len_of(place))
     }
 

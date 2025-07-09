@@ -73,12 +73,25 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
     }
 
     fn ref_to(mut self, place: Self::Place, _is_mutable: bool) {
-        let value = if place.is_symbolic() {
-            Expr::Ref(SymPlaceValueRef::new(place)).into()
-        } else {
-            UnevalValue::Some.into()
-        };
-        self.set_value(Implied::by_unknown(value))
+        use backend::expr::place::*;
+        match place.as_ref() {
+            PlaceValue::Symbolic(sym_place) => match &sym_place.base {
+                // Reborrowing
+                SymbolicPlaceBase::Deref(DerefSymHostPlace { host, .. }) => {
+                    // FIXME: retain antecedents
+                    self.set(Implied::by_unknown(host.clone().into()))
+                }
+                SymbolicPlaceBase::SymIndex(..) => {
+                    // FIXME: retain antecedents
+                    self.set_value(Implied::by_unknown(
+                        Expr::Ref(SymIndexPlaceValueRef::new(place)).into(),
+                    ));
+                }
+            },
+            PlaceValue::Deterministic(..) => {
+                self.set_value(Implied::always(UnevalValue::Some.into()))
+            }
+        }
     }
 
     fn thread_local_ref_to(mut self) {

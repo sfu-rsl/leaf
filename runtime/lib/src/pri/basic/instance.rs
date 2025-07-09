@@ -125,6 +125,10 @@ pub(super) fn take_place_info_to_write(reference: PlaceRef) -> PlaceImpl {
     let place_info = take_back_place_info(reference);
     get_backend_place(PlaceUsage::Write, |h| h.from_info(place_info))
 }
+pub(super) fn take_place_info_to_ref(reference: PlaceRef) -> PlaceImpl {
+    let place_info = take_back_place_info(reference);
+    get_backend_place(PlaceUsage::Ref, |h| h.from_info(place_info))
+}
 #[inline]
 pub(super) fn get_backend_place<T>(
     usage: PlaceUsage,

@@ -1,4 +1,4 @@
-use std::{num::NonZero, ops::DerefMut, rc::Rc};
+use std::{cell::RefCell, num::NonZero, ops::DerefMut, rc::Rc};
 
 use derive_more as dm;
 
@@ -12,11 +12,16 @@ use crate::{
         expr::{lazy::RawPointerRetriever, prelude::*},
         implication::{Antecedents, Implied, Precondition, PreconditionConstraints},
         place::{LocalWithMetadata, PlaceWithMetadata, Projection},
+        state::{
+            SymPlaceSymEntity, pointer_based::sym_place::strategies::IndexOnlySymPlaceHandler,
+        },
         type_info::TypeLayoutResolverExt,
     },
     type_info::TypeInfoExt,
     utils::{InPlaceSelfHierarchical, alias::RRef},
 };
+
+use super::SymPlaceHandler;
 
 mod memory;
 pub(super) mod sym_place;
@@ -25,11 +30,7 @@ use memory::*;
 type Local = LocalWithMetadata;
 type Place = PlaceWithMetadata;
 
-type SymPlaceHandlerDyn = dyn super::SymPlaceHandler<
-        SymEntity = SymValueRef,
-        ConcEntity = ConcreteValueRef,
-        Entity = ValueRef,
-    >;
+type SymPlaceHandlerDyn = dyn SymPlaceHandler<SymEntity = SymPlaceSymEntity, ConcEntity = ConcreteValueRef, Entity = ValueRef>;
 
 type SymPlaceHandlerObject = RRef<SymPlaceHandlerDyn>;
 
@@ -120,6 +121,7 @@ pub(in super::super) struct RawPointerVariableState<EB> {
     type_manager: Rc<dyn TypeDatabase>,
     sym_read_handler: SymPlaceHandlerObject,
     sym_write_handler: SymPlaceHandlerObject,
+    sym_ref_handler: SymPlaceHandlerObject,
     expr_builder: RRef<EB>,
 }
 
@@ -133,6 +135,9 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         Self {
             memory: Default::default(),
             type_manager,
+            sym_ref_handler: RRef::new(RefCell::new(IndexOnlySymPlaceHandler(
+                sym_read_handler.clone(),
+            ))),
             sym_read_handler,
             sym_write_handler,
             expr_builder,
@@ -164,10 +169,7 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
 
     #[tracing::instrument(level = "debug", skip(self))]
     fn ref_place(&self, place: &Place, usage: PlaceUsage) -> PlaceValueRef {
-        self.get_place(place, match usage {
-            PlaceUsage::Read => self.sym_read_handler.borrow_mut(),
-            PlaceUsage::Write => self.sym_write_handler.borrow_mut(),
-        })
+        self.get_place(place, usage)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -177,10 +179,7 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
         ptr_type_id: TypeId,
         usage: PlaceUsage,
     ) -> PlaceValueRef {
-        self.get_deref_of_ptr(ptr.value, ptr_type_id, match usage {
-            PlaceUsage::Read => self.sym_read_handler.borrow_mut(),
-            PlaceUsage::Write => self.sym_write_handler.borrow_mut(),
-        })
+        self.get_deref_of_ptr(ptr.value, ptr_type_id, usage)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -455,7 +454,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                  * which cannot appear as the target value.
                  * For Len, it is a deref over a slice pointer/ref, which cannot be
                  * a symbolic reference (o.w., it would be possible to have a standalone value
-                 * from a slice type which is unsized. Also, ref over deref gets optimized.).
+                 * from a slice type which is unsized. ~~Also, ref over deref gets optimized.~~).
                  * For PtrMetadata, the reference is to an unsized type (o.w., it gets optimized),
                  * and the same as above holds. */
                 self.to_sym_values(

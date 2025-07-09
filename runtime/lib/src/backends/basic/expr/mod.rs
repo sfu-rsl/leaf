@@ -16,14 +16,16 @@ use derive_more as dm;
 
 use common::type_info::TypeInfo;
 
-use crate::abs::expr::sym_place::{Select, SymbolicReadTree};
-use crate::utils::meta::{define_reversible_pair, sub_enum};
-use place::SymPlaceValueRef;
-
-use crate::abs;
+use crate::abs::{
+    self,
+    expr::sym_place::{Select, SymbolicReadTree},
+};
 pub(crate) use crate::abs::{
     FloatType, IntType, PointerOffset, RawAddress, TypeId, ValueType, VariantIndex,
 };
+use crate::utils::meta::{define_reversible_pair, sub_enum};
+
+use place::{SymIndexPlaceValueRef, SymPlaceValueRef};
 
 #[derive(Clone, PartialEq, Eq, dm::Deref, dm::DerefMut, dm::Debug, dm::Display)]
 pub(crate) struct ValueRef(Rc<Value>);
@@ -802,7 +804,7 @@ pub(crate) enum Expr {
      * converted to pointers. So, we should also have the same behavior for both.
      */
     #[from(ignore)]
-    Ref(SymPlaceValueRef),
+    Ref(SymIndexPlaceValueRef),
 
     #[from(ignore)]
     Len(SymPlaceValueRef),
