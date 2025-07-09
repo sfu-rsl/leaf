@@ -2435,7 +2435,7 @@ mod implementation {
                 self.context.tcx(),
                 serialized.as_bytes(),
             )]);
-            self.insert_blocks([block]);
+            // self.insert_blocks([block]);
         }
     }
 

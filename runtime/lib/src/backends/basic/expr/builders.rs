@@ -311,7 +311,10 @@ mod toplevel {
 }
 
 mod symbolic {
-    use crate::backends::basic::alias::SymValueRefExprBuilder;
+    use crate::{
+        backends::basic::alias::SymValueRefExprBuilder,
+        type_info::{FieldsShapeInfoExt, TypeInfoExt},
+    };
 
     use super::{
         adapters::{ConstFolder, ConstSimplifier, CoreBuilder},
@@ -322,7 +325,7 @@ mod symbolic {
         /*Binary:*/
         Chained<ConstSimplifier, Chained<ConstFolder, CoreBuilder>>,
         /*Unary:*/
-        CoreBuilder,
+        Chained<PtrMetadataExtractor, CoreBuilder>,
         /*Ternary:*/
         Chained<ConstSimplifier, CoreBuilder>,
         /*Cast:*/
@@ -337,12 +340,25 @@ mod symbolic {
 
     impl SymbolicBuilder {
         pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
+            let base_builder = BaseSymbolicBuilder {
+                binary: Default::default(),
+                unary: Chained::new(
+                    PtrMetadataExtractor {
+                        type_manager: type_manager.clone(),
+                    },
+                    Default::default(),
+                ),
+                ternary: Default::default(),
+                cast: Default::default(),
+            };
             let uneval_resolver = UnevaluatedResolverBuilder {
                 type_manager,
-                sym_builder: Logger::<BaseSymbolicBuilder>::default(),
+                sym_builder: Logger {
+                    builder: base_builder.clone(),
+                },
             };
             Logger {
-                builder: Chained::new(uneval_resolver, BaseSymbolicBuilder::default()),
+                builder: Chained::new(uneval_resolver, base_builder),
             }
         }
     }
@@ -432,9 +448,18 @@ mod symbolic {
         fn unary_op<'a>(
             &mut self,
             mut operand: Self::ExprRef<'a>,
-            _op: AbsUnaryOp,
+            op: AbsUnaryOp,
         ) -> Self::Expr<'a> {
-            self.resolve_sym(operand.as_mut(), true);
+            let expect_scalar = {
+                use AbsUnaryOp::*;
+                match op {
+                    NoOp => false,
+                    PtrMetadata => false,
+                    Not | Neg | BitReverse | NonZeroTrailingZeros | TrailingZeros | CountOnes
+                    | NonZeroLeadingZeros | LeadingZeros => true,
+                }
+            };
+            self.resolve_sym(operand.as_mut(), expect_scalar);
             Err(operand)
         }
 
@@ -495,6 +520,73 @@ mod symbolic {
         }
 
         impl_singular_casts_through_general!();
+    }
+
+    /// Extracts metadata from a porter value.
+    #[derive(Clone)]
+    pub(crate) struct PtrMetadataExtractor {
+        type_manager: Rc<dyn TypeDatabase>,
+    }
+
+    impl UnaryExprBuilder for PtrMetadataExtractor {
+        type ExprRef<'a> = SymValueRef;
+        type Expr<'a> = Result<ValueRef, Self::ExprRef<'a>>;
+
+        fn unary_op<'a>(&mut self, operand: Self::ExprRef<'a>, op: AbsUnaryOp) -> Self::Expr<'a> {
+            if op != AbsUnaryOp::PtrMetadata {
+                return Err(operand);
+            }
+
+            let SymValue::Expression(Expr::Partial(PorterValue {
+                as_concrete,
+                sym_values,
+            })) = operand.as_ref()
+            else {
+                return Err(operand);
+            };
+
+            let ptr_ty = as_concrete
+                .1
+                .get_type(self.type_manager.as_ref())
+                .expect("Type of partial value is not available.");
+
+            debug_assert!(
+                ptr_ty.pointee_ty.is_some(),
+                "PtrMetadata on non-pointer type: {:?}",
+                ptr_ty
+            );
+            debug_assert!(
+                !self
+                    .type_manager
+                    .get_type(&ptr_ty.pointee_ty.unwrap())
+                    .is_sized(),
+                "Pointer with struct shape is expected to be fat."
+            );
+
+            let metadata_field = &ptr_ty.expect_single_variant().fields.expect_struct().fields[1];
+            Ok(sym_values
+                .iter()
+                .find_map(|(offset, ty_id, value)| {
+                    if metadata_field.offset.eq(offset) {
+                        debug_assert_eq!(*ty_id, metadata_field.ty);
+                        return Some(value.clone().into());
+                    } else {
+                        // TODO: Add checks for corrupted overlapping values.
+                        None
+                    }
+                })
+                .unwrap_or_else(|| {
+                    let as_concrete = RawConcreteValue(
+                        as_concrete
+                            .0
+                            .wrapping_byte_add(metadata_field.offset as usize),
+                        as_concrete.1.clone(),
+                    );
+                    as_concrete.to_value_ref()
+                }))
+        }
+
+        impl_singular_unary_ops_through_general!();
     }
 }
 
