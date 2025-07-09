@@ -50,13 +50,15 @@ cfg-if = { version = "1.0" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(runtime_access, values("safe_mt", "safe_brt", "unsafe"))',
     'cfg(place_addr)',
     'cfg(abs_concrete)',
 ] }
 [features]
 default = []
 release_sym_value_loss_checks = []
+
+runtime_access_raw_ptr = []
+runtime_access_mutex = []
 
 profile_flame = ["dep:tracing-flame"]
 profile_tracy = ["dep:tracing-tracy"]
