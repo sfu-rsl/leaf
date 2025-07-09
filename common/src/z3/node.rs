@@ -153,10 +153,15 @@ impl<'ctx> AstNode<'ctx> {
     }
 
     pub fn to_smtlib2(&self) -> String {
+        macro_rules! to_smt_string {
+            ($ast:expr) => {
+                $ast.simplify().to_string()
+            };
+        }
         match self {
-            Self::Bool(ast) => ast.to_string(),
-            Self::BitVector(BVNode(ast, _)) => ast.to_string(),
-            Self::Array(ArrayNode(ast, _)) => ast.to_string(),
+            Self::Bool(ast) => to_smt_string!(ast),
+            Self::BitVector(BVNode(ast, _)) => to_smt_string!(ast),
+            Self::Array(ArrayNode(ast, _)) => to_smt_string!(ast),
         }
     }
 }
