@@ -8,6 +8,7 @@ use crate::abs::{
     },
 };
 use crate::backends::basic::BasicPlaceBuilder;
+use cfg_if::cfg_if;
 use common::log_info;
 use common::utils::UnsafeSync;
 
@@ -27,32 +28,38 @@ pub(super) type FieldImpl =
     <<BackendImpl as RuntimeBackend>::AssignmentHandler<'static> as AssignmentHandler>::Field;
 
 static INIT: Once = Once::new();
-#[cfg(runtime_access = "safe_mt")]
-static BACKEND: Mutex<Option<BackendImpl>> = Mutex::new(None);
-#[cfg(runtime_access = "safe_brt")]
-static BACKEND: UnsafeSync<RefCell<Option<BackendImpl>>> = UnsafeSync::new(RefCell::new(None));
-#[cfg(runtime_access = "unsafe")]
-static mut BACKEND: Option<BackendImpl> = None;
-
-#[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))]
-thread_local! {
-/*
- * Breaking places and operands is something that happens in our compiler, so
- * it is not possible to see references shared between threads.
-*/
-static PLACE_REF_MANAGER: RefCell<DefaultRefManager<PlaceInfo>> =
-    RefCell::new(DefaultRefManager::new());
+cfg_if! {
+    if #[cfg(runtime_access = "safe_mt")] {
+        static BACKEND: Mutex<Option<BackendImpl>> = Mutex::new(None);
+    } else if #[cfg(runtime_access = "safe_brt")] {
+        static BACKEND: UnsafeSync<RefCell<Option<BackendImpl>>> = UnsafeSync::new(RefCell::new(None));
+    } else if #[cfg(runtime_access = "unsafe")] {
+        static mut BACKEND: Option<BackendImpl> = None;
+    }
 }
-#[cfg(runtime_access = "unsafe")]
-static mut PLACE_REF_MANAGER: DefaultRefManager<PlaceInfo> = DefaultRefManager::new();
 
-#[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))]
-thread_local! {
-static OPERAND_REF_MANAGER: RefCell<DefaultRefManager<OperandImpl>> =
-    RefCell::new(DefaultRefManager::new());
+cfg_if! {
+    if #[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))] {
+        thread_local! {
+            // Place and operand references are local to functions, so they need not and should not be shared
+            static PLACE_REF_MANAGER: RefCell<DefaultRefManager<PlaceInfo>> =
+                RefCell::new(DefaultRefManager::new());
+        }
+    } else if #[cfg(runtime_access = "unsafe")] {
+        static mut PLACE_REF_MANAGER: DefaultRefManager<PlaceInfo> = DefaultRefManager::new();
+    }
 }
-#[cfg(runtime_access = "unsafe")]
-static mut OPERAND_REF_MANAGER: DefaultRefManager<OperandImpl> = DefaultRefManager::new();
+
+cfg_if! {
+    if #[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))] {
+        thread_local! {
+            static OPERAND_REF_MANAGER: RefCell<DefaultRefManager<OperandImpl>> =
+                RefCell::new(DefaultRefManager::new());
+        }
+    } else if #[cfg(runtime_access = "unsafe")] {
+        static mut OPERAND_REF_MANAGER: DefaultRefManager<OperandImpl> = DefaultRefManager::new();
+    }
+}
 
 pub(super) fn init_backend() {
     INIT.call_once(|| {
@@ -62,20 +69,15 @@ pub(super) fn init_backend() {
         log_info!("Initializing basic backend");
         let backend =
             BackendImpl::try_from(config).expect("Failed to initialize backend through the config");
-        #[cfg(runtime_access = "safe_mt")]
-        {
-            let mut guard = BACKEND.lock().unwrap();
-            *guard = Some(backend);
-        }
-        #[cfg(runtime_access = "safe_brt")]
-        {
-            let mut binding = BACKEND.borrow_mut();
-            *binding = Some(backend);
-        }
-        #[cfg(runtime_access = "unsafe")]
-        {
-            unsafe {
-                BACKEND = Some(backend);
+        cfg_if! {
+            if #[cfg(runtime_access = "safe_mt")] {
+                let mut guard = BACKEND.lock().unwrap();
+                *guard = Some(backend);
+            } else if #[cfg(runtime_access = "safe_brt")] {
+                let mut binding = BACKEND.borrow_mut();
+                *binding = Some(backend);
+            } else if #[cfg(runtime_access = "unsafe")] {
+                unsafe { BACKEND = Some(backend); }
             }
         }
         log_info!("Basic backend initialized");
@@ -213,21 +215,22 @@ pub(super) fn annotate<T>(
     })
 }
 
-#[cfg(runtime_access = "safe_mt")]
-fn perform_on_backend<T>(action: impl FnOnce(&mut BackendImpl) -> T) -> T {
-    let mut guard = BACKEND.lock().unwrap();
-    check_and_perform_on_backend(&mut guard, action)
-}
-
-#[cfg(runtime_access = "safe_brt")]
-fn perform_on_backend<T>(action: impl FnOnce(&mut BackendImpl) -> T) -> T {
-    let mut binding = BACKEND.borrow_mut();
-    check_and_perform_on_backend(&mut binding, action)
-}
-
-#[cfg(runtime_access = "unsafe")]
-fn perform_on_backend<T>(action: impl FnOnce(&mut BackendImpl) -> T) -> T {
-    check_and_perform_on_backend(unsafe { &mut BACKEND }, action)
+cfg_if! {
+    if #[cfg(runtime_access = "safe_mt")] {
+        fn perform_on_backend<T>(action: impl FnOnce(&mut BackendImpl) -> T) -> T {
+            let mut guard = BACKEND.lock().unwrap();
+            check_and_perform_on_backend(&mut guard, action)
+        }
+    } else if #[cfg(runtime_access = "safe_brt")] {
+        fn perform_on_backend<T>(action: impl FnOnce(&mut BackendImpl) -> T) -> T {
+            let mut binding = BACKEND.borrow_mut();
+            check_and_perform_on_backend(&mut binding, action)
+        }
+    } else if #[cfg(runtime_access = "unsafe")] {
+        fn perform_on_backend<T>(action: impl FnOnce(&mut BackendImpl) -> T) -> T {
+            check_and_perform_on_backend(unsafe { &mut BACKEND }, action)
+        }
+    }
 }
 
 fn check_and_perform_on_backend<T>(
@@ -237,31 +240,34 @@ fn check_and_perform_on_backend<T>(
     let backend = backend.as_mut().expect("Runtime is not initialized.");
     action(backend)
 }
-
-#[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))]
-fn perform_on_place_ref_manager<T>(
-    action: impl FnOnce(&mut DefaultRefManager<PlaceInfo>) -> T,
-) -> T {
-    PLACE_REF_MANAGER.with_borrow_mut(action)
+cfg_if! {
+    if #[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))] {
+        fn perform_on_place_ref_manager<T>(
+            action: impl FnOnce(&mut DefaultRefManager<PlaceInfo>) -> T,
+        ) -> T {
+            PLACE_REF_MANAGER.with_borrow_mut(action)
+        }
+    } else if #[cfg(runtime_access = "unsafe")] {
+        fn perform_on_place_ref_manager<T>(
+            action: impl FnOnce(&mut DefaultRefManager<PlaceInfo>) -> T,
+        ) -> T {
+            action(unsafe { &mut PLACE_REF_MANAGER })
+        }
+    }
 }
 
-#[cfg(runtime_access = "unsafe")]
-fn perform_on_place_ref_manager<T>(
-    action: impl FnOnce(&mut DefaultRefManager<PlaceInfo>) -> T,
-) -> T {
-    action(unsafe { &mut PLACE_REF_MANAGER })
-}
-
-#[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))]
-fn perform_on_operand_ref_manager<T>(
-    action: impl FnOnce(&mut DefaultRefManager<OperandImpl>) -> T,
-) -> T {
-    OPERAND_REF_MANAGER.with_borrow_mut(action)
-}
-
-#[cfg(runtime_access = "unsafe")]
-fn perform_on_operand_ref_manager<T>(
-    action: impl FnOnce(&mut DefaultRefManager<OperandImpl>) -> T,
-) -> T {
-    action(unsafe { &mut OPERAND_REF_MANAGER })
+cfg_if! {
+    if #[cfg(any(runtime_access = "safe_mt", runtime_access = "safe_brt"))] {
+        fn perform_on_operand_ref_manager<T>(
+            action: impl FnOnce(&mut DefaultRefManager<OperandImpl>) -> T,
+        ) -> T {
+            OPERAND_REF_MANAGER.with_borrow_mut(action)
+        }
+    } else if #[cfg(runtime_access = "unsafe")] {
+        fn perform_on_operand_ref_manager<T>(
+            action: impl FnOnce(&mut DefaultRefManager<OperandImpl>) -> T,
+        ) -> T {
+            action(unsafe { &mut OPERAND_REF_MANAGER })
+        }
+    }
 }
