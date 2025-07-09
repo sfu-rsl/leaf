@@ -59,7 +59,7 @@ impl<V> ArrayListRefManager<V> {
  * should be alive at any given time. Probably the largest numbers happen for
  * functions calls and aggregate value creation. Unless in exceptional programs,
  * running out of buffer means a bug in the instrumentation. */
-const DEFAULT_BUFFER_SIZE: usize = 128;
+const DEFAULT_BUFFER_SIZE: usize = 1024;
 
 pub(super) struct CircularBufferRefManager<V> {
     buffer: [Option<V>; DEFAULT_BUFFER_SIZE],
