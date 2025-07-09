@@ -104,6 +104,10 @@ pub fn execute_once_for_trace(
             directory = "{dir}"
             prefix = "{preconditions_filename}"
             format = "jsonl"
+
+            [exe_trace]
+            dump_interval = 5
+            inspectors = []
             "#,
             dir = traces_dir.display(),
         ),
