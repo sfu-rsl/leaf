@@ -1,12 +1,14 @@
 use core::iter;
 use std::{
     borrow::Borrow,
-    cell::RefCell,
-    collections::{HashMap, HashSet},
+    cell::{LazyCell, RefCell},
+    collections::HashMap,
     rc::Rc,
 };
 
+use derive_more as dm;
 use disjoint::DisjointSet;
+use itertools::Either;
 use tracing::Span;
 
 use common::{
@@ -28,8 +30,10 @@ type Constraint<'ctx> = common::types::trace::Constraint<ParsedDiscrValue<'ctx>,
 type ParsedSwitchStep<'ctx> = SwitchStep<ParsedDiscrValue<'ctx>>;
 type VariablesForest = Rc<DisjointSet>;
 
-type DecisionCache = HashSet<(usize, ConstraintKind<RawCaseValue>)>;
-type ChangeCache = HashSet<usize>;
+type CacheEntry<'ctx> = Rc<RefCell<Vec<SolveResult<'ctx>>>>;
+
+type DecisionCache<'ctx> = HashMap<ResultId, SolveResult<'ctx>>;
+type ChangeCache<'ctx> = HashMap<usize, CacheEntry<'ctx>>;
 
 pub(crate) struct Solver<'ctx, 'a> {
     solver: Z3Solver<'ctx, u32>,
@@ -38,14 +42,22 @@ pub(crate) struct Solver<'ctx, 'a> {
     weakened_trace: Vec<ParsedSwitchStep<'ctx>>,
     vars_forests: Vec<Option<VariablesForest>>,
     antecedent_strategy: AntecedentSolvingStrategy,
-    tried_decisions: RefCell<DecisionCache>,
-    tried_changes: RefCell<ChangeCache>,
+    tried_decisions: RefCell<DecisionCache<'ctx>>,
+    tried_changes: RefCell<ChangeCache<'ctx>>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash, dm::Display)]
+#[display("({} -> {})", step_index, constraint_kind)]
+pub(crate) struct ResultId {
+    pub step_index: usize,
+    pub constraint_kind: ConstraintKind<RawCaseValue>,
+}
+
+#[derive(Clone)]
 pub(crate) struct SolveResult<'ctx> {
+    pub id: ResultId,
     pub solver_result: z3::SatResult,
     pub answers: HashMap<u32, AstNode<'ctx>>,
-    pub step_index: usize,
 }
 
 impl<'ctx, 'a> Solver<'ctx, 'a> {
@@ -88,10 +100,10 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
     ///   not take the edge are guaranteed to be generated.
     ///   In other words, it may return false positives but not true negatives.
     #[tracing::instrument(level = "debug", skip_all)]
-    pub(crate) fn try_satisfy_edge(
-        &mut self,
-        edge: &DirectedEdge<'_, &[CfgEdgeDestination]>,
-    ) -> Option<impl Iterator<Item = SolveResult>> {
+    pub(crate) fn try_satisfy_edge<'b, 'c>(
+        &'b mut self,
+        edge: &DirectedEdge<'a, &'c [CfgEdgeDestination]>,
+    ) -> Option<impl Iterator<Item = SolveResult<'ctx>> + use<'ctx, 'a, 'b, 'c>> {
         let index = self
             .trace
             .element_offset(edge.src)
@@ -111,6 +123,22 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
             "Satisfying edge",
         );
 
+        if last.discr.is_some() {
+            let x = cfg_constraints_to_kind(
+                cfg_constraints_to(edge.metadata, edge.dst),
+                edge.metadata,
+                last.decision.is_boolean(),
+            )
+            .filter(|c| !c.eq(&last.decision))
+            .collect::<Vec<_>>();
+            log_debug!("edgeeee");
+
+            if x.is_empty() {
+                log_debug!("Nothing to change...");
+            } else if last.discr.is_some() {
+                log_debug!("Diverging...");
+            }
+        }
         let from_discr = last
             .discr
             .is_some()
@@ -196,68 +224,44 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
             step.location,
         );
 
-        let to_satisfy = kinds
-            .into_iter()
-            .filter(move |k| {
-                self.tried_decisions
-                    .borrow_mut()
-                    .insert((step.trace_index, k.clone()))
-            })
-            .map(|k| k.map(ast_mapper(discr)))
-            .map(|kind| Constraint {
-                discr: discr.clone(),
-                kind,
-            })
-            .inspect(|c| log_debug!("Constraint to satisfy: {c}"));
+        let prefix = LazyCell::new(|| self.collect_relevant_constraints(prefix, discr));
 
-        // Only send constraints for the participating variables.
-        let vars_forest = self.vars_forests[prefix.len()].as_ref().unwrap();
-        let vars_set_root = vars_forest.root_of(
-            discr
-                .variables
-                .iter()
-                .map(|(id, _)| *id as usize)
-                .next()
-                .unwrap(),
-        );
-
-        const USE_WEAKENED_TRACE: bool = true;
-        let prefix = if USE_WEAKENED_TRACE {
-            &self.weakened_trace[..prefix.len()]
-        } else {
-            prefix
-        };
-        let prefix = prefix
-            .iter()
-            .filter(|s| {
-                s.discr.as_ref().is_some_and(|d| {
-                    d.variables
-                        .iter()
-                        .any(|(id, _)| vars_forest.is_joined(vars_set_root, *id as usize))
-                })
-            })
-            .map(|s| {
-                let discr = s.discr.as_ref().unwrap();
-                Constraint {
-                    discr: discr.clone(),
-                    kind: s.decision.as_ref().map(ast_mapper(&discr)),
-                }
-            })
-            .collect::<Vec<_>>();
-
-        log_debug!("Found {} relevant constraints in the prefix", prefix.len());
-
-        to_satisfy
-            .map(move |to_satisfy| {
-                self.solver
-                    .check(prefix.iter().cloned().chain(iter::once(to_satisfy)))
-            })
-            .map(|(smt_res, answers)| SolveResult {
-                solver_result: smt_res,
-                answers,
+        let satisfy_kind = move |kind: ConstraintKind<RawCaseValue>| {
+            let id = ResultId {
                 step_index: step.trace_index,
-            })
-            .instrumented(Span::current())
+                constraint_kind: kind,
+            };
+            if let Some(cached) = self.tried_decisions.borrow().get(&id).cloned() {
+                log_trace!(
+                    "Already tried to satisfy decision at step {} for kind",
+                    step.trace_index
+                );
+                return cached;
+            }
+
+            let to_satisfy = Constraint {
+                discr: discr.clone(),
+                kind: id.constraint_kind.as_ref().map(ast_mapper(discr)),
+            };
+            log_debug!("Constraint to satisfy: {to_satisfy}");
+
+            let (solver_result, answers) = self
+                .solver
+                .check(prefix.iter().cloned().chain(iter::once(to_satisfy)));
+
+            let result = SolveResult {
+                id,
+                solver_result,
+                answers,
+            };
+
+            self.tried_decisions
+                .borrow_mut()
+                .insert(result.id.clone(), result.clone());
+            result
+        };
+
+        kinds.into_iter().map(satisfy_kind)
     }
 
     fn change_antecedents<'b>(
@@ -295,12 +299,12 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
         prefix: &'b [ParsedSwitchStep<'ctx>],
         step: &'b ParsedSwitchStep<'ctx>,
     ) -> impl Iterator<Item = SolveResult<'ctx>> {
-        if !self.tried_changes.borrow_mut().insert(step.trace_index) {
+        if let Some(cached) = self.tried_changes.borrow().get(&step.trace_index).cloned() {
             log_trace!(
                 "Already tried to change decision for step {}",
                 step.trace_index
             );
-            return None.into_iter().flatten();
+            return Either::Left(cached.as_ref().borrow().clone().into_iter());
         }
 
         let from_discr = step
@@ -319,9 +323,60 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
 
         let from_antecedents = self.change_antecedents(prefix, step).into_iter().flatten();
 
-        Some(from_discr.chain(from_antecedents))
-            .into_iter()
-            .flatten()
+        let results = Rc::new(RefCell::new(Vec::new()));
+        self.tried_changes
+            .borrow_mut()
+            .insert(step.trace_index, results.clone());
+        Either::Right(
+            from_discr
+                .chain(from_antecedents)
+                .inspect(move |r| results.borrow_mut().push(r.clone())),
+        )
+    }
+
+    fn collect_relevant_constraints<'b>(
+        &self,
+        prefix: &'b [ParsedSwitchStep<'ctx>],
+        discr: &'b ParsedDiscrValue<'ctx>,
+    ) -> Vec<Constraint<'ctx>> {
+        // Only send constraints for the participating variables.
+        let vars_forest = self.vars_forests[prefix.len()].as_ref().unwrap();
+        let vars_set_root = vars_forest.root_of(
+            discr
+                .variables
+                .iter()
+                .map(|(id, _)| *id as usize)
+                .next()
+                .unwrap(),
+        );
+
+        const USE_WEAKENED_TRACE: bool = true;
+        let prefix = if USE_WEAKENED_TRACE {
+            &self.weakened_trace[..prefix.len()]
+        } else {
+            prefix
+        };
+
+        let result = prefix
+            .iter()
+            .filter(|s| {
+                s.discr.as_ref().is_some_and(|d| {
+                    d.variables
+                        .iter()
+                        .any(|(id, _)| vars_forest.is_joined(vars_set_root, *id as usize))
+                })
+            })
+            .map(|s| {
+                let discr = s.discr.as_ref().unwrap();
+                Constraint {
+                    discr: discr.clone(),
+                    kind: s.decision.as_ref().map(ast_mapper(&discr)),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        log_debug!("Found {} relevant constraints in the prefix", prefix.len());
+        result
     }
 }
 
