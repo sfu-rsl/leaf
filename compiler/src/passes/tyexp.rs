@@ -127,6 +127,15 @@ fn add_type_information_to_map<'tcx>(
     ty: Ty<'tcx>,
     typing_env: TypingEnv<'tcx>,
 ) {
+    // The type passed here is instantiated, so this check should be the same as inside the layout_of function.
+    match ty.kind() {
+        // Although should not really appear at this stage, we have faced errors before.
+        TyKind::Bound(..) | TyKind::CoroutineWitness(..) | TyKind::Infer(_) | TyKind::Error(_) => {
+            return;
+        }
+        _ => {}
+    }
+
     let layout = match tcx.layout_of(typing_env.as_query_input(ty)) {
         Ok(TyAndLayout { layout, .. }) => layout,
         Err(err) => {
