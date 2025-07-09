@@ -411,7 +411,8 @@ pub(crate) mod z3 {
                             (BinaryOp::Shr, false) => Some(ast::BV::bvlshr),
                             (BinaryOp::RotateL, _) => Some(ast::BV::bvrotl),
                             (BinaryOp::RotateR, _) => Some(ast::BV::bvrotr),
-                            (BinaryOp::Offset, _) => Some(todo!()),
+                            // TODO: Double-check if this is correct.
+                            (BinaryOp::Offset, _) => Some(ast::BV::bvadd),
                             _ => None,
                         };
                         f.map(|f| left_node.map(|left| f(left, right_bv)).into())
