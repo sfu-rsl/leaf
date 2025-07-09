@@ -21,6 +21,5 @@ common = { path = "../../common", package = "common" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(place_addr)',
     'cfg(core_build)',
 ] }

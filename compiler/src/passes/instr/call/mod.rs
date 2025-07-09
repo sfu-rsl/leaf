@@ -723,13 +723,11 @@ mod implementation {
                 let added_blocks = self.reference_place_projection(place_ref, proj);
                 blocks.extend(added_blocks);
 
-                if cfg!(place_addr) {
-                    cum_place = cum_place.project_deeper(&[proj], tcx);
-                    cum_ty = cum_ty.projection_ty(tcx, proj);
+                cum_place = cum_place.project_deeper(&[proj], tcx);
+                cum_ty = cum_ty.projection_ty(tcx, proj);
 
-                    blocks.extend(self.set_place_type(place_ref, cum_ty.ty));
-                    blocks.push(self.set_place_addr(place_ref, &cum_place, cum_ty.ty));
-                }
+                blocks.extend(self.set_place_type(place_ref, cum_ty.ty));
+                blocks.push(self.set_place_addr(place_ref, &cum_place, cum_ty.ty));
             }
 
             BlocksAndResult(blocks, place_ref)
@@ -751,11 +749,9 @@ mod implementation {
             let (block, place_ref) = self.make_bb_for_place_ref_call(func_name, args);
             let mut blocks = vec![block];
 
-            if cfg!(place_addr) {
-                let ty = self.local_decls()[local].ty;
-                blocks.extend(self.set_place_type(place_ref, ty));
-                blocks.push(self.set_place_addr(place_ref, &local.into(), ty));
-            }
+            let ty = self.local_decls()[local].ty;
+            blocks.extend(self.set_place_type(place_ref, ty));
+            blocks.push(self.set_place_addr(place_ref, &local.into(), ty));
 
             BlocksAndResult(blocks, place_ref)
         }
@@ -901,14 +897,12 @@ mod implementation {
                 ));
             }
 
-            #[cfg(place_addr)]
             let id_local = {
                 let (block, id_local) = self.make_type_id_of_bb(ty);
                 blocks.push(block);
                 id_local
             };
 
-            #[cfg(place_addr)]
             blocks.push(self.make_bb_for_call(sym::set_place_type_id, vec![
                 operand::copy_for_local(place_ref),
                 operand::move_for_local(id_local),
@@ -957,12 +951,10 @@ mod implementation {
             let BlocksAndResult(mut additional_blocks, place_ref) =
                 self.internal_reference_place(place);
 
-            if cfg!(place_addr) {
-                let tcx = self.tcx();
-                let ty = place.ty(&self.context, tcx).ty;
-                if ty.is_adt() || ty.is_trivially_tuple() || ty.is_array() || !ty.is_known_rigid() {
-                    additional_blocks.extend(self.set_place_size(place_ref, ty));
-                }
+            let tcx = self.tcx();
+            let ty = place.ty(&self.context, tcx).ty;
+            if ty.is_adt() || ty.is_trivially_tuple() || ty.is_array() || !ty.is_known_rigid() {
+                additional_blocks.extend(self.set_place_size(place_ref, ty));
             }
 
             let func_name = if is_copy {

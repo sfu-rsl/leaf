@@ -48,9 +48,6 @@ smallvec = "1.15.0"
 [package.metadata.rust-analyzer]
 rustc_private = true
 
-[lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(place_addr)'] }
-
 [features]
 default = ["abs_concrete"]
 abs_concrete = []

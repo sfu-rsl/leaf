@@ -1,8 +1,6 @@
 [build]
 rustflags = [
     "--cfg",
-    "place_addr",
-    "--cfg",
     "info_db_fmt=\"rkyv\"",
 ]
 

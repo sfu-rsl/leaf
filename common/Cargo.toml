@@ -65,7 +65,6 @@ z3-sys = { workspace = true, optional = true }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(place_addr)',
     'cfg(core_build)',
     'cfg(info_db_fmt, values("json", "rkyv"))',
 ] }
