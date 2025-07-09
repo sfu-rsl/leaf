@@ -49,7 +49,8 @@ smallvec = "1.15.0"
 rustc_private = true
 
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = [
-    'cfg(place_addr)',
-    'cfg(abs_concrete)',
-] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(place_addr)'] }
+
+[features]
+default = ["abs_concrete"]
+abs_concrete = []

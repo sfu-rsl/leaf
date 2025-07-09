@@ -51,7 +51,6 @@ cfg-if = { version = "1.0" }
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(place_addr)',
-    'cfg(abs_concrete)',
 ] }
 [features]
 default = []

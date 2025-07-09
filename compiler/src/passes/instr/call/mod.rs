@@ -993,7 +993,7 @@ mod implementation {
             let tcx = self.tcx();
             if ty.is_primitive() {
                 self.internal_reference_const_primitive(constant)
-            } else if cfg!(abs_concrete) {
+            } else if cfg!(feature = "abs_concrete") {
                 self.internal_reference_const_some()
             }
             // &str
@@ -1235,7 +1235,7 @@ mod implementation {
         }
 
         fn by_thread_local_ref(&mut self, _def_id: &DefId) {
-            if cfg!(abs_concrete) {
+            if cfg!(feature = "abs_concrete") {
                 self.to_some_concrete()
             } else {
                 self.add_bb_for_assign_call(sym::assign_thread_local_ref, vec![])
@@ -1306,7 +1306,7 @@ mod implementation {
         }
 
         fn by_nullary_op(&mut self) {
-            if cfg!(abs_concrete) {
+            if cfg!(feature = "abs_concrete") {
                 self.to_some_concrete()
             } else {
                 unimplemented!()
@@ -1551,7 +1551,7 @@ mod implementation {
         }
 
         fn through_fn_ptr_coercion(&mut self) {
-            if cfg!(abs_concrete) {
+            if cfg!(feature = "abs_concrete") {
                 // Effective only at compile time, no operational effect.
                 self.by_use(self.context.operand_ref())
             } else {
