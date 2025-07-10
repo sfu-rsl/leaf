@@ -5,31 +5,16 @@ use core::{
 };
 use std::{borrow::Cow, collections::BTreeSet, rc::Rc};
 
-use common::program_dep::{
-    ControlDependency, ProgramDepAssignmentQuery, ProgramDependenceMap,
-    rw::{LoadedProgramDepMap, read_program_dep_map},
-};
 use derive_more as dm;
 
-use crate::{
-    abs::{BasicBlockLocation, PointerOffset, TypeSize},
-    utils::HasIndex,
-};
+use crate::abs::{PointerOffset, TypeSize};
 
-use super::{
-    AssignmentId, BasicConstraint, EnumAntecedentsResult, ImplicationInvestigator, InstanceKindId,
-    alias::TraceQuerier, trace::BasicExeTraceRecorder,
-};
+use super::ConstraintId;
 
-pub(super) type BasicProgramDependenceMap = LoadedProgramDepMap;
+pub(crate) type Antecedents = NonEmptyConstraintSet;
 
-pub(crate) fn default_program_dependence_map() -> BasicProgramDependenceMap {
-    read_program_dep_map().expect("Failed to read program dependence map")
-}
+type RangedAntecedents = (PointerOffset, NonZero<TypeSize>, Antecedents);
 
-type ConstraintId = usize; // Step index
-
-pub(super) type Antecedents = NonEmptyConstraintSet;
 mod empty_guarded {
     use super::*;
 
@@ -58,15 +43,11 @@ mod empty_guarded {
         }
     }
 
-    #[derive(Debug, Clone, dm::Deref, dm::DerefMut)]
-    pub(crate) struct NonEmptyRefinedConstraints(
-        Vec<(PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)>,
-    );
+    #[derive(Debug, Clone, dm::Deref, dm::DerefMut, dm::IntoIterator)]
+    pub(crate) struct NonEmptyRefinedConstraints(Vec<RangedAntecedents>);
 
     impl NonEmptyRefinedConstraints {
-        pub fn from_iter(
-            iter: impl IntoIterator<Item = (PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)>,
-        ) -> Option<Self> {
+        pub fn from_iter(iter: impl IntoIterator<Item = RangedAntecedents>) -> Option<Self> {
             let iter = iter.into_iter();
             if iter.size_hint().1 == Some(0) {
                 return None;
@@ -75,8 +56,21 @@ mod empty_guarded {
             (!constraints.is_empty()).then_some(Self(constraints))
         }
 
-        pub fn get(self) -> Vec<(PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)> {
+        pub fn get(self) -> Vec<RangedAntecedents> {
             self.0
+        }
+    }
+
+    impl TryFrom<Vec<RangedAntecedents>> for NonEmptyRefinedConstraints {
+        type Error = ();
+
+        #[inline]
+        fn try_from(value: Vec<RangedAntecedents>) -> Result<Self, Self::Error> {
+            if value.is_empty() {
+                Err(())
+            } else {
+                Ok(Self(value))
+            }
         }
     }
 }
@@ -89,8 +83,6 @@ pub(crate) enum Precondition {
     #[from(forward)]
     Constraints(PreconditionConstraints),
 }
-
-type RefinedConstraints = Vec<(PointerOffset, NonZero<TypeSize>, NonEmptyConstraintSet)>;
 
 #[derive(Debug, Clone, dm::From)]
 pub(crate) enum PreconditionConstraints {
@@ -209,9 +201,11 @@ impl PreconditionConstraints {
         }
     }
 
-    pub fn at_loc(self, at: PointerOffset, size: NonZero<TypeSize>) -> RefinedConstraints {
-        match self {
-            Self::Whole(antecedents) => vec![(at, size, antecedents)],
+    pub fn at_loc(self, at: PointerOffset, size: NonZero<TypeSize>) -> NonEmptyRefinedConstraints {
+        NonEmptyRefinedConstraints::try_from(match self {
+            Self::Whole(antecedents) => {
+                vec![(at, size, antecedents)]
+            }
             Self::Refined(refined) => refined
                 .get()
                 .into_iter()
@@ -220,13 +214,8 @@ impl PreconditionConstraints {
                     (sub_offset + at, sub_size, antecedents)
                 })
                 .collect::<Vec<_>>(),
-        }
-    }
-}
-
-impl<R> FromResidual<R> for Precondition {
-    fn from_residual(_residual: R) -> Self {
-        Precondition::NoneOrUnknown
+        })
+        .unwrap()
     }
 }
 
@@ -276,134 +265,5 @@ impl<V> Implied<V> {
 impl<V> Borrow<Precondition> for Implied<V> {
     fn borrow(&self) -> &Precondition {
         &self.by
-    }
-}
-
-struct BasicImplicationInvestigator<Q> {
-    program_dep_map: BasicProgramDependenceMap,
-    trace_querier: Rc<Q>,
-}
-
-pub(super) fn default_implication_investigator<Q: TraceQuerier>(
-    trace_querier: Rc<Q>,
-) -> impl ImplicationInvestigator {
-    BasicImplicationInvestigator {
-        program_dep_map: default_program_dependence_map(),
-        trace_querier,
-    }
-}
-
-type Record = <BasicExeTraceRecorder as super::ExeTraceStorage>::Record;
-type AssignmentLocation = (InstanceKindId, AssignmentId);
-
-impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q> {
-    #[tracing::instrument(level = "debug", skip(self), ret)]
-    fn antecedent_of_latest_assignment(
-        &self,
-        (body, assignment_id): AssignmentLocation,
-    ) -> Option<Antecedents> {
-        let assignments_info = self.program_dep_map.assignments(body)?;
-
-        if !assignments_info.alternatives_may_exist(assignment_id) {
-            return None;
-        }
-
-        let bb_index = assignments_info.basic_block_index(assignment_id);
-
-        self.control_dep_latest_at(BasicBlockLocation {
-            body,
-            index: bb_index,
-        })
-    }
-
-    #[tracing::instrument(level = "debug", skip(self), ret)]
-    fn antecedent_of_latest_enum_assignment(
-        &self,
-        (body, assignment_id): (InstanceKindId, AssignmentId),
-    ) -> Option<EnumAntecedentsResult> {
-        let assignments_info = self.program_dep_map.assignments(body)?;
-        let bb_index = assignments_info.basic_block_index(assignment_id);
-
-        /* NOTE: Why don't we check alternatives for the tag?
-         * Hypothesis: It is always true.
-         * First, note that this function is meant to be used when the Rvalue is an enum.
-         * (so does not apply to cases like returning the result of a function call).
-         * Now assume that the tag has no alternatives, and there is a controller.
-         * Then, the program would look like:
-         * ```
-         * if condition1 {
-         *     VariantX(data)
-         * } else if condition2 {
-         *     VariantX(data)
-         * } else if ... {
-         *     VariantX(data)
-         * }
-         * ```
-         * which we hypothesize is not common (using the same variant in all branches).
-         */
-        let tag = {
-            self.control_dep_latest_at(BasicBlockLocation {
-                body,
-                index: bb_index,
-            })
-        }?;
-
-        // Alternatives are supposed to be specialized for the enums to mean the fields of the enum.
-        let fields = assignments_info
-            .alternatives_may_exist(assignment_id)
-            .then(|| tag.clone());
-
-        Some(EnumAntecedentsResult { tag, fields })
-    }
-}
-
-impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
-    #[tracing::instrument(level = "debug", skip(self), ret)]
-    fn control_dep_latest_at(&self, loc: BasicBlockLocation) -> Option<Antecedents> {
-        let cdg = self.program_dep_map.control_dependency(loc.body)?;
-
-        if !self
-            .trace_querier
-            .any_sym_dependent_in_current_call(loc.body)
-        {
-            return None;
-        }
-
-        let get_controllers = |block| {
-            Some(cdg.controllers(block).into_iter().collect::<Vec<_>>()).filter(|cs| !cs.is_empty())
-        };
-
-        let mut controllers = get_controllers(loc.index)?;
-        let (controller_step, found) =
-            self.trace_querier
-                .find_map_in_current_func(loc.body, move |block, c| {
-                    if controllers.contains(&block) {
-                        if c.discr.is_symbolic() || c.discr.by.is_some() {
-                            Some(true)
-                        } else {
-                            // Recurse
-                            if let Some(t_controllers) = get_controllers(block) {
-                                controllers = t_controllers;
-                                None // Continue
-                            } else {
-                                Some(false)
-                            }
-                        }
-                    } else {
-                        None
-                    }
-                })?;
-
-        found.then(|| {
-            let constraint: &BasicConstraint = controller_step.as_ref();
-            if constraint.discr.is_symbolic() {
-                Antecedents::from_constraint(controller_step.index())
-            } else if let Precondition::Constraints(constraints) = &constraint.discr.by {
-                // Discriminant is always a primitive, so it won't be refined.
-                constraints.expect_whole().clone()
-            } else {
-                unreachable!()
-            }
-        })
     }
 }
