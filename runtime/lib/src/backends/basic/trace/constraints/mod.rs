@@ -29,6 +29,7 @@ use backend::{
     config::SolverImpl,
     config::{ExecutionTraceConfig, OutputConfig, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
+    implication::PreconditionQuery,
 };
 
 use super::{Step, SymDependentMarker};

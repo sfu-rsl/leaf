@@ -1,7 +1,6 @@
 use core::{iter, ops::DerefMut};
-use std::{borrow::Cow, num::NonZero};
 
-use common::type_info::{TagEncodingInfo, TagInfo};
+use common::type_info::TagEncodingInfo;
 
 use crate::{
     abs::{
@@ -10,25 +9,29 @@ use crate::{
         backend::AssignmentHandler,
         expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
     },
-    utils::{RangeIntersection, alias::RRef},
+    utils::alias::RRef,
 };
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicValue, BasicValueExprBuilder, CallStackInfo, ImplicationInvestigator,
-    Implied, PlaceValueRef, Precondition, TypeDatabase, TypeLayoutResolver, ValueRef,
-    VariablesState, alias::BasicExprBuilder, expr::prelude::*,
-    implication::PreconditionConstraints, place::DiscriminantPossiblePlace,
-    type_info::TypeLayoutResolverExt,
+    BasicBackend, BasicValue, BasicValueExprBuilder, CallStackInfo, Implied, PlaceValueRef,
+    Precondition, TypeDatabase, ValueRef, VariablesState, alias::BasicExprBuilder,
+    expr::prelude::*, implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
 };
 
+#[cfg(feature = "implicit_flow")]
+use backend::ImplicationInvestigator;
+
 pub(crate) struct BasicAssignmentHandler<'s, EB> {
+    #[cfg(feature = "implicit_flow")]
     id: AssignmentId,
+    #[cfg(feature = "implicit_flow")]
     current_func: InstanceKindId,
     dest: PlaceValueRef,
     vars_state: &'s mut dyn VariablesState,
     expr_builder: RRef<EB>,
     type_manager: &'s dyn TypeDatabase,
+    #[cfg(feature = "implicit_flow")]
     implication_investigator: &'s dyn ImplicationInvestigator,
 }
 
@@ -39,12 +42,15 @@ impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
         backend: &'s mut BasicBackend,
     ) -> Self {
         Self {
+            #[cfg(feature = "implicit_flow")]
             id,
+            #[cfg(feature = "implicit_flow")]
             current_func: backend.call_stack_manager.current_func().body_id,
             dest,
             vars_state: backend.call_stack_manager.top(),
             expr_builder: backend.expr_builder.clone(),
             type_manager: backend.type_manager.as_ref(),
+            #[cfg(feature = "implicit_flow")]
             implication_investigator: backend.implication_investigator.as_ref(),
         }
     }
@@ -175,17 +181,23 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
         self.set(discr_value)
     }
 
+    #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
     fn array_from(mut self, elements: impl Iterator<Item = Self::Operand>) {
         let (preconditions, values) = elements
             .map(Implied::into_tuple)
             .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
+        let precondition = self.precondition_of_array(preconditions);
 
         let value = ConcreteValue::Array(ArrayValue {
             elements: values.into_iter().collect(),
         });
 
         self.set_no_ant(Implied {
-            by: self.precondition_of_array(preconditions),
+            by: precondition,
             value: value.to_value_ref(),
         })
     }
@@ -275,7 +287,8 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
     }
 
     fn set(&mut self, mut value: BasicValue) {
-        self.add_antecedent(&mut value.by);
+        #[cfg(feature = "implicit_flow")]
+        self.add_antecedent(&mut value);
         self.set_no_ant(value);
     }
 
@@ -284,54 +297,11 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
         self.vars_state.set_place(&self.dest, value);
     }
 
-    fn add_antecedent(&self, precondition: &mut Precondition) {
-        let antecedent = self
-            .implication_investigator
-            .antecedent_of_latest_assignment((self.current_func, self.id));
-        if let Some(antecedent) = antecedent {
-            precondition.add_antecedents(Cow::Owned(antecedent), || {
-                self.dest.type_info().get_size(self.type_manager).unwrap()
-            });
-        }
-    }
-
     fn expr_builder(&self) -> impl DerefMut<Target = EB> + '_ {
         self.expr_builder.as_ref().borrow_mut()
     }
 
-    fn precondition_of_array(&self, elements: Vec<Precondition>) -> Precondition {
-        let for_elements = self
-            .implication_investigator
-            .antecedent_of_latest_assignment((self.current_func, self.id));
-
-        let elements = if elements.iter().any(|p| p.is_some()) {
-            let element_intervals = self
-                .type_manager
-                .layouts()
-                .resolve_array_elements(self.dest.type_id())
-                .1;
-            let elements = elements
-                .into_iter()
-                .zip(element_intervals)
-                .map(|(mut p, (offset, size))| {
-                    if let Some(for_elements) = for_elements.as_ref() {
-                        p.add_antecedents(Cow::Borrowed(for_elements), || size);
-                    }
-                    (p, (offset, size))
-                })
-                .flat_map(|(p, (offset, size))| {
-                    p.take_constraints()
-                        .zip(NonZero::new(size).map(|s| (offset, s)))
-                })
-                .flat_map(|(c, (offset, size))| c.at_loc(offset, size));
-            PreconditionConstraints::refined(elements)
-        } else {
-            None
-        };
-
-        elements.or(for_elements.map(Into::into)).into()
-    }
-
+    #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
     fn set_adt_value(
         &mut self,
         kind: AdtKind,
@@ -343,6 +313,9 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
             })
             .unzip::<_, _, Vec<_>, Vec<_>>();
 
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
         let precondition = self.precondition_of_adt(&kind, preconditions);
 
         let value = ConcreteValue::Adt(AdtValue {
@@ -354,106 +327,6 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
             by: precondition,
             value: value.to_value_ref(),
         })
-    }
-
-    fn precondition_of_adt(
-        &self,
-        kind: &AdtKind,
-        fields: Vec<Option<Precondition>>,
-    ) -> Precondition {
-        let opt_tag_interval = self
-            .dest
-            .type_info()
-            .get_type(self.type_manager)
-            .unwrap()
-            .tag
-            .as_ref()
-            .and_then(|tag| {
-                if let TagInfo::Regular { as_field, encoding } = tag {
-                    let tag_ty = self.type_manager.get_type(&as_field.ty);
-                    Some((
-                        (
-                            as_field.offset,
-                            tag_ty.size().and_then(NonZero::new).unwrap(),
-                        ),
-                        matches!(encoding, TagEncodingInfo::Niche { .. }),
-                    ))
-                } else {
-                    None
-                }
-            });
-
-        let (for_fields, for_tag) = if opt_tag_interval.is_some() {
-            let antecedents = self
-                .implication_investigator
-                .antecedent_of_latest_enum_assignment((self.current_func, self.id));
-
-            let (for_fields, for_tag) = antecedents.map(|a| (a.fields, a.tag)).unzip();
-            (for_fields.flatten(), for_tag)
-        } else {
-            // If not enum, work as regular.
-            let for_fields = self
-                .implication_investigator
-                .antecedent_of_latest_assignment((self.current_func, self.id));
-            (for_fields, None)
-        };
-
-        let mut fields = if fields.iter().flatten().any(|p| p.is_some()) {
-            let field_intervals = self
-                .type_manager
-                .layouts()
-                .resolve_adt_fields(self.dest.type_id(), kind.variant_index())
-                .map(|(_, offset, size)| (offset, size));
-            fields
-                .into_iter()
-                .zip(field_intervals)
-                .flat_map(|(p, interval)| p.map(|p| (p, interval)))
-                .map(|(mut p, (offset, size))| {
-                    if let Some(for_fields) = for_fields.as_ref() {
-                        p.add_antecedents(Cow::Borrowed(for_fields), || size);
-                    }
-                    (p, (offset, size))
-                })
-                .flat_map(|(p, (offset, size))| {
-                    p.take_constraints()
-                        .zip(NonZero::new(size).map(|s| (offset, s)))
-                })
-                .flat_map(|(c, (offset, size))| c.at_loc(offset, size))
-                .collect::<Vec<_>>()
-        } else {
-            Vec::with_capacity(for_tag.is_some() as usize)
-        };
-
-        if let Some(antecedents) = for_tag {
-            let ((tag_offset, tag_size), is_niche) = opt_tag_interval.unwrap();
-            if is_niche {
-                // If the tag is niche, and it is the niche variant assignment
-                let tag_range = tag_offset..(tag_offset + tag_size.get());
-                if let Some((offset, size, existing)) =
-                    fields.iter_mut().find(|(offset, size, _)| {
-                        RangeIntersection::is_overlapping(
-                            &(*offset..(offset + size.get())),
-                            &tag_range,
-                        )
-                    })
-                {
-                    // Then it should fall into one of the fields.
-                    debug_assert!(RangeIntersection::contains(
-                        &(*offset..(*offset + size.get())),
-                        &tag_range,
-                    ));
-                    existing.extend_with(&antecedents);
-                } else {
-                    fields.push((tag_offset, tag_size, antecedents));
-                }
-            } else {
-                fields.push((tag_offset, tag_size, antecedents));
-            }
-        }
-
-        PreconditionConstraints::refined(fields)
-            .or(for_fields.map(Into::into))
-            .into()
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -540,5 +413,187 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
         *ty.as_int()
             // https://doc.rust-lang.org/reference/type-layout.html#primitive-representations
             .unwrap_or_else(|| panic!("Expected the type of the tag to be a int type: {:?}", ty))
+    }
+}
+
+#[cfg(feature = "implicit_flow")]
+pub(super) mod precondition {
+    use std::{borrow::Cow, num::NonZero};
+
+    use common::type_info::TagInfo;
+
+    use crate::utils::RangeIntersection;
+
+    use crate::backends::basic as backend;
+    use backend::{
+        TypeLayoutResolver,
+        implication::{PreconditionConstraints, PreconditionQuery},
+        type_info::TypeLayoutResolverExt,
+    };
+
+    use super::*;
+
+    impl<EB> BasicAssignmentHandler<'_, EB> {
+        pub(super) fn add_antecedent(&self, value: &mut BasicValue) {
+            add_antecedent(
+                self.implication_investigator,
+                self.type_manager,
+                &self.dest,
+                (self.current_func, self.id),
+                value,
+            );
+        }
+
+        pub(super) fn precondition_of_array(&self, elements: Vec<Precondition>) -> Precondition {
+            let for_elements = self
+                .implication_investigator
+                .antecedent_of_latest_assignment((self.current_func, self.id));
+
+            // If non of the elements have preconditions, don't bother with refined information.
+            let elements = if elements.iter().any(|p| p.is_some()) {
+                let element_intervals = self
+                    .type_manager
+                    .layouts()
+                    .resolve_array_elements(self.dest.type_id())
+                    .1;
+                let elements = elements
+                    .into_iter()
+                    .zip(element_intervals)
+                    .map(|(mut p, (offset, size))| {
+                        if let Some(for_elements) = for_elements.as_ref() {
+                            p = p.add(Cow::Borrowed(for_elements), || size);
+                        }
+                        (p, (offset, size))
+                    })
+                    .flat_map(|(p, (offset, size))| {
+                        p.take_constraints()
+                            .zip(NonZero::new(size).map(|s| (offset, s)))
+                    })
+                    .flat_map(|(c, (offset, size))| c.at_loc(offset, size));
+                PreconditionConstraints::refined(elements)
+            } else {
+                None
+            };
+
+            Precondition::new(elements.or(for_elements.map(Into::into)))
+        }
+
+        pub(super) fn precondition_of_adt(
+            &self,
+            kind: &AdtKind,
+            fields: Vec<Option<Precondition>>,
+        ) -> Precondition {
+            let opt_tag_interval = self
+                .dest
+                .type_info()
+                .get_type(self.type_manager)
+                .unwrap()
+                .tag
+                .as_ref()
+                .and_then(|tag| {
+                    if let TagInfo::Regular { as_field, encoding } = tag {
+                        let tag_ty = self.type_manager.get_type(&as_field.ty);
+                        Some((
+                            (
+                                as_field.offset,
+                                tag_ty.size().and_then(NonZero::new).unwrap(),
+                            ),
+                            matches!(encoding, TagEncodingInfo::Niche { .. }),
+                        ))
+                    } else {
+                        None
+                    }
+                });
+
+            let (for_fields, for_tag) = if opt_tag_interval.is_some() {
+                let antecedents = self
+                    .implication_investigator
+                    .antecedent_of_latest_enum_assignment((self.current_func, self.id));
+
+                let (for_fields, for_tag) = antecedents.map(|a| (a.fields, a.tag)).unzip();
+                (for_fields.flatten(), for_tag)
+            } else {
+                // If not enum, work as regular.
+                let for_fields = self
+                    .implication_investigator
+                    .antecedent_of_latest_assignment((self.current_func, self.id));
+                (for_fields, None)
+            };
+
+            let mut fields = if fields.iter().flatten().any(|p| p.is_some()) {
+                let field_intervals = self
+                    .type_manager
+                    .layouts()
+                    .resolve_adt_fields(self.dest.type_id(), kind.variant_index())
+                    .map(|(_, offset, size)| (offset, size));
+                fields
+                    .into_iter()
+                    .zip(field_intervals)
+                    .flat_map(|(p, interval)| p.map(|p| (p, interval)))
+                    .map(|(mut p, (offset, size))| {
+                        if let Some(for_fields) = for_fields.as_ref() {
+                            p = p.add(Cow::Borrowed(for_fields), || size);
+                        }
+                        (p, (offset, size))
+                    })
+                    .flat_map(|(p, (offset, size))| {
+                        p.take_constraints()
+                            .zip(NonZero::new(size).map(|s| (offset, s)))
+                    })
+                    .flat_map(|(c, (offset, size))| c.at_loc(offset, size))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::with_capacity(for_tag.is_some() as usize)
+            };
+
+            if let Some(antecedents) = for_tag {
+                let ((tag_offset, tag_size), is_niche) = opt_tag_interval.unwrap();
+                if is_niche {
+                    // If the tag is niche, and it is the niche variant assignment
+                    let tag_range = tag_offset..(tag_offset + tag_size.get());
+                    if let Some((offset, size, existing)) =
+                        fields.iter_mut().find(|(offset, size, _)| {
+                            RangeIntersection::is_overlapping(
+                                &(*offset..(offset + size.get())),
+                                &tag_range,
+                            )
+                        })
+                    {
+                        // Then it should fall into one of the fields.
+                        debug_assert!(RangeIntersection::contains(
+                            &(*offset..(*offset + size.get())),
+                            &tag_range,
+                        ));
+                        existing.extend_with(&antecedents);
+                    } else {
+                        fields.push((tag_offset, tag_size, antecedents));
+                    }
+                } else {
+                    fields.push((tag_offset, tag_size, antecedents));
+                }
+            }
+
+            Precondition::new(
+                PreconditionConstraints::refined(fields).or(for_fields.map(Into::into)),
+            )
+        }
+    }
+
+    pub(crate) fn add_antecedent(
+        implication_investigator: &(impl ImplicationInvestigator + ?Sized),
+        type_manager: &dyn TypeDatabase,
+        dest: &PlaceValueRef,
+        assignment_id: (InstanceKindId, AssignmentId),
+        value: &mut BasicValue,
+    ) {
+        let Some(antecedent) =
+            implication_investigator.antecedent_of_latest_assignment(assignment_id)
+        else {
+            return;
+        };
+
+        value.add_antecedents(Cow::Owned(antecedent), || {
+            dest.type_info().get_size(type_manager).unwrap()
+        });
     }
 }

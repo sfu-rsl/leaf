@@ -833,6 +833,7 @@ mod adapters {
         use crate::backends::basic::{
             Implied, Precondition,
             alias::{ImpliedValueRefExprBuilder, ValueRefExprBuilderWrapper},
+            implication::PreconditionConstruct,
         };
 
         use super::*;
@@ -852,7 +853,7 @@ mod adapters {
                 op: AbsBinaryOp,
             ) -> Self::Expr<'a> {
                 Implied {
-                    by: Precondition::merge(vec![first.by, second.by]),
+                    by: Precondition::merge([first.by, second.by]),
                     value: self
                         .0
                         .borrow_mut()
@@ -890,7 +891,7 @@ mod adapters {
                 op: AbsTernaryOp,
             ) -> Self::Expr<'a> {
                 Implied {
-                    by: Precondition::merge(vec![first.by, second.by, third.by]),
+                    by: Precondition::merge([first.by, second.by, third.by]),
                     value: self
                         .0
                         .borrow_mut()

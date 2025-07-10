@@ -13,7 +13,7 @@ use backend::{
     TraceQuerier,
 };
 
-use super::{Antecedents, Precondition};
+use super::{Antecedents, PreconditionQuery};
 
 type BasicProgramDependenceMap = LoadedProgramDepMap;
 
@@ -139,7 +139,7 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
             let constraint: &BasicConstraint = controller_step.as_ref();
             if constraint.discr.is_symbolic() {
                 Antecedents::from_constraint(controller_step.index())
-            } else if let Precondition::Constraints(constraints) = &constraint.discr.by {
+            } else if let Some(constraints) = constraint.discr.by.constraints() {
                 // Discriminant is always a primitive, so it won't be refined.
                 constraints.expect_whole().clone()
             } else {

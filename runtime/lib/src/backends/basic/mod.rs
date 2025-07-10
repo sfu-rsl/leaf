@@ -40,7 +40,7 @@ use self::{
     config::BasicBackendConfig,
     constraint::BasicConstraintHandler,
     expr::{SymVarId, prelude::*},
-    implication::{Antecedents, Implied, Precondition, default_implication_investigator},
+    implication::{Antecedents, Implied, Precondition},
     operand::BasicOperandHandler,
     place::BasicPlaceHandler,
     state::{BasicMemoryHandler, RawPointerVariableState, make_sym_place_handler},
@@ -59,6 +59,7 @@ pub struct BasicBackend {
     expr_builder: RRef<BasicExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeDatabase>,
+    #[cfg(feature = "implicit_flow")]
     implication_investigator: Rc<dyn ImplicationInvestigator>,
     tags: RRef<Vec<Tag>>,
 }
@@ -88,12 +89,21 @@ impl BasicBackend {
             &config.outputs,
             &config.solver,
         );
-        let constraint_steps = TraceViewProvider::view(&trace_manager);
-        let constraints = TraceViewProvider::<BasicConstraint>::view(&trace_manager);
-        let sym_dependent_step_indices =
-            TraceIndicesProvider::<trace::SymDependentMarker>::indices(&trace_manager);
+        #[cfg(feature = "implicit_flow")]
+        let implication_investigator = {
+            let constraint_steps = TraceViewProvider::view(&trace_manager);
+            let constraints = TraceViewProvider::<BasicConstraint>::view(&trace_manager);
+            let sym_dependent_step_indices =
+                TraceIndicesProvider::<trace::SymDependentMarker>::indices(&trace_manager);
+            let trace_querier = Rc::new(default_trace_querier(
+                trace_recorder_ref.borrow().records(),
+                constraint_steps,
+                constraints,
+                sym_dependent_step_indices,
+            ));
+            Rc::new(implication::default_implication_investigator(trace_querier))
+        };
         let trace_manager_ref = Rc::new(RefCell::new(trace_manager));
-        let trace_manager = trace_manager_ref.clone();
 
         let sym_place_handler_factory = |s| {
             Rc::new(RefCell::from(make_sym_place_handler(s, || {
@@ -105,14 +115,6 @@ impl BasicBackend {
         };
         let sym_read_handler_ref = sym_place_handler_factory(config.sym_place.read);
         let sym_write_handler_ref = sym_place_handler_factory(config.sym_place.write);
-
-        let trace_querier = Rc::new(default_trace_querier(
-            trace_recorder_ref.borrow().records(),
-            constraint_steps,
-            constraints,
-            sym_dependent_step_indices,
-        ));
-        let implication_investigator = Rc::new(default_implication_investigator(trace_querier));
 
         Self {
             call_stack_manager: BasicCallStackManager::new(
@@ -130,13 +132,14 @@ impl BasicBackend {
                 }),
                 &config.call,
             ),
-            trace_manager,
+            trace_manager: trace_manager_ref.clone(),
             trace_recorder: trace_recorder_ref.clone(),
             expr_builder: Rc::new(RefCell::new(expr::builders::to_implied_expr_builder(
                 expr_builder,
             ))),
             sym_values: sym_var_manager.clone(),
             type_manager,
+            #[cfg(feature = "implicit_flow")]
             implication_investigator,
             tags: tags_ref.clone(),
         }
@@ -315,6 +318,7 @@ struct EnumAntecedentsResult {
     fields: Option<Antecedents>,
 }
 
+#[cfg(feature = "implicit_flow")]
 trait ImplicationInvestigator {
     fn antecedent_of_latest_assignment(
         &self,

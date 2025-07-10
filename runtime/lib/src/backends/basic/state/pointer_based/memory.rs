@@ -15,7 +15,7 @@ mod high {
 
     use crate::backends::basic::{
         expr::SymValueRef,
-        implication::{Antecedents, Precondition, PreconditionConstraints},
+        implication::{Antecedents, Precondition, PreconditionConstraints, PreconditionQuery},
     };
 
     use low::Memory;
@@ -36,6 +36,7 @@ mod high {
     #[derive(Default)]
     pub(crate) struct MemoryGate {
         value_mem: Memory<ValueObject>,
+        #[cfg(feature = "implicit_flow")]
         precondition_mem: Memory<PreconditionObject>,
     }
 
@@ -82,6 +83,7 @@ mod high {
             values
         }
 
+        #[cfg(feature = "implicit_flow")]
         #[tracing::instrument(level = "debug", skip(self), ret)]
         pub(crate) fn read_preconditions<'a, 'b>(
             &'a self,
@@ -166,6 +168,7 @@ mod high {
             );
         }
 
+        #[cfg(feature = "implicit_flow")]
         #[tracing::instrument(level = "debug", skip(self))]
         pub(crate) fn erase_preconditions_in(&mut self, addr: Address, size: TypeSize) {
             self.inner_erase_preconditions_in(addr, size, false);
@@ -206,6 +209,7 @@ mod high {
             }
         }
 
+        #[cfg(feature = "implicit_flow")]
         #[tracing::instrument(level = "debug", skip(self))]
         pub(crate) fn replace_preconditions(
             &mut self,
@@ -244,6 +248,7 @@ mod high {
             }
         }
 
+        #[cfg(feature = "implicit_flow")]
         #[tracing::instrument(level = "debug", skip(self))]
         fn inner_erase_preconditions_in(
             &mut self,
@@ -313,6 +318,7 @@ mod high {
             }
         }
 
+        #[cfg(feature = "implicit_flow")]
         #[tracing::instrument(level = "debug", skip(self, obj_precondition))]
         fn split_erase_preconditions_and_insert(
             &mut self,

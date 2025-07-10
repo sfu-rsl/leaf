@@ -330,22 +330,30 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     }
 
     fn get_select_sym_place_result(&self, select: &PlaceSelect) -> Implied<ValueSelect<ValueRef>> {
-        let mut preconditions = Vec::new();
+        #[cfg(feature = "implicit_flow")]
+        let mut preconditions: Vec<Precondition> = Vec::new();
+
         let value = select.map_leaves(
             |index| SliceIndex {
                 index: index.clone(),
                 from_end: false,
             },
             |place| {
-                let Implied { by, value } = self.get_single_sym_place_result(place);
-                preconditions.push(by);
-                value.to_value_ref()
+                let read_val = self.get_single_sym_place_result(place);
+                #[cfg(feature = "implicit_flow")]
+                preconditions.push(read_val.by);
+                read_val.value.to_value_ref()
             },
         );
 
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
+        // We overapproximate over the preconditions of the leaves for simplicity.
+        let precondition = Precondition::merge(preconditions);
+
         Implied {
-            // We overapproximate over the preconditions of the leaves for simplicity.
-            by: Precondition::merge(preconditions),
+            by: precondition,
             value,
         }
     }

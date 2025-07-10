@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{CurrentSolverCase, CurrentSolverValue, OutputConfig, Step, backend};
-use backend::Precondition;
+use backend::{Precondition, implication::PreconditionQuery};
 
 pub(super) fn create_solver_constraints_dumper<'ctx, S, V, C>(
     config: &OutputConfig,
@@ -54,20 +54,6 @@ where
     S: Borrow<Step> + HasIndex,
     V: Borrow<Precondition>,
 {
-    impl serde::Serialize for Precondition {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer,
-        {
-            match self {
-                Precondition::NoneOrUnknown => serializer.serialize_none(),
-                Precondition::Constraints(constraints) => {
-                    constraints.expect_whole().serialize(serializer)
-                }
-            }
-        }
-    }
-
     let mut serializer = match config {
         OutputConfig::File(cfg) => {
             assert!(

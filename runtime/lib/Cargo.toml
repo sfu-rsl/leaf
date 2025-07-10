@@ -54,6 +54,8 @@ cfg-if = { version = "1.0" }
 default = []
 release_sym_value_loss_checks = []
 
+implicit_flow = []
+
 runtime_access_raw_ptr = []
 runtime_access_mutex = []
 

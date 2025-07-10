@@ -1,10 +1,9 @@
-mod stack;
-use std::{borrow::Cow, cell::RefMut};
+use std::cell::RefMut;
 
 use derive_more as dm;
 
 use crate::abs::{
-    AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local, LocalIndex, TypeId,
+    AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local, LocalIndex,
     backend::{ArgsTupling, CallHandler, PhasedCallTraceRecorder},
     utils::BasicBlockLocationExt,
 };
@@ -14,6 +13,8 @@ use backend::{
     BasicBackend, BasicValue, BasicVariablesState, CallStackInfo, GenericVariablesState, Implied,
     PlaceValueRef, TypeDatabase, Value, expr::prelude::DeterPlaceValueRef,
 };
+
+mod stack;
 
 pub(super) use self::stack::BasicCallStackManager;
 use self::stack::EntranceToken;
@@ -98,7 +99,8 @@ impl<T> CallStackManager for T where
 pub(crate) struct BasicCallHandler<'a> {
     call_stack_manager: &'a mut dyn CallStackManager,
     type_manager: &'a dyn TypeDatabase,
-    implication_investigator: &'a dyn ImplicationInvestigator,
+    #[cfg(feature = "implicit_flow")]
+    implication_investigator: &'a dyn super::ImplicationInvestigator,
     trace_recorder: RefMut<'a, dyn PhasedCallTraceRecorder>,
 }
 
@@ -107,6 +109,7 @@ impl<'a> BasicCallHandler<'a> {
         Self {
             call_stack_manager: &mut backend.call_stack_manager,
             type_manager: backend.type_manager.as_ref(),
+            #[cfg(feature = "implicit_flow")]
             implication_investigator: backend.implication_investigator.as_ref(),
             trace_recorder: backend.trace_recorder.borrow_mut(),
         }
@@ -236,6 +239,7 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
         self.call_stack_manager.pop_stack_frame();
     }
 
+    #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
     fn after_call(mut self, assignment_id: AssignmentId, result_dest: Self::Place) {
         debug_assert!(!result_dest.is_symbolic());
         let (mut return_val, sanity) = self.call_stack_manager.finalize_call();
@@ -244,14 +248,15 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
             .finish_return(matches!(sanity, CallFlowSanity::Broken));
         debug_assert_eq!(call_site.body, self.current_func());
 
-        let antecedent = self
-            .implication_investigator
-            .antecedent_of_latest_assignment((call_site.body.body_id, assignment_id));
-        if let Some(antecedent) = antecedent {
-            return_val.by.add_antecedents(Cow::Owned(antecedent), || {
-                result_dest.type_info().get_size(self.type_manager).unwrap()
-            });
-        }
+        #[cfg(feature = "implicit_flow")]
+        super::assignment::precondition::add_antecedent(
+            self.implication_investigator,
+            self.type_manager,
+            &result_dest,
+            (call_site.body.body_id, assignment_id),
+            &mut return_val,
+        );
+
         self.call_stack_manager
             .top()
             .set_place(DeterPlaceValueRef::new(result_dest).as_ref(), return_val);
@@ -367,5 +372,3 @@ mod tupling {
     }
 }
 use tupling::BasicUntupleHelper;
-
-use super::ImplicationInvestigator;

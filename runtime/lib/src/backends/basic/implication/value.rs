@@ -1,28 +1,31 @@
 use core::{
     borrow::Borrow,
     num::NonZero,
-    ops::{DerefMut, FromResidual},
+    ops::{Deref, DerefMut},
 };
-use std::{borrow::Cow, collections::BTreeSet, rc::Rc};
+use std::borrow::Cow;
 
+use cfg_if::cfg_if;
 use derive_more as dm;
 
 use crate::abs::{PointerOffset, TypeSize};
 
 use super::ConstraintId;
 
-pub(crate) type Antecedents = NonEmptyConstraintSet;
+pub(crate) type Antecedents = NonEmptyConstraints;
 
 type RangedAntecedents = (PointerOffset, NonZero<TypeSize>, Antecedents);
 
 mod empty_guarded {
+    use std::{collections::BTreeSet, rc::Rc};
+
     use super::*;
 
     #[derive(Debug, Clone, dm::Deref)]
-    pub(crate) struct NonEmptyConstraintSet(Rc<BTreeSet<ConstraintId>>);
+    pub(crate) struct NonEmptyConstraints(Rc<BTreeSet<ConstraintId>>);
 
-    impl NonEmptyConstraintSet {
-        pub fn new(set: BTreeSet<ConstraintId>) -> Option<Self> {
+    impl NonEmptyConstraints {
+        fn new(set: BTreeSet<ConstraintId>) -> Option<Self> {
             if set.is_empty() {
                 None
             } else {
@@ -74,68 +77,12 @@ mod empty_guarded {
         }
     }
 }
-use empty_guarded::{NonEmptyConstraintSet, NonEmptyRefinedConstraints};
-
-#[derive(Debug, Clone, Default, dm::From)]
-pub(crate) enum Precondition {
-    #[default]
-    NoneOrUnknown,
-    #[from(forward)]
-    Constraints(PreconditionConstraints),
-}
+use empty_guarded::{NonEmptyConstraints, NonEmptyRefinedConstraints};
 
 #[derive(Debug, Clone, dm::From)]
 pub(crate) enum PreconditionConstraints {
-    Whole(NonEmptyConstraintSet),
+    Whole(NonEmptyConstraints),
     Refined(NonEmptyRefinedConstraints),
-}
-
-impl Precondition {
-    pub fn is_some(&self) -> bool {
-        match self {
-            Self::NoneOrUnknown => false,
-            Self::Constraints(..) => true,
-        }
-    }
-
-    pub fn take_constraints(self) -> Option<PreconditionConstraints> {
-        match self {
-            Self::Constraints(constraints) => Some(constraints),
-            _ => None,
-        }
-    }
-
-    pub fn add_antecedents(
-        &mut self,
-        antecedents: Cow<Antecedents>,
-        whole_size: impl FnOnce() -> TypeSize,
-    ) {
-        match self {
-            Self::NoneOrUnknown => {
-                *self = PreconditionConstraints::Whole(antecedents.into_owned()).into()
-            }
-            Self::Constraints(constraints) => constraints.add(antecedents, whole_size),
-        }
-    }
-
-    pub fn merge<'a>(preconditions: impl IntoIterator<Item = impl Borrow<Self>>) -> Self {
-        let mut iter =
-            preconditions
-                .into_iter()
-                .flat_map(|precondition| match precondition.borrow() {
-                    Self::NoneOrUnknown => None,
-                    Self::Constraints(constraints) => Some(constraints.merge().into_owned()),
-                });
-        iter.next()
-            .map(|first| {
-                iter.fold(first, |mut unified, antecedents| {
-                    unified.extend_with(antecedents.borrow());
-                    unified
-                })
-            })
-            .map(PreconditionConstraints::Whole)
-            .into()
-    }
 }
 
 impl PreconditionConstraints {
@@ -145,14 +92,14 @@ impl PreconditionConstraints {
         NonEmptyRefinedConstraints::from_iter(constraints).map(Self::Refined)
     }
 
-    pub fn expect_whole(&self) -> &NonEmptyConstraintSet {
+    pub fn expect_whole(&self) -> &NonEmptyConstraints {
         match self {
             Self::Whole(antecedents) => antecedents,
             Self::Refined(..) => panic!("Fine information is not expected"),
         }
     }
 
-    pub fn merge(&self) -> Cow<NonEmptyConstraintSet> {
+    pub fn merge(&self) -> Cow<NonEmptyConstraints> {
         match self {
             Self::Whole(antecedents) => Cow::Borrowed(antecedents),
             Self::Refined(refined) => Cow::Owned({
@@ -166,10 +113,9 @@ impl PreconditionConstraints {
         }
     }
 
-    pub fn add(&mut self, other: impl Borrow<Antecedents>, whole_size: impl FnOnce() -> TypeSize) {
-        let other = other.borrow();
+    pub fn add(&mut self, other: Cow<Antecedents>, whole_size: impl FnOnce() -> TypeSize) {
         match self {
-            Self::Whole(antecedents) => antecedents.extend_with(other),
+            Self::Whole(antecedents) => antecedents.extend_with(&other),
             Self::Refined(ref mut refined) => {
                 let mut last_end: PointerOffset = 0;
                 let whole_size = whole_size();
@@ -179,11 +125,11 @@ impl PreconditionConstraints {
                 for (sub_offset, sub_size, mut antecedents) in subs {
                     if sub_offset > last_end {
                         let gap_size = NonZero::new(sub_offset - last_end).unwrap();
-                        refined.push((last_end, gap_size, other.clone()));
+                        refined.push((last_end, gap_size, other.deref().clone()));
                     } else {
                         debug_assert!(sub_offset == last_end, "Overlapping constraints");
                     }
-                    antecedents.extend_with(other);
+                    antecedents.extend_with(&other);
                     refined.push((sub_offset, sub_size, antecedents));
                     last_end = sub_offset + sub_size.get();
                 }
@@ -192,7 +138,7 @@ impl PreconditionConstraints {
                     refined.push((
                         last_end,
                         NonZero::new(whole_size - last_end).unwrap(),
-                        other.clone(),
+                        other.into_owned(),
                     ));
                 } else {
                     debug_assert!(last_end == whole_size, "Overflowing constraints");
@@ -219,51 +165,263 @@ impl PreconditionConstraints {
     }
 }
 
-impl<T: Into<PreconditionConstraints>> From<Option<T>> for Precondition {
-    fn from(value: Option<T>) -> Self {
-        match value {
-            Some(value) => Precondition::Constraints(value.into()),
-            None => Precondition::NoneOrUnknown,
-        }
+cfg_if! {
+    if #[cfg(feature = "implicit_flow")] {
+        type PreconditionImpl = enabled::Precondition;
+    } else {
+        type PreconditionImpl = disabled::Precondition;
     }
 }
 
+pub(crate) trait ImpliedValue {
+    type Precondition: PreconditionConstruct + PreconditionQuery;
+}
+
+pub(crate) trait PreconditionConstruct: Default {
+    fn always() -> Self;
+    fn unknown() -> Self;
+    fn new(constraints: Option<impl Into<PreconditionConstraints>>) -> Self;
+
+    fn merge<'a>(preconditions: impl IntoIterator<Item = impl Borrow<Self>>) -> Self;
+
+    fn add(self, antecedents: Cow<Antecedents>, whole_size: impl FnOnce() -> TypeSize) -> Self;
+}
+
+pub(crate) trait PreconditionQuery {
+    fn is_some(&self) -> bool;
+
+    fn constraints(&self) -> Option<&PreconditionConstraints>;
+
+    fn take_constraints(self) -> Option<PreconditionConstraints>;
+}
+
+/* NOTE: It would be neater if P was first
+ * But V is more of a parameter than P. P is kept as generic for better abstraction.
+ * It is supposed to be set by compilation configuration. */
 #[derive(Debug, Clone, dm::Deref)]
-pub(crate) struct Implied<V> {
-    pub by: Precondition,
+pub(crate) struct Implied<V, P = PreconditionImpl> {
+    pub by: P,
     #[deref]
     pub value: V,
 }
 
-impl<V> Implied<V> {
-    pub fn always(value: V) -> Self {
+impl<V, P> Implied<V, P> {
+    pub fn always(value: V) -> Self
+    where
+        P: PreconditionConstruct,
+    {
         Self {
-            by: Precondition::NoneOrUnknown,
+            by: P::always(),
             value,
         }
     }
 
-    pub fn by_unknown(value: V) -> Self {
+    pub fn by_unknown(value: V) -> Self
+    where
+        P: PreconditionConstruct,
+    {
         Self {
-            by: Precondition::NoneOrUnknown,
+            by: P::unknown(),
             value,
         }
     }
 
-    pub fn map_value<VTo>(self, f: impl FnOnce(V) -> VTo) -> Implied<VTo> {
+    pub fn map_value<VTo>(self, f: impl FnOnce(V) -> VTo) -> Implied<VTo, P> {
         Implied {
             by: self.by,
             value: f(self.value),
         }
     }
 
-    pub fn into_tuple(self) -> (Precondition, V) {
+    pub fn into_tuple(self) -> (P, V) {
         (self.by, self.value)
+    }
+
+    pub fn add_antecedents(
+        &mut self,
+        antecedents: Cow<Antecedents>,
+        whole_size: impl FnOnce() -> TypeSize,
+    ) where
+        P: PreconditionConstruct,
+    {
+        self.by = core::mem::take(&mut self.by).add(antecedents, whole_size);
     }
 }
 
-impl<V> Borrow<Precondition> for Implied<V> {
-    fn borrow(&self) -> &Precondition {
-        &self.by
+impl<V, P> ImpliedValue for Implied<V, P>
+where
+    P: PreconditionConstruct + PreconditionQuery,
+{
+    type Precondition = P;
+}
+
+mod enabled {
+
+    use super::*;
+
+    #[derive(Debug, Clone, Default, dm::From)]
+    pub(crate) enum Precondition {
+        #[default]
+        NoneOrUnknown,
+        #[from(forward)]
+        Constraints(PreconditionConstraints),
+    }
+
+    impl PreconditionConstruct for Precondition {
+        fn always() -> Self {
+            Precondition::NoneOrUnknown
+        }
+
+        fn unknown() -> Self {
+            Precondition::NoneOrUnknown
+        }
+
+        fn new(constraints: Option<impl Into<PreconditionConstraints>>) -> Self {
+            match constraints {
+                Some(antecedents) => Precondition::Constraints(antecedents.into()),
+                None => Precondition::NoneOrUnknown,
+            }
+        }
+
+        fn merge<'a>(preconditions: impl IntoIterator<Item = impl Borrow<Self>>) -> Self {
+            let mut iter =
+                preconditions
+                    .into_iter()
+                    .flat_map(|precondition| match precondition.borrow() {
+                        Self::NoneOrUnknown => None,
+                        Self::Constraints(constraints) => Some(constraints.merge().into_owned()),
+                    });
+            iter.next()
+                .map(|first| {
+                    iter.fold(first, |mut unified, antecedents| {
+                        unified.extend_with(antecedents.borrow());
+                        unified
+                    })
+                })
+                .map(PreconditionConstraints::Whole)
+                .into()
+        }
+
+        fn add(self, antecedents: Cow<Antecedents>, whole_size: impl FnOnce() -> TypeSize) -> Self {
+            match self {
+                Self::NoneOrUnknown => {
+                    PreconditionConstraints::Whole(antecedents.into_owned()).into()
+                }
+                Self::Constraints(mut constraints) => {
+                    constraints.add(antecedents, whole_size);
+                    Self::Constraints(constraints)
+                }
+            }
+        }
+    }
+
+    impl PreconditionQuery for Precondition {
+        fn is_some(&self) -> bool {
+            match self {
+                Self::NoneOrUnknown => false,
+                Self::Constraints(..) => true,
+            }
+        }
+
+        fn constraints(&self) -> Option<&PreconditionConstraints> {
+            match self {
+                Self::NoneOrUnknown => None,
+                Self::Constraints(constraints) => Some(constraints),
+            }
+        }
+
+        fn take_constraints(self) -> Option<PreconditionConstraints> {
+            match self {
+                Self::Constraints(constraints) => Some(constraints),
+                _ => None,
+            }
+        }
+    }
+
+    impl<T: Into<PreconditionConstraints>> From<Option<T>> for Precondition {
+        fn from(value: Option<T>) -> Self {
+            match value {
+                Some(value) => Precondition::Constraints(value.into()),
+                None => Precondition::NoneOrUnknown,
+            }
+        }
+    }
+
+    impl<V> Borrow<Precondition> for Implied<V, Precondition> {
+        fn borrow(&self) -> &Precondition {
+            &self.by
+        }
+    }
+
+    mod serdes {
+        use serde::Serialize;
+
+        use super::Precondition;
+
+        impl Serialize for Precondition {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: serde::Serializer,
+            {
+                match self {
+                    Precondition::NoneOrUnknown => serializer.serialize_none(),
+                    Precondition::Constraints(constraints) => {
+                        constraints.expect_whole().serialize(serializer)
+                    }
+                }
+            }
+        }
+    }
+}
+
+mod disabled {
+    use super::*;
+
+    pub(crate) type Precondition = ();
+
+    impl PreconditionConstruct for Precondition {
+        fn always() -> Self {
+            ()
+        }
+
+        fn unknown() -> Self {
+            ()
+        }
+
+        fn merge<'a>(_preconditions: impl IntoIterator<Item = impl Borrow<Self>>) -> Self {
+            ()
+        }
+
+        fn add(
+            self,
+            _antecedents: Cow<Antecedents>,
+            _whole_size: impl FnOnce() -> TypeSize,
+        ) -> Self {
+            self
+        }
+
+        fn new(_constraints: Option<impl Into<PreconditionConstraints>>) -> Self {
+            ()
+        }
+    }
+
+    impl PreconditionQuery for Precondition {
+        fn is_some(&self) -> bool {
+            false
+        }
+
+        fn constraints(&self) -> Option<&PreconditionConstraints> {
+            None
+        }
+
+        fn take_constraints(self) -> Option<PreconditionConstraints> {
+            None
+        }
+    }
+
+    impl<V> Borrow<Precondition> for Implied<V, Precondition> {
+        fn borrow(&self) -> &Precondition {
+            &self.by
+        }
     }
 }

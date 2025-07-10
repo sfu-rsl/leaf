@@ -10,7 +10,9 @@ use crate::{
         GenericVariablesState, TypeLayoutResolver, ValueRef,
         alias::{SymValueRefExprBuilder, TypeDatabase},
         expr::{lazy::RawPointerRetriever, prelude::*},
-        implication::{Antecedents, Implied, Precondition, PreconditionConstraints},
+        implication::{
+            Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
+        },
         place::{LocalWithMetadata, PlaceWithMetadata, Projection},
         state::{
             SymPlaceSymEntity, pointer_based::sym_place::strategies::IndexOnlySymPlaceHandler,
@@ -273,8 +275,14 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             _ => self.create_porter_for_copy(place_val, size, values).into(),
         };
 
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
+        let precondition =
+            Self::to_single_precondition(self.memory.read_preconditions(addr, size), size);
+
         Implied {
-            by: Self::to_single_precondition(self.memory.read_preconditions(addr, size), size),
+            by: precondition,
             value,
         }
     }
@@ -299,8 +307,14 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             _ => self.create_porter_for_move(place_val, size, values).into(),
         };
 
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
+        let precondition =
+            Self::to_single_precondition(self.memory.read_preconditions(addr, size), size);
+
         Implied {
-            by: Self::to_single_precondition(self.memory.read_preconditions(addr, size), size),
+            by: precondition,
             value,
         }
     }
@@ -317,6 +331,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     fn drop_deterministic_place(&mut self, place_val: &DeterministicPlaceValue) {
         let size = self.get_type_size(place_val);
         self.memory.erase_values(place_val.address(), size);
+        #[cfg(feature = "implicit_flow")]
         self.memory
             .erase_preconditions_in(place_val.address(), size);
     }
@@ -336,7 +351,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                     .map(|(offset, size, antecedents)| (offset, size, antecedents)),
             ),
         };
-        constraints.into()
+        Precondition::new(constraints)
     }
 }
 
@@ -432,6 +447,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         let mut sym_values = Vec::new();
         self.to_sym_values(&mut sym_values, 0, size, value.value, type_id);
         self.memory.replace_values(addr, size, sym_values);
+        #[cfg(feature = "implicit_flow")]
         self.memory.replace_preconditions(addr, size, value.by);
     }
 
