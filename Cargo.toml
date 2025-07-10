@@ -27,6 +27,7 @@ edition = "2021"
 common = { path = "common", package = "common" }
 macros = { path = "macros" }
 runtime_basic_li = { path = "runtime/flavors/basic_li" }
+runtime_basic_li_no_implicit = { path = "runtime/flavors/basic_li_no_implicit" }
 runtime_noop = { path = "runtime/flavors/noop" }
 libafl_leaf = { path = "integration/libafl/lib" }
 

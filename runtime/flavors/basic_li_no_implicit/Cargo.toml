@@ -1,13 +1,13 @@
 [package]
-name = "runtime_basic"
+name = "runtime_basic_li_no_implicit"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "leafrt_basic"
+name = "leafrt_basic_li_no_implicit"
 crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
-runtime = { path = "../../lib", features = ["implicit_flow"] }
+runtime = { path = "../../lib", features = [] }

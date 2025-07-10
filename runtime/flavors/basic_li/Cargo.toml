@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
-runtime = { path = "../../lib" }
+runtime = { path = "../../lib", features = ["implicit_flow"] }

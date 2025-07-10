@@ -495,6 +495,7 @@ dependencies = [
  "regex-lite",
  "ron",
  "runtime_basic_li",
+ "runtime_basic_li_no_implicit",
  "runtime_noop",
  "serde",
  "smallvec",
@@ -2291,6 +2292,14 @@ dependencies = [
 
 [[package]]
 name = "runtime_basic_li"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "runtime",
+]
+
+[[package]]
+name = "runtime_basic_li_no_implicit"
 version = "0.1.0"
 dependencies = [
  "common",

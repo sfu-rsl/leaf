@@ -27,6 +27,7 @@ common = { workspace = true, features = [
 macros = { workspace = true }
 # Adding runtime flavors as dependencies, so they will be built along with the compiler.
 runtime_basic_li = { workspace = true }
+runtime_basic_li_no_implicit = { workspace = true }
 runtime_noop = { workspace = true }
 
 delegate = { workspace = true }
