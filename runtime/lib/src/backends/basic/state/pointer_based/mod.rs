@@ -115,6 +115,20 @@ type SymPlaceHandlerObject = RRef<SymPlaceHandlerDyn>;
  * of the object that an address falls within.
  */
 
+/* NOTE: (FIXME) Preconditions of places
+ * Ideally, we should take care of preconditions of places as well.
+ * Direct places (no dereferences) trivially do not have preconditions.
+ * For places with dereferences, the value is effectively preconditioned by the
+ * preconditions of the reference as well.
+ * An example of preconditions of references is:
+ * let item = if x {
+ *     &arr[i]
+ * } else {
+ *    &arr[j]
+ * }
+ * use(item)
+ */
+
 /// Provides a mapping for raw pointers to symbolic values.
 /// All places that have a valid address are handled by this state, otherwise
 /// they will be sent to the `fallback` state to be handled.

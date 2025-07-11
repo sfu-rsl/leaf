@@ -55,20 +55,26 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
          */
 
         // 1. Dereferencing a symbolic value.
-        let opt_sym_deref = projs.first().is_some_and(|p| matches!(p, Projection::Deref)).then(|| {
-            let dereferenced_meta = projs_metadata.next().unwrap();
-            let opt_sym_deref = self.opt_sym_deref(host_metadata, dereferenced_meta,  sym_place_handler);
+        let opt_sym_deref = projs
+            .first()
+            .is_some_and(|p| matches!(p, Projection::Deref))
+            .then(|| {
+                let dereferenced_meta = projs_metadata.next().unwrap();
+                let opt_sym_deref =
+                    self.opt_sym_deref(host_metadata, dereferenced_meta, sym_place_handler);
 
-            // Symbolic or not, pass the deref projection.
-            host_metadata = dereferenced_meta;
-            projs = &projs[(Bound::Excluded(0), Bound::Unbounded)];
-            debug_assert!(
-                !has_deref(projs.iter().skip(1)),
-                "Based on the documentation, Deref can only appear as the first projection after MIR optimizations."
-            );
+                // Symbolic or not, pass the deref projection.
+                host_metadata = dereferenced_meta;
+                projs = &projs[(Bound::Excluded(0), Bound::Unbounded)];
+                debug_assert!(
+                    !has_deref(projs.iter().skip(1)),
+                    // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.AnalysisPhase.html#variant.PostCleanup
+                    "Deref can only appear as the first projection after MIR optimizations."
+                );
 
-            opt_sym_deref
-        }).flatten();
+                opt_sym_deref
+            })
+            .flatten();
 
         let value = opt_sym_deref
             .map(Into::into)

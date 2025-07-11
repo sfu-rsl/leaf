@@ -195,9 +195,9 @@ pub(crate) trait PreconditionQuery {
     fn take_constraints(self) -> Option<PreconditionConstraints>;
 }
 
-/* NOTE: It would be neater if P was first
- * But V is more of a parameter than P. P is kept as generic for better abstraction.
- * It is supposed to be set by compilation configuration. */
+/* NOTE: It would be neater if P was first.
+ * But V is more of a parameter than P. P is kept as generic for better abstraction and maintainability.
+ * It is supposed to be fixed based on the feature enabled or not. */
 #[derive(Debug, Clone, dm::Deref)]
 pub(crate) struct Implied<V, P = PreconditionImpl> {
     pub by: P,

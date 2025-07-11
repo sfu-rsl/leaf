@@ -124,11 +124,7 @@ fn make_assignment_info<'tcx>(body: &Body<'tcx>) -> AssignmentsInfo {
     for (loc, lhs, _) in assignment_ids_split_agnostic(body) {
         bb_map.push(loc.block.as_u32());
 
-        let left_val = if lhs
-            .iter_projections()
-            .last()
-            .is_some_and(|p| matches!(p.1, ProjectionElem::Deref))
-        {
+        let left_val = if lhs.is_indirect_first_projection() {
             LValue::Deref
         } else {
             // Conservatively overapproximate over the local
@@ -184,8 +180,12 @@ fn check_alternatives(
         .map(|(loc, left_val)| {
             match left_val {
                 LValue::Deref => {
-                    // Deref assignments are always considered to have alternatives.
-                    // Look at the first case in `there_are_alternatives_for`.
+                    /* Deref assignments are always considered to have alternatives.
+                     * Look at the first case in `there_are_alternatives_for`.
+                     * However, this is quite conservative. The direct and indirect
+                     * assignments may be part of the same SESE (like passing a mutable
+                     * reference to a function).
+                     */
                     return true;
                 }
                 LValue::Direct(class) => {
