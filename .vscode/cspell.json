@@ -5,17 +5,17 @@
         {
             "name": "leaf",
             "description": "Terms used in the project",
-            "path": "./.vscode/dictionaries/leaf.txt"
+            "path": "./dictionaries/leaf.txt"
         },
         {
             "name": "rust",
             "description": "Terms and names used in Rust",
-            "path": "./.vscode/dictionaries/rust.txt"
+            "path": "./dictionaries/rust.txt"
         },
         {
             "name": "rustc",
             "description": "Terms and names used in the Rust compiler",
-            "path": "./.vscode/dictionaries/rustc.txt"
+            "path": "./dictionaries/rustc.txt"
         }
     ],
     "dictionaries": [

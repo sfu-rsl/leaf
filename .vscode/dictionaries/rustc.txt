@@ -1,4 +1,5 @@
 binop
+cnum
 codegen
 creader
 ctxt
@@ -7,8 +8,10 @@ deinit
 Desugared
 discr
 krate
+monomorphized
 nullary
 pointee
+rlib
 RPATH
 rustc
 rustup
@@ -20,10 +23,14 @@ tupled
 Tupling
 TyCtx
 unsize
+Unsize
 unsizing
 untuple
+Untuple
 untupled
+Untupled
 untupling
+upcasting
 upvar
 upvars
 vtable
