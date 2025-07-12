@@ -42,25 +42,35 @@ impl CompilationPass for TypeExporter {
         let out_dir = tcx.output_dir();
         let is_single_file_program =
             out_dir.as_os_str().is_empty() || !rustc_session::utils::was_invoked_from_cargo();
-        let out_dir = if is_single_file_program {
-            Some(out_dir.as_path())
+        let out_dirs = if is_single_file_program {
+            vec![out_dir.as_path()]
         } else if env::var("CARGO_PRIMARY_PACKAGE").is_ok() {
             /* For compiling a single file program, the final type export file is placed in the same directory as the program file.
-             * For compiling a project, the final type export file is placed in the output directory (i.e. "./target/debug/") */
-            Some(out_dir.parent().unwrap())
+             * For compiling a project, the final type export file is also placed in the output directory (i.e. "./target/debug/") */
+            vec![out_dir.as_path(), out_dir.parent().unwrap()]
         } else {
             // Types for dependencies should not be required.
-            None
+            vec![]
         };
 
-        if let Some(out_dir) = out_dir {
-            type_info::rw::write_types_db_in(
-                type_map.values(),
-                get_core_types(tcx).map(|t| type_id(tcx, t)),
-                &out_dir,
-            )
-            .expect("Failed to write type info");
-        }
+        let write = move || -> Result<(), Box<dyn core::error::Error>> {
+            let mut out_dirs = out_dirs.into_iter();
+            if let Some(out_dir) = out_dirs.next() {
+                let path = type_info::rw::write_types_db_in(
+                    type_map.values(),
+                    get_core_types(tcx).map(|t| type_id(tcx, t)),
+                    &out_dir,
+                )?;
+                for out_dir in out_dirs {
+                    std::fs::copy(&path, out_dir.join(path.file_name().unwrap()))
+                        .map_err(|e| Box::new(e))?;
+                }
+            } else {
+                log_debug!("Type info export is skipped")
+            }
+            Ok(())
+        };
+        write().expect("Failed to write type info");
     }
 }
 

@@ -207,7 +207,7 @@ impl<'t, D: TypeDatabase<'t> + ?Sized> TypeDatabase<'t> for std::rc::Rc<D> {
 #[cfg(feature = "type_info_rw")]
 pub mod rw {
     use core::error::Error as StdError;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
 
     use super::*;
 
@@ -254,12 +254,13 @@ pub mod rw {
             all_types: impl Iterator<Item = &'a TypeInfo>,
             core_types: CoreTypes<TypeId>,
             out_dir: impl AsRef<Path>,
-        ) -> Result<(), Box<dyn StdError>> {
+        ) -> Result<PathBuf, Box<dyn StdError>> {
+            let path = out_dir.as_ref().join(FILENAME_DB);
             let file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(out_dir.as_ref().join(FILENAME_DB))
+                .open(&path)
                 .map_err(Box::<dyn StdError>::from)?;
 
             let mut serializer = serde_json::Serializer::pretty(file);
@@ -268,12 +269,14 @@ pub mod rw {
                 core_types: core_types.to_pairs().to_vec(),
             };
             data.serialize(&mut serializer)
+                .map(|_| path)
                 .map_err(Box::<dyn StdError>::from)
         }
     }
 
     #[cfg(feature = "rkyv")]
     mod rkyving {
+
         use once_map::OnceMap;
         use rkyv::rancor::{Error, OptionExt};
 
@@ -340,12 +343,13 @@ pub mod rw {
             all_types: impl Iterator<Item = &'a TypeInfo>,
             core_types: CoreTypes<TypeId>,
             out_dir: impl AsRef<Path>,
-        ) -> Result<(), Box<dyn StdError>> {
+        ) -> Result<PathBuf, Box<dyn StdError>> {
+            let path = out_dir.as_ref().join(FILENAME_DB);
             let file = OpenOptions::new()
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(out_dir.as_ref().join(FILENAME_DB))
+                .open(&path)
                 .map_err(Box::<dyn StdError>::from)?;
 
             let data = TypesData {
@@ -362,7 +366,7 @@ pub mod rw {
             };
 
             rkyv::api::high::to_bytes_in::<_, Error>(&data, rkyv::ser::writer::IoWriter::new(file))
-                .map(|_| ())
+                .map(|_| path)
                 .map_err(Box::<dyn StdError>::from)
         }
     }
@@ -395,7 +399,7 @@ pub mod rw {
         types: impl Iterator<Item = &'a TypeInfo> + Clone,
         core_types: CoreTypes<TypeId>,
         out_dir: impl AsRef<Path>,
-    ) -> Result<(), Box<dyn StdError>> {
+    ) -> Result<PathBuf, Box<dyn StdError>> {
         log_info!("Writing type info db in: `{}`", out_dir.as_ref().display());
 
         if cfg!(debug_assertions) {
