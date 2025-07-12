@@ -30,6 +30,9 @@ type = "file"
 directory = "leaf_out"
 format = "jsonl"
 
+[[exe_trace.inspectors]]
+type = "sanity_checker"
+level = "panic"
 
 [[exe_trace.inspectors]]
 type = "diverging_input"
@@ -49,15 +52,17 @@ check_optimistic = true
 # type = "tags"
 # exclude_any_of = ["test_no_diverge"]
 
-[[exe_trace.inspectors]]
-type = "branch_coverage"
-[exe_trace.inspectors.output]
-type = "file"
-directory = "leaf_out"
-format = "json"
+# Enabling branch coverage
+# [[exe_trace.inspectors]]
+# type = "branch_coverage"
+# [exe_trace.inspectors.output]
+# type = "file"
+# directory = "leaf_out"
+# format = "json"
 
 [solver]
 type = "z3"
 [solver.global_params]
 timeout = 10000
-"solver.smtlib2_log" = "queries.smt2"
+# If interested in Z3's SMT queries
+# "solver.smtlib2_log" = "queries.smt2"
