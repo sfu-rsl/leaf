@@ -23,6 +23,7 @@ common = { workspace = true, features = [
     "z3",
     "answers",
     "directed",
+    "program_dep",
 ] }
 leaf_macros = { path = "../../macros", package = "macros" }
 
