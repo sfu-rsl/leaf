@@ -102,6 +102,10 @@ impl<T: PartialOrd, R: RangeBounds<T>> RangeIntersection<T> for R {
     }
 }
 
+pub(crate) fn byte_offset_from<T: Sized>(at: *const T, base: *const T) -> usize {
+    at.addr() - base.addr()
+}
+
 #[derive(Clone, Debug, dm::Deref)]
 pub(super) struct Tagged<T> {
     #[deref]

@@ -19,7 +19,7 @@ type PlaceInfo = <BasicPlaceBuilder as PlaceBuilder>::Place;
 type PlaceImpl = <<BackendImpl as RuntimeBackend>::PlaceHandler<'static> as PlaceHandler>::Place;
 pub(super) type OperandImpl =
     <<BackendImpl as RuntimeBackend>::OperandHandler<'static> as OperandHandler>::Operand;
-pub(super) type FieldImpl = 
+pub(super) type FieldImpl =
     <<BackendImpl as RuntimeBackend>::AssignmentHandler<'static> as AssignmentHandler>::Field;
 
 static INIT: Once = Once::new();

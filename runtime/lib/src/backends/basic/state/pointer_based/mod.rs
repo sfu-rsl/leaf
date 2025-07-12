@@ -20,7 +20,7 @@ use crate::{
         type_info::TypeLayoutResolverExt,
     },
     type_info::TypeInfoExt,
-    utils::{InPlaceSelfHierarchical, alias::RRef},
+    utils::{InPlaceSelfHierarchical, alias::RRef, byte_offset_from},
 };
 
 use super::SymPlaceHandler;
@@ -377,8 +377,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         size: TypeSize,
         values: Vec<(Address, &SymValueRef, &TypeId)>,
     ) -> PorterValue {
-        let result = Self::create_porter(place_val, values);
-        self.inspect_porter_sym_values(&result, size);
+        let result = self.create_porter(place_val, values, size);
         self.retrieve_porter_value(&result)
     }
 
@@ -391,9 +390,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         // Disabling removal because of possible use after move.
         // https://github.com/rust-lang/unsafe-code-guidelines/issues/188
         // self.memory.erase(range)
-        let result = Self::create_porter(place_val, values);
-        self.inspect_porter_sym_values(&result, size);
-        self.retrieve_porter_value(&result)
+        self.create_porter_for_copy(place_val, size, values)
     }
 
     /// Looks in the region indicated by `addr` and `size` and picks all
@@ -401,24 +398,29 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     /// symbolic value in that region, returns `None`.
     #[tracing::instrument(level = "debug", skip_all)]
     fn create_porter(
+        &self,
         place_val: &DeterministicPlaceValue,
         sym_values: Vec<(Address, &SymValueRef, &TypeId)>,
+        whole_size: TypeSize,
     ) -> PorterValue {
         let obj_addr = place_val.address();
         let sym_values = sym_values
             .into_iter()
             .map(|(addr, sym_value, sym_type_id)| {
-                let offset: PointerOffset = unsafe { addr.byte_offset_from(obj_addr) }
-                    .try_into()
-                    .unwrap();
+                let offset: PointerOffset = byte_offset_from(addr, obj_addr) as PointerOffset;
+
                 (offset, *sym_type_id, sym_value.clone())
             })
             .collect();
 
-        PorterValue {
+        let value = PorterValue {
             as_concrete: place_val.to_raw_value(),
             sym_values,
+        };
+        if cfg!(debug_assertions) {
+            self.inspect_porter_sym_values(&value, whole_size);
         }
+        value
     }
 
     fn inspect_porter_sym_values(&self, porter: &PorterValue, porter_size: TypeSize) {

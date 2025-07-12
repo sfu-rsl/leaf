@@ -311,9 +311,12 @@ mod toplevel {
 }
 
 mod symbolic {
+    use common::{pri::TypeSize, type_info::FieldInfo};
+
     use crate::{
         backends::basic::alias::SymValueRefExprBuilder,
         type_info::{FieldsShapeInfoExt, TypeInfoExt},
+        utils::RangeIntersection,
     };
 
     use super::{
@@ -325,33 +328,30 @@ mod symbolic {
         /*Binary:*/
         Chained<ConstSimplifier, Chained<ConstFolder, CoreBuilder>>,
         /*Unary:*/
-        Chained<PtrMetadataExtractor, CoreBuilder>,
+        Chained<FatPtrPorterExtractor, CoreBuilder>,
         /*Ternary:*/
         Chained<ConstSimplifier, CoreBuilder>,
         /*Cast:*/
-        CoreBuilder,
+        Chained<FatPtrPorterExtractor, CoreBuilder>,
     >;
 
     impl SymValueRefExprBuilder for Logger<BaseSymbolicBuilder> {}
 
-    pub(crate) type SymbolicBuilder = Logger<
-        Chained<UnevaluatedResolverBuilder<Logger<BaseSymbolicBuilder>>, BaseSymbolicBuilder>,
-    >;
+    pub(crate) type SymbolicBuilder =
+        Logger<Chained<UnevaluatedResolver<Logger<BaseSymbolicBuilder>>, BaseSymbolicBuilder>>;
 
     impl SymbolicBuilder {
         pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
+            let fat_ptr_extractor = FatPtrPorterExtractor {
+                type_manager: type_manager.clone(),
+            };
             let base_builder = BaseSymbolicBuilder {
                 binary: Default::default(),
-                unary: Chained::new(
-                    PtrMetadataExtractor {
-                        type_manager: type_manager.clone(),
-                    },
-                    Default::default(),
-                ),
+                unary: Chained::new(fat_ptr_extractor.clone(), Default::default()),
                 ternary: Default::default(),
-                cast: Default::default(),
+                cast: Chained::new(fat_ptr_extractor, Default::default()),
             };
-            let uneval_resolver = UnevaluatedResolverBuilder {
+            let uneval_resolver = UnevaluatedResolver {
                 type_manager,
                 sym_builder: Logger {
                     builder: base_builder.clone(),
@@ -364,12 +364,12 @@ mod symbolic {
     }
 
     #[derive(Clone)]
-    pub(crate) struct UnevaluatedResolverBuilder<EB: SymValueRefExprBuilder> {
+    pub(crate) struct UnevaluatedResolver<EB: SymValueRefExprBuilder> {
         type_manager: Rc<dyn TypeDatabase>,
         sym_builder: EB,
     }
 
-    impl<EB: SymValueRefExprBuilder> UnevaluatedResolverBuilder<EB> {
+    impl<EB: SymValueRefExprBuilder> UnevaluatedResolver<EB> {
         fn resolve(&mut self, value: &mut ValueRef, expect_scalar: bool) {
             match value.as_ref() {
                 Value::Concrete(_) => self.resolve_conc(value, expect_scalar),
@@ -420,7 +420,7 @@ mod symbolic {
         }
     }
 
-    impl<EB: SymValueRefExprBuilder> BinaryExprBuilder for UnevaluatedResolverBuilder<EB> {
+    impl<EB: SymValueRefExprBuilder> BinaryExprBuilder for UnevaluatedResolver<EB> {
         type ExprRefPair<'a> = SymBinaryOperands;
         type Expr<'a> = Result<ValueRef, SymBinaryOperands>;
 
@@ -441,7 +441,7 @@ mod symbolic {
         impl_singular_binary_ops_through_general!();
     }
 
-    impl<EB: SymValueRefExprBuilder> UnaryExprBuilder for UnevaluatedResolverBuilder<EB> {
+    impl<EB: SymValueRefExprBuilder> UnaryExprBuilder for UnevaluatedResolver<EB> {
         type ExprRef<'a> = SymValueRef;
         type Expr<'a> = Result<ValueRef, SymValueRef>;
 
@@ -466,7 +466,7 @@ mod symbolic {
         impl_singular_unary_ops_through_general!();
     }
 
-    impl<EB: SymValueRefExprBuilder> TernaryExprBuilder for UnevaluatedResolverBuilder<EB> {
+    impl<EB: SymValueRefExprBuilder> TernaryExprBuilder for UnevaluatedResolver<EB> {
         type ExprRefTriple<'a> = SymTernaryOperands;
         type Expr<'a> = Result<ValueRef, SymTernaryOperands>;
 
@@ -488,7 +488,7 @@ mod symbolic {
         impl_singular_ternary_ops_through_general!();
     }
 
-    impl<EB: SymValueRefExprBuilder> CastExprBuilder for UnevaluatedResolverBuilder<EB> {
+    impl<EB: SymValueRefExprBuilder> CastExprBuilder for UnevaluatedResolver<EB> {
         type ExprRef<'a> = SymValueRef;
         type Expr<'a> = Result<ValueRef, SymValueRef>;
         type Metadata<'a> = CastMetadata;
@@ -524,11 +524,11 @@ mod symbolic {
 
     /// Extracts metadata from a porter value.
     #[derive(Clone)]
-    pub(crate) struct PtrMetadataExtractor {
+    pub(crate) struct FatPtrPorterExtractor {
         type_manager: Rc<dyn TypeDatabase>,
     }
 
-    impl UnaryExprBuilder for PtrMetadataExtractor {
+    impl UnaryExprBuilder for FatPtrPorterExtractor {
         type ExprRef<'a> = SymValueRef;
         type Expr<'a> = Result<ValueRef, Self::ExprRef<'a>>;
 
@@ -537,56 +537,117 @@ mod symbolic {
                 return Err(operand);
             }
 
-            let SymValue::Expression(Expr::Partial(PorterValue {
-                as_concrete,
-                sym_values,
-            })) = operand.as_ref()
+            let SymValue::Expression(Expr::Partial(value @ PorterValue { as_concrete, .. })) =
+                operand.as_ref()
             else {
                 return Err(operand);
             };
 
-            let ptr_ty = as_concrete
-                .1
-                .get_type(self.type_manager.as_ref())
-                .expect("Type of partial value is not available.");
+            let metadata_field = &self
+                .opt_fat_ptr_ty(&as_concrete.1)
+                .expect("Fat pointer type is expected")
+                .1[Self::FIELD_METADATA];
 
-            debug_assert!(
-                ptr_ty.pointee_ty.is_some(),
-                "PtrMetadata on non-pointer type: {:?}",
+            Ok(self.field_value(value, metadata_field))
+        }
+
+        impl_singular_unary_ops_through_general!();
+    }
+
+    impl CastExprBuilder for FatPtrPorterExtractor {
+        type ExprRef<'a> = SymValueRef;
+        type Expr<'a> = Result<ValueRef, Self::ExprRef<'a>>;
+        type Metadata<'a> = CastMetadata;
+
+        fn cast<'a, 'b>(
+            &mut self,
+            operand: Self::ExprRef<'a>,
+            target: CastKind<Self::IntType, Self::FloatType, Self::PtrType, Self::GenericType>,
+            metadata: Self::Metadata<'b>,
+        ) -> Self::Expr<'a> {
+            if !matches!(target, CastKind::ToPointer(_)) {
+                return Err(operand);
+            }
+
+            let SymValue::Expression(Expr::Partial(value @ PorterValue { as_concrete, .. })) =
+                operand.as_ref()
+            else {
+                return Err(operand);
+            };
+
+            let Some((ty_size, fields)) = self.opt_fat_ptr_ty(&as_concrete.1) else {
+                return Err(operand);
+            };
+            let to_ptr_ty_size = metadata.get_size(self.type_manager.as_ref()).unwrap();
+            if ty_size == to_ptr_ty_size {
+                // Only handles fat pointer to thin pointer casts (addr extraction).
+                return Err(operand);
+            }
+
+            let ptr_field = &fields[Self::FIELD_PTR];
+            Ok(self.field_value(value, ptr_field))
+        }
+
+        impl_singular_casts_through_general!();
+    }
+
+    impl FatPtrPorterExtractor {
+        const FIELD_PTR: usize = 0;
+        const FIELD_METADATA: usize = 1;
+
+        fn opt_fat_ptr_ty<'t>(
+            &self,
+            ty_info: &'t LazyTypeInfo,
+        ) -> Option<(TypeSize, &'t [FieldInfo; 2])> {
+            let ptr_ty = ty_info.get_type(self.type_manager.as_ref())?;
+
+            // Normal pointer
+            if self.type_manager.get_type(&ptr_ty.pointee_ty?).is_sized() {
+                return None;
+            }
+
+            ptr_ty.size().zip(
                 ptr_ty
-            );
-            debug_assert!(
-                !self
-                    .type_manager
-                    .get_type(&ptr_ty.pointee_ty.unwrap())
-                    .is_sized(),
-                "Pointer with struct shape is expected to be fat."
-            );
+                    .expect_single_variant()
+                    .fields
+                    .expect_struct()
+                    .fields
+                    .as_array(),
+            )
+        }
 
-            let metadata_field = &ptr_ty.expect_single_variant().fields.expect_struct().fields[1];
-            Ok(sym_values
+        fn field_value(
+            &self,
+            PorterValue {
+                as_concrete,
+                sym_values,
+            }: &PorterValue,
+            field: &FieldInfo,
+        ) -> ValueRef {
+            #[cfg(debug_assertions)]
+            let field_range = field.offset..self.type_manager.get_type(&field.ty).size().unwrap();
+            sym_values
                 .iter()
                 .find_map(|(offset, ty_id, value)| {
-                    if metadata_field.offset.eq(offset) {
-                        debug_assert_eq!(*ty_id, metadata_field.ty);
+                    if field.offset.eq(offset) {
+                        debug_assert_eq!(*ty_id, field.ty);
                         return Some(value.clone().into());
                     } else {
-                        // TODO: Add checks for corrupted overlapping values.
+                        debug_assert!(!RangeIntersection::is_overlapping(
+                            &field_range,
+                            &(*offset..self.type_manager.get_type(ty_id).size().unwrap())
+                        ));
                         None
                     }
                 })
                 .unwrap_or_else(|| {
                     let as_concrete = RawConcreteValue(
-                        as_concrete
-                            .0
-                            .wrapping_byte_add(metadata_field.offset as usize),
+                        as_concrete.0.wrapping_byte_add(field.offset as usize),
                         as_concrete.1.clone(),
                     );
                     as_concrete.to_value_ref()
-                }))
+                })
         }
-
-        impl_singular_unary_ops_through_general!();
     }
 }
 
@@ -812,7 +873,7 @@ mod adapters {
 
     impl<T: ValueRefExprBuilder> CastExprBuilder for SymValueRefExprBuilderAdapter<T> {
         type ExprRef<'a> = SymValueRef;
-        type Expr<'a> = SymValueRef;
+        type Expr<'a> = ValueRef;
         type Metadata<'a> = CastMetadata;
 
         fn cast<'a, 'b>(
@@ -821,7 +882,7 @@ mod adapters {
             target: CastKind<Self::IntType, Self::FloatType, Self::PtrType, Self::GenericType>,
             metadata: Self::Metadata<'b>,
         ) -> Self::Expr<'a> {
-            SymValueRef::new(self.0.borrow_mut().cast(operand.into(), target, metadata))
+            self.0.borrow_mut().cast(operand.into(), target, metadata)
         }
 
         impl_singular_casts_through_general!();
@@ -1237,11 +1298,12 @@ mod core {
 
         fn to_ptr<'a, 'b>(
             &mut self,
-            _operand: Self::ExprRef<'a>,
-            _ty: Self::PtrType,
-            _metadata: Self::Metadata<'b>,
+            operand: Self::ExprRef<'a>,
+            ty: Self::PtrType,
+            metadata: Self::Metadata<'b>,
         ) -> Self::Expr<'a> {
-            unreachable!("Casting to pointers [from pointers] are not expected at this level.")
+            // A ptr to ptr cast reaching here should be a regular ptr to regular ptr cast.
+            self.transmute(operand, ty, metadata)
         }
 
         fn ptr_unsize<'a, 'b>(

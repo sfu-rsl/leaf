@@ -24,7 +24,7 @@ where
         + for<'a> TernaryExprBuilder<ExprRefTriple<'a> = SymTernaryOperands, Expr<'a> = ValueRef>
         + for<'a> CastExprBuilder<
             ExprRef<'a> = SymValueRef,
-            Expr<'a> = SymValueRef,
+            Expr<'a> = ValueRef,
             Metadata<'a> = LazyTypeInfo,
             IntType = IntType,
             FloatType = FloatType,

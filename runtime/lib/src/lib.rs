@@ -13,6 +13,7 @@
 #![feature(seek_stream_len)]
 #![feature(try_trait_v2)]
 #![feature(cold_path)]
+#![feature(slice_as_array)]
 
 pub mod abs;
 mod backends;

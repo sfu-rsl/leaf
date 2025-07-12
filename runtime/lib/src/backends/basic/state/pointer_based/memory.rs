@@ -6,7 +6,7 @@ use std::{
 
 use common::pri::TypeSize;
 
-use crate::utils::RangeIntersection;
+use crate::utils::{RangeIntersection, byte_offset_from};
 
 pub(super) type Address = common::types::RawAddress;
 
@@ -66,6 +66,7 @@ mod high {
                                 "Object boundary/alignment assumption does not hold. ",
                                 "An overlapping object / symbolic container found. ",
                                 "This is probably due to missed deallocations. ",
+                                "Skipping value retrieval. ",
                                 "Query: {:?}, Object: {:?}"
                             ),
                             range,
@@ -109,8 +110,9 @@ mod high {
                         log_warn!(
                             concat!(
                                 "Object boundary/alignment assumption does not hold. ",
-                                "An overlapping object's preconditions fetched. Skipping. ",
+                                "An overlapping object's preconditions fetched. ",
                                 "This is probably due to missed deallocations. ",
+                                "Skipping precondition retrieval. ",
                                 "Query: {:?}, Object: {:?}"
                             ),
                             range,
@@ -122,13 +124,14 @@ mod high {
                     }
                 },
                 |p_addr, p_size, precondition| {
-                    let offset = if *p_addr > range.start {
-                        offset_of(range.start, *p_addr)
-                    } else {
-                        0
-                    };
-                    let size = (*p_size).min(NonZero::new(size.get() - offset).unwrap());
-                    preconditions.push((offset, size, precondition.clone()));
+                    let offset =
+                        core::intrinsics::saturating_sub(p_addr.addr(), range.start.addr());
+                    let end = p_addr
+                        .wrapping_byte_add(p_size.get() as usize)
+                        .min(range.end);
+                    let size = byte_offset_from(end, range.start.wrapping_byte_add(offset));
+                    let size = NonZero::new(size as TypeSize).unwrap();
+                    preconditions.push((offset as PointerOffset, size, precondition.clone()));
                 },
             );
 
@@ -244,7 +247,12 @@ mod high {
                 PreconditionConstraints::Refined(items) => items
                     .get()
                     .into_iter()
-                    .for_each(|(offset, size, precondition)| insert(offset, size, precondition)),
+                    // We don't currently guarantee order, so we stick with filter instead of take_while.
+                    .filter(|(offset, _, _)| *offset < whole_size.get())
+                    .for_each(|(offset, size, precondition)| {
+                        let size = size.min(NonZero::new(whole_size.get() - offset).unwrap());
+                        insert(offset, size, precondition)
+                    }),
             }
         }
 
@@ -328,15 +336,11 @@ mod high {
             ),
             range: Range<Address>,
         ) {
-            let mut insert = |part: (*const (), *const ())| {
-                if let Some(size) = NonZero::new(
-                    unsafe { part.1.byte_offset_from(part.0) }
-                        .try_into()
-                        .unwrap(),
-                ) {
+            let mut insert = |r: (*const (), *const ())| {
+                if let Some(size) = NonZero::new(byte_offset_from(r.1, r.0) as TypeSize) {
                     self.precondition_mem
-                        .after_or_at_mut(&part.0)
-                        .insert_before(part.0, (size, obj_precondition.clone()))
+                        .after_or_at_mut(&r.0)
+                        .insert_before(r.0, (size, obj_precondition.clone()))
                         .unwrap();
                 }
             };
@@ -351,13 +355,6 @@ mod high {
                 insert(second_part);
             }
         }
-    }
-
-    #[inline]
-    fn offset_of(base_addr: Address, inner_addr: Address) -> PointerOffset {
-        unsafe { inner_addr.byte_offset_from(base_addr) }
-            .try_into()
-            .unwrap()
     }
 }
 pub(super) use high::MemoryGate;

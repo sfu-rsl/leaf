@@ -485,20 +485,21 @@ mod retrieval {
 
             debug_assert!(
                 value_size + at <= whole_size,
-                "The value is overflowing the whole value. {:?} @ {:?}",
+                "The value is overflowing the whole value. {:?} @ {:?} of {:?}",
                 value,
                 at,
+                whole_size,
             );
 
             let padded = (0..value_size).fold(
                 ConstValue::new_int(0u128, bit_rep_ty).to_value_ref(),
                 |acc, i| {
                     let byte = self.extract_byte(value.clone(), value_size, i);
-                    let extended = self.expr_builder.to_int(
+                    let extended = SymValueRef::new(self.expr_builder.to_int(
                         byte,
                         bit_rep_ty,
                         self.type_manager.int_type(bit_rep_ty),
-                    );
+                    ));
                     // NOTE: We need to care about the endianness as the whole value is a scalar (primitive).
                     let shift_amount = Self::shift_amount(whole_size, at + i as PointerOffset);
                     let aligned = SymValueRef::new(
@@ -543,9 +544,11 @@ mod retrieval {
                     .into(),
             );
 
-            let result = self
-                .expr_builder
-                .to_int(result, IntType::U8, self.type_manager.u8());
+            let result = SymValueRef::new(self.expr_builder.to_int(
+                result,
+                IntType::U8,
+                self.type_manager.u8(),
+            ));
 
             debug_assert!(
                 ValueType::try_from(result.value()).is_ok_and(|ty| ty == IntType::U8.into()),
@@ -555,8 +558,11 @@ mod retrieval {
 
         fn to_bit_rep(&mut self, value: &SymValueRef, ty: &TypeInfo) -> SymValueRef {
             if ScalarType::try_from(ty).is_ok_and(|ty| matches!(ty, ScalarType::Bool)) {
-                self.expr_builder
-                    .to_int(value.clone(), IntType::U8, self.type_manager.u8())
+                SymValueRef::new(self.expr_builder.to_int(
+                    value.clone(),
+                    IntType::U8,
+                    self.type_manager.u8(),
+                ))
             } else {
                 value.clone()
             }
