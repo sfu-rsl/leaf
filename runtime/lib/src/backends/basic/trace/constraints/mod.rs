@@ -13,13 +13,14 @@ use crate::{
     abs::{
         Tag,
         backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
+        utils::Tagged,
     },
     solvers::z3::Z3Solver,
     trace::{
         AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
         FilterTraceManagerExt, InspectionTraceManagerExt, LoggerTraceManagerExt, StepInspector,
     },
-    utils::{Indexed, RefView, Tagged, alias::RRef},
+    utils::{Indexed, RefView, alias::RRef},
 };
 
 use super::backend;

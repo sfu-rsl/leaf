@@ -4,7 +4,6 @@ use core::{
     ops::{Deref, RangeBounds},
 };
 
-use delegate::delegate;
 use derive_more as dm;
 
 pub(crate) mod alias;
@@ -13,8 +12,6 @@ pub(crate) mod logging;
 pub(crate) mod meta;
 
 use alias::RRef;
-
-use crate::abs::{HasTags, Tag};
 
 /// A trait for any hierarchical structure that may take a parent.
 pub(crate) trait Hierarchical<T> {
@@ -106,35 +103,6 @@ pub(crate) fn byte_offset_from<T: Sized>(at: *const T, base: *const T) -> usize 
     at.addr() - base.addr()
 }
 
-#[derive(Clone, Debug, dm::Deref)]
-pub(super) struct Tagged<T> {
-    #[deref]
-    pub value: T,
-    pub tags: Vec<Tag>,
-}
-
-impl<T> Borrow<T> for Tagged<T> {
-    fn borrow(&self) -> &T {
-        &self.value
-    }
-}
-
-impl<T> HasTags for Tagged<T> {
-    fn tags(&self) -> &[Tag] {
-        &self.tags
-    }
-}
-
-impl<T: Display> Display for Tagged<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if self.tags.is_empty() {
-            return self.value.fmt(f);
-        } else {
-            write!(f, "{} #[{}]", self.value, self.tags.join(", "))
-        }
-    }
-}
-
 pub(crate) trait HasIndex {
     fn index(&self) -> usize;
 }
@@ -161,21 +129,5 @@ impl<T> Borrow<T> for Indexed<T> {
 impl<T: Display> Display for Indexed<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.index, self.value)
-    }
-}
-
-impl<T: HasIndex> HasIndex for Tagged<T> {
-    delegate! {
-        to self.value {
-            fn index(&self) -> usize;
-        }
-    }
-}
-
-impl<T: HasTags> HasTags for Indexed<T> {
-    delegate! {
-        to self.value {
-            fn tags(&self) -> &[Tag];
-        }
     }
 }
