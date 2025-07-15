@@ -446,7 +446,7 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
 name = "common"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "config",
  "delegate",
@@ -478,7 +478,7 @@ dependencies = [
 
 [[package]]
 name = "compiler"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bimap",
  "bitflags 2.8.0",
@@ -1452,7 +1452,7 @@ dependencies = [
 
 [[package]]
 name = "libafl_leaf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "common",
  "derive_more",
@@ -1578,7 +1578,7 @@ dependencies = [
 
 [[package]]
 name = "macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ignore",
  "proc-macro2",
@@ -1878,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "orchestrator"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bincode 2.0.1",
  "clap",
@@ -2081,7 +2081,7 @@ dependencies = [
 
 [[package]]
 name = "pure_concolic"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "clap",
  "common",
@@ -2256,7 +2256,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "cfg-if",
  "chrono",
@@ -2284,7 +2284,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_basic"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "common",
  "runtime",
@@ -2292,7 +2292,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_basic_li"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "common",
  "runtime",
@@ -2300,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_basic_li_no_implicit"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "common",
  "runtime",
@@ -2308,7 +2308,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_noop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "common",
  "runtime",

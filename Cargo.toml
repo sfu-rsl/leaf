@@ -21,6 +21,7 @@ exclude = [
 [workspace.package]
 license = "MIT OR Apache-2.0"
 edition = "2021"
+version = "0.2.0"
 
 [workspace.dependencies]
 # Unless we specify the package, it won't be renamed.
