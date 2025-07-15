@@ -4,12 +4,10 @@ use core::{
     ops::{CoerceUnsized, Deref},
 };
 
-use common::types::{InstanceKindDiscr, InstanceKindId};
-
 use super::common::{
     self,
     pri::*,
-    types::{BasicBlockLocation, DefId},
+    types::{BasicBlockLocation, DefId, InstanceKindDiscr, InstanceKindId},
 };
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
@@ -53,14 +51,6 @@ static _TYPE_ID_OF_REFERENCER: fn() -> TypeId = type_id_of::<u32>;
 
 #[used]
 static _SIZE_OF_REFERENCER: fn() -> TypeSize = size_of::<u32>;
-
-#[used]
-static _BASIC_BLOCK_LOCATION_REFERENCER: fn(
-    InstanceKindDiscr,
-    u32,
-    u32,
-    BasicBlockIndex,
-) -> BasicBlockLocation = basic_block_location;
 
 #[used]
 static _SWITCH_INFO_REFERENCER: fn(BasicBlockIndex, OperandRef) -> SwitchInfo = switch_info;
@@ -109,21 +99,6 @@ pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
 #[inline(always)]
 pub const fn size_of<T>() -> TypeSize {
     intrinsics::size_of::<T>() as TypeSize
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub const fn basic_block_location(
-    instance_kind_discr: InstanceKindDiscr,
-    crate_id: u32,
-    body_id: u32,
-    index: BasicBlockIndex,
-) -> BasicBlockLocation {
-    BasicBlockLocation {
-        body: InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
-        index,
-    }
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]

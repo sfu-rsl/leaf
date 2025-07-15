@@ -179,7 +179,6 @@ pub mod sym {
                 type_id_of,
                 size_of,
 
-                basic_block_location,
                 switch_info,
                 assertion_info,
 
@@ -227,7 +226,7 @@ pub mod sym {
 
         pass_compiler_helpers_to!(symbols_in_compiler_helpers);
 
-        pub(crate) const ALL_HELPERS: [LS; 25] = pass_compiler_helpers_to!(bracket);
+        pub(crate) const ALL_HELPERS: [LS; 24] = pass_compiler_helpers_to!(bracket);
     }
     pub(crate) use compiler_helpers::*;
 
