@@ -1827,7 +1827,7 @@ mod implementation {
 
     impl<'tcx, C> FunctionHandler<'tcx> for RuntimeCallAdder<C>
     where
-        Self: MirCallAdder<'tcx> + BlockInserter<'tcx>,
+        Self: MirCallAdder<'tcx> + BlockInserter<'tcx> + DebugInfoHandler,
         C: ForFunctionCalling<'tcx>,
     {
         fn before_call_func(
@@ -2422,12 +2422,17 @@ mod implementation {
         C: ForInsertion<'tcx>,
     {
         fn debug_info<T: Serialize>(&mut self, info: &T) {
+            // FIXME: Make it configurable.
+            if self.tcx().sess.opts.optimize != rustc_session::config::OptLevel::No {
+                return;
+            }
+
             let serialized = ron::to_string(info).unwrap();
             let block = self.make_bb_for_call(sym::debug_info, vec![operand::const_from_byte_str(
                 self.context.tcx(),
                 serialized.as_bytes(),
             )]);
-            // self.insert_blocks([block]);
+            self.insert_blocks([block]);
         }
     }
 
