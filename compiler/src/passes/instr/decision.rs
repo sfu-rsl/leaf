@@ -702,7 +702,6 @@ mod intrinsics {
                 ptr_offset_from,
                 nontemporal_store,
                 compare_bytes,
-                bswap,
                 catch_unwind,
                 abort,
                 drop_in_place,
@@ -731,6 +730,7 @@ mod intrinsics {
                 ctpop,
                 ctlz_nonzero,
                 ctlz,
+                bswap,
                 // disjoint_bitor,
                 black_box,
             )
@@ -818,6 +818,7 @@ mod intrinsics {
             rsym::ctpop => psym::intrinsic_assign_ctpop,
             rsym::ctlz_nonzero => psym::intrinsic_assign_ctlz_nonzero,
             rsym::ctlz => psym::intrinsic_assign_ctlz,
+            rsym::bswap => psym::intrinsic_assign_bswap,
             rsym::black_box => psym::intrinsic_assign_identity,
             _ => unreachable!(),
         };

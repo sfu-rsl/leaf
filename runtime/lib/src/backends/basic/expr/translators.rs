@@ -318,6 +318,7 @@ pub(crate) mod z3 {
                     TrailingZeros => self.translate_count_zeros_expr::<true>(bv),
                     LeadingZeros => self.translate_count_zeros_expr::<false>(bv),
                     CountOnes => self.translate_count_ones_expr(bv),
+                    ByteSwap => self.translate_byte_swap_expr(bv),
                 },
                 (operator, operand) => unreachable!(
                     "Unary operator {operator:?} is not supported for the operand: {operand:?}"
@@ -705,6 +706,18 @@ pub(crate) mod z3 {
                 ));
             }
             BVNode::new(count, false).into()
+        }
+
+        fn translate_byte_swap_expr(&mut self, bv: BVNode<'ctx>) -> AstNode<'ctx> {
+            let size = bv.size();
+            debug_assert!(size % 8 == 0);
+            let swapped_bv = (0..size)
+                .step_by(8)
+                .rev()
+                .map(|idx| bv.0.extract(idx + 7, idx))
+                .reduce(|acc, byte| ast::BV::concat(&byte, &acc))
+                .unwrap();
+            BVNode::new(swapped_bv, bv.is_signed()).into()
         }
     }
 

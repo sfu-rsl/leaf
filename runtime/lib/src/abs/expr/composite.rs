@@ -120,7 +120,7 @@ where
     impl_unary_expr_method!(unary_op + op: UnaryOp);
 
     impl_unary_expr_method!(no_op not neg ptr_metadata);
-    impl_unary_expr_method!(bit_reverse count_ones);
+    impl_unary_expr_method!(bit_reverse count_ones byte_swap);
     impl_unary_expr_method!(trailing_zeros + non_zero: bool);
     impl_unary_expr_method!(leading_zeros + non_zero: bool);
 }

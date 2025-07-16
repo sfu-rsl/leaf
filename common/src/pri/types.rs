@@ -120,6 +120,7 @@ enum_like_type! {
         CTPOP = 37;
         CTLZ_NONZERO = 38;
         CTLZ = 39;
+        BSWAP = 40;
     }
 }
 

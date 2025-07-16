@@ -9,7 +9,7 @@ use crate::abs::{
     self, AssertKind, CastKind, Constant, FloatType, IntType, Local, SymVariable, ValueType,
     backend::*,
 };
-use common::log_warn;
+
 use leaf_macros::trait_log_fn;
 
 pub struct BasicPri;
@@ -679,6 +679,10 @@ impl ProgramRuntimeInterface for BasicPri {
 
     fn intrinsic_assign_ctlz(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
         Self::assign_unary_op(id, dest, Self::UnaryOp::LeadingZeros, x);
+    }
+
+    fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::ByteSwap, x);
     }
 
     fn intrinsic_assign_ctpop(id: AssignmentId, dest: PlaceRef, x: OperandRef) {

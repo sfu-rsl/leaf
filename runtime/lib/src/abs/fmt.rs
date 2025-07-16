@@ -126,6 +126,7 @@ impl Display for UnaryOp {
             UnaryOp::CountOnes => "ctpop",
             UnaryOp::LeadingZeros => "ctlz",
             UnaryOp::NonZeroLeadingZeros => "ctlz_nonzero",
+            UnaryOp::ByteSwap => "↔",
         })
     }
 }

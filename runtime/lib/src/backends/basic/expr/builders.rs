@@ -456,7 +456,7 @@ mod symbolic {
                     NoOp => false,
                     PtrMetadata => false,
                     Not | Neg | BitReverse | NonZeroTrailingZeros | TrailingZeros | CountOnes
-                    | NonZeroLeadingZeros | LeadingZeros => true,
+                    | NonZeroLeadingZeros | LeadingZeros | ByteSwap => true,
                 }
             };
             self.resolve_sym(operand.as_mut(), expect_scalar);
@@ -1168,7 +1168,7 @@ mod core {
             match op {
                 NoOp => operand,
                 Neg | Not | BitReverse | TrailingZeros | NonZeroTrailingZeros | LeadingZeros
-                | NonZeroLeadingZeros | CountOnes => Expr::Unary {
+                | NonZeroLeadingZeros | CountOnes | ByteSwap => Expr::Unary {
                     operator: op.try_into().unwrap(),
                     operand: operand,
                 }

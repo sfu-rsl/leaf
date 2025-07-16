@@ -135,6 +135,7 @@ macro_rules! impl_general_unary_op_through_singulars {
                 CountOnes => self.count_ones(operand),
                 NonZeroLeadingZeros => self.leading_zeros(operand, true),
                 LeadingZeros => self.leading_zeros(operand, false),
+                ByteSwap => self.byte_swap(operand),
             }
         }
     };
@@ -174,6 +175,7 @@ macro_rules! impl_singular_unary_ops_through_general {
                 } else {
                     crate::abs::UnaryOp::LeadingZeros
                 })
+            (byte_swap = crate::abs::UnaryOp::ByteSwap)
         );
     };
 }
@@ -294,9 +296,9 @@ macro_rules! macro_rules_method_with_optional_args {
 pub(crate) use {
     impl_general_binary_op_for, impl_general_binary_op_through_singulars,
     impl_general_cast_through_singulars, impl_general_ternary_op_through_singulars,
-    impl_singular_binary_ops_through_general, impl_singular_cast_through_general,
-    impl_singular_casts_through_general, impl_singular_ternary_op_through_general,
-    impl_singular_ternary_ops_through_general, impl_singular_unary_op_through_general,
-    impl_singular_unary_ops_through_general, macro_rules_method_with_optional_args,
-    repeat_macro_for,
+    impl_general_unary_op_through_singulars, impl_singular_binary_ops_through_general,
+    impl_singular_cast_through_general, impl_singular_casts_through_general,
+    impl_singular_ternary_op_through_general, impl_singular_ternary_ops_through_general,
+    impl_singular_unary_op_through_general, impl_singular_unary_ops_through_general,
+    macro_rules_method_with_optional_args, repeat_macro_for,
 };

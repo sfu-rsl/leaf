@@ -293,6 +293,7 @@ pub mod macros {
           { fn intrinsic_assign_ctpop(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
+          { fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
 
           // All atomic operations have an ordering, majority get applied on a pointer.
           #[allow(unused_parens)]
@@ -662,6 +663,8 @@ pub mod macros {
                 fn intrinsic_assign_ctlz_nonzero(id:AssignmentId,dest:PlaceRef,x:OperandRef);
             }$modifier!{
                 fn intrinsic_assign_ctlz(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+            }$modifier!{
+                fn intrinsic_assign_bswap(id:AssignmentId,dest:PlaceRef,x:OperandRef);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_load(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,);
             }$modifier!{

@@ -97,6 +97,7 @@ pub enum UnaryOp {
     CountOnes = common::pri::UnaryOp::CTPOP.as_u8(),
     NonZeroLeadingZeros = common::pri::UnaryOp::CTLZ_NONZERO.as_u8(),
     LeadingZeros = common::pri::UnaryOp::CTLZ.as_u8(),
+    ByteSwap = common::pri::UnaryOp::BSWAP.as_u8(),
 }
 
 #[derive(Clone, Copy, Debug)]

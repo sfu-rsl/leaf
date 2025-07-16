@@ -703,6 +703,7 @@ sub_enum! {
         TrailingZeros +| NonZeroTrailingZeros,
         LeadingZeros +| NonZeroLeadingZeros,
         CountOnes,
+        ByteSwap,
     }
 }
 
