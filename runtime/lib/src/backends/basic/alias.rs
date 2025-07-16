@@ -107,13 +107,13 @@ pub(super) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuild
 
 pub(super) trait TypeDatabase:
     abs::backend::TypeDatabase<'static>
-    + CoreTypeProvider<&'static TypeInfo>
+    + for<'t> CoreTypeProvider<&'t TypeInfo>
     + CoreTypeProvider<LazyTypeInfo>
 {
 }
-impl<'t, T> TypeDatabase for T where
+impl<T> TypeDatabase for T where
     T: abs::backend::TypeDatabase<'static>
-        + CoreTypeProvider<&'static TypeInfo>
+        + for<'t> CoreTypeProvider<&'t TypeInfo>
         + CoreTypeProvider<LazyTypeInfo>
 {
 }

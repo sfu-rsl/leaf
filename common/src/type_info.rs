@@ -307,7 +307,7 @@ pub mod rw {
             }
         }
 
-        impl TypeDatabase<'static> for &'static OwnedArchivedTypesData {
+        impl<'t> TypeDatabase<'t> for &'static OwnedArchivedTypesData {
             fn opt_get_type(&self, key: &TypeId) -> Option<&'static TypeInfo> {
                 self.deserialized
                     .all_types

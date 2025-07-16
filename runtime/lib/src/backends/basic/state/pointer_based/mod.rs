@@ -413,10 +413,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             })
             .collect();
 
-        let value = PorterValue {
-            as_concrete: place_val.to_raw_value(),
-            sym_values,
-        };
+        let value = PorterValue::new(place_val.to_raw_value(), sym_values);
         if cfg!(debug_assertions) {
             self.inspect_porter_sym_values(&value, whole_size);
         }

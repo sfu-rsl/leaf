@@ -644,7 +644,11 @@ mod symbolic {
                 .unwrap_or_else(|| {
                     let as_concrete = RawConcreteValue(
                         as_concrete.0.wrapping_byte_add(field.offset as usize),
-                        as_concrete.1.clone(),
+                        LazyTypeInfo::from((
+                            Some(field.ty),
+                            self.type_manager
+                                .try_to_value_type(LazyTypeInfo::from(field.ty)),
+                        )),
                     );
                     as_concrete.to_value_ref()
                 })

@@ -506,20 +506,9 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     }
 
     pub(super) fn retrieve_porter_value(&self, porter: &PorterValue) -> PorterValue {
-        PorterValue {
-            as_concrete: porter.as_concrete.clone(),
-            sym_values: porter
-                .sym_values
-                .iter()
-                .map(|(index, type_id, sym_value)| {
-                    (
-                        *index,
-                        *type_id,
-                        self.retrieve_sym_value(sym_value.clone(), *type_id),
-                    )
-                })
-                .collect(),
-        }
+        porter.clone().map_sym_values(|type_id, sym_value| {
+            self.retrieve_sym_value(sym_value.clone(), type_id)
+        })
     }
 
     fn retrieve_len_value(&self, place: &SymbolicPlaceValue) -> SymValueRef {

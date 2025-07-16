@@ -858,6 +858,46 @@ pub(crate) struct PorterValue {
     pub(crate) sym_values: Vec<(PointerOffset, TypeId, SymValueRef)>,
 }
 
+impl PorterValue {
+    pub(crate) fn new(
+        as_concrete: RawConcreteValue,
+        sym_values: Vec<(PointerOffset, TypeId, SymValueRef)>,
+    ) -> Self {
+        #[cfg(debug_assertions)]
+        match sym_values.as_slice() {
+            &[] => {
+                panic!("Empty porter value")
+            }
+            [(0, type_id, _)] if as_concrete.1.id().unwrap() == *type_id => {
+                panic!(
+                    "Improper porter value construction: {:?}, {:?}",
+                    as_concrete, sym_values
+                );
+            }
+            _ => {}
+        }
+
+        Self {
+            as_concrete,
+            sym_values,
+        }
+    }
+
+    pub(crate) fn map_sym_values<F>(self, mut f: F) -> Self
+    where
+        F: FnMut(TypeId, SymValueRef) -> SymValueRef,
+    {
+        Self {
+            as_concrete: self.as_concrete,
+            sym_values: self
+                .sym_values
+                .into_iter()
+                .map(|(offset, ty, value)| (offset, ty, f(ty, value)))
+                .collect(),
+        }
+    }
+}
+
 mod guards {
     use super::*;
 

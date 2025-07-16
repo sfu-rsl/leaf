@@ -1,22 +1,24 @@
 use common::type_info::{FieldInfo, TypeInfo};
 use common::{log_debug, log_warn};
 
-use crate::{
-    abs::{IntType, ValueType},
-    backends::basic::alias::TypeDatabase,
-    type_info::TypeInfoExt,
-};
+use crate::type_info::TypeInfoExt;
+
+use crate::backends::basic as backend;
+use backend::alias::TypeDatabase;
 
 use super::*;
 
 mod retrieval {
+    use core::num::Wrapping;
+
     use common::type_info::{FieldsShapeInfo, VariantInfo};
     use common::types::TypeSize;
 
-    use core::num::Wrapping;
+    use crate::abs::{IntType, ValueType, backend::CoreTypeProvider};
 
-    use super::super::super::alias::SymValueRefExprBuilder;
     use super::*;
+
+    use backend::SymValueRefExprBuilder;
 
     pub(crate) trait RawPointerRetriever {
         fn retrieve(&self, addr: RawAddress, type_id: TypeId) -> ValueRef;
@@ -156,6 +158,23 @@ mod retrieval {
         Int(IntType),
         Float(FloatType),
         Address,
+    }
+
+    impl ScalarType {
+        fn try_from<'a>(
+            ty: &'a TypeInfo,
+            core_types: &(impl CoreTypeProvider<&'a TypeInfo> + ?Sized),
+        ) -> Result<Self, ()> {
+            if ty.id == core_types.raw_addr().id || ty.id == core_types.raw_mut_addr().id {
+                Ok(Self::Address)
+            } else if let Some(value_ty) = core_types.try_to_value_type(ty) {
+                Ok(Self::from(value_ty))
+            } else if ty.pointee_ty.is_some() && ty.size() == core_types.raw_addr().size() {
+                Ok(Self::Address)
+            } else {
+                Err(())
+            }
+        }
     }
 
     impl<'a> TryFrom<&'a TypeInfo> for ScalarType {
@@ -300,7 +319,7 @@ mod retrieval {
                 )
                 .into(),
                 NoFields => {
-                    if let Ok(ty) = ScalarType::try_from(ty) {
+                    if let Ok(ty) = ScalarType::try_from(ty, type_manager) {
                         retrieve_scalar(addr, &ty).into()
                     } else {
                         unsupported()
@@ -399,7 +418,7 @@ mod retrieval {
                 .try_to_bit_rep()
                 .expect("Unexpected const value.");
 
-            let (result, mask) = value.sym_values.iter().fold(
+            let (result, mask) = match value.sym_values.iter().try_fold(
                 (
                     ConstValue::new_int(0u128, whole_bit_rep_ty).to_value_ref(),
                     0u128,
@@ -415,30 +434,34 @@ mod retrieval {
 
                     let sym_value = self.to_bit_rep(sym_value, value_ty);
 
-                    let (padded, mask) = self.pad(sym_value, *at, value_size, whole_bit_rep_ty);
-
                     // Covering the whole value
                     if value_size == whole_size {
+                        debug_assert_eq!(value.sym_values.len(), 1);
                         log_debug!(
                             concat!(
                                 "A transmutation is happening as a form of porter value. ",
-                                "With the exception symbolic enum discriminant, ",
-                                "either the program is unusually unsafe, or there is a problem ",
-                                "with value storage and retrieval. ",
-                                "Symbolic value: {:?}, Whole value: {:?}",
+                                "This is only expected to appear when there are ",
+                                "symbolic enum discriminants and raw symbolic pointer casts. ",
+                                "Whole value: {:?}",
                             ),
-                            padded,
                             value,
                         );
-                        return (padded.into(), mask);
+                        return Err(sym_value);
                     }
 
-                    (
+                    let (padded, mask) = self.pad(sym_value, *at, value_size, whole_bit_rep_ty);
+
+                    Ok((
                         self.expr_builder.or((padded, acc_value).into()),
                         acc_mask | mask,
-                    )
+                    ))
                 },
-            );
+            ) {
+                Ok((result, mask)) => (result, mask),
+                Err(transmuted) => {
+                    return transmuted;
+                }
+            };
             let result = SymValueRef::new(result);
             let result = SymValueRef::new(
                 self.expr_builder.and(
@@ -506,7 +529,8 @@ mod retrieval {
                         self.expr_builder
                             .shl(SymBinaryOperands::Orig {
                                 first: extended,
-                                second: ConstValue::from(shift_amount).to_value_ref(),
+                                second: ConstValue::new_int(shift_amount, bit_rep_ty)
+                                    .to_value_ref(),
                             })
                             .into(),
                     );
@@ -557,13 +581,16 @@ mod retrieval {
         }
 
         fn to_bit_rep(&mut self, value: &SymValueRef, ty: &TypeInfo) -> SymValueRef {
-            if ScalarType::try_from(ty).is_ok_and(|ty| matches!(ty, ScalarType::Bool)) {
+            if ScalarType::try_from(ty, self.type_manager)
+                .is_ok_and(|ty| matches!(ty, ScalarType::Bool))
+            {
                 SymValueRef::new(self.expr_builder.to_int(
                     value.clone(),
                     IntType::U8,
                     self.type_manager.u8(),
                 ))
             } else {
+                // There is nothing special to do for other types.
                 value.clone()
             }
         }
