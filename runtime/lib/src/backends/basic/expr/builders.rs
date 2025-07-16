@@ -320,7 +320,7 @@ mod symbolic {
     };
 
     use super::{
-        adapters::{ConstFolder, ConstSimplifier, CoreBuilder},
+        adapters::{ConstFolder, ConstSimplifier, CoreBuilder, MiscSimplifier},
         *,
     };
 
@@ -328,7 +328,7 @@ mod symbolic {
         /*Binary:*/
         Chained<ConstSimplifier, Chained<ConstFolder, CoreBuilder>>,
         /*Unary:*/
-        Chained<FatPtrPorterExtractor, CoreBuilder>,
+        Chained<FatPtrPorterExtractor, Chained<MiscSimplifier, CoreBuilder>>,
         /*Ternary:*/
         Chained<ConstSimplifier, CoreBuilder>,
         /*Cast:*/
@@ -818,6 +818,22 @@ mod adapters {
             }
 
             Err(operands)
+        }
+    }
+
+    #[derive(Default, Clone, Deref, DerefMut)]
+    pub(crate) struct MiscSimplifier(simp::MiscSimplifier);
+
+    impl UnaryExprBuilderAdapter for MiscSimplifier {
+        type TargetExprRef<'a> = SymValueRef;
+        type TargetExpr<'a> = Result<ValueRef, SymValueRef>;
+
+        #[inline]
+        fn adapt<'t, F>(operand: Self::TargetExprRef<'t>, build: F) -> Self::TargetExpr<'t>
+        where
+            F: for<'s> FnH<<Self::Target as UEB>::ExprRef<'s>, <Self::Target as UEB>::Expr<'s>>,
+        {
+            build(operand).map(Into::into)
         }
     }
 
@@ -2195,6 +2211,84 @@ mod simp {
 
         fn offset<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
             Err(operands)
+        }
+    }
+
+    #[derive(Clone, Default)]
+    pub(crate) struct MiscSimplifier;
+
+    impl UnaryExprBuilder for MiscSimplifier {
+        type ExprRef<'a> = SymValueRef;
+        type Expr<'a> = Result<Self::ExprRef<'a>, Self::ExprRef<'a>>;
+
+        impl_general_unary_op_through_singulars!();
+
+        fn no_op<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            Err(operand)
+        }
+
+        fn not<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            match operand.as_ref() {
+                SymValue::Expression(Expr::Unary {
+                    operator: BasicUnaryOp::Not,
+                    operand,
+                }) => Ok(operand.clone()),
+                _ => Err(operand),
+            }
+        }
+
+        fn neg<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            match operand.as_ref() {
+                SymValue::Expression(Expr::Unary {
+                    operator: BasicUnaryOp::Neg,
+                    operand,
+                }) => Ok(operand.clone()),
+                _ => Err(operand),
+            }
+        }
+
+        fn ptr_metadata<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            Err(operand)
+        }
+
+        fn bit_reverse<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            match operand.as_ref() {
+                SymValue::Expression(Expr::Unary {
+                    operator: BasicUnaryOp::BitReverse,
+                    operand,
+                }) => Ok(operand.clone()),
+                _ => Err(operand),
+            }
+        }
+
+        fn count_ones<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            Err(operand)
+        }
+
+        fn byte_swap<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
+            match operand.as_ref() {
+                SymValue::Expression(Expr::Unary {
+                    operator: BasicUnaryOp::ByteSwap,
+                    operand,
+                }) => Ok(operand.clone()),
+                _ => Err(operand),
+            }
+        }
+
+        fn trailing_zeros<'a>(
+            &mut self,
+            operand: Self::ExprRef<'a>,
+            _non_zero: bool,
+        ) -> Self::Expr<'a> {
+            Err(operand)
+        }
+
+        fn leading_zeros<'a>(
+            &mut self,
+            operand: Self::ExprRef<'a>,
+            _non_zero: bool,
+        ) -> Self::Expr<'a> {
+            Err(operand)
         }
     }
 
