@@ -633,6 +633,7 @@ mod symbolic {
                         debug_assert_eq!(*ty_id, field.ty);
                         return Some(value.clone().into());
                     } else {
+                        #[cfg(debug_assertions)]
                         debug_assert!(!RangeIntersection::is_overlapping(
                             &field_range,
                             &(*offset..self.type_manager.get_type(ty_id).size().unwrap())
