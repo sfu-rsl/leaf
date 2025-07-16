@@ -1,6 +1,7 @@
 alloc
 bitreverse
 bitvector
+bswap
 chrono
 clippy
 ctlz
