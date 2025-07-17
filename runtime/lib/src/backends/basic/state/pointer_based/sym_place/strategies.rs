@@ -1,5 +1,5 @@
 use crate::backends::basic::{
-    concrete::Concretizer,
+    concrete::{ConcolicValueObtainer, Concretizer},
     config::SymbolicPlaceStrategy,
     state::{SymPlaceHandler, SymPlaceSymEntity},
 };
@@ -39,7 +39,7 @@ impl SymPlaceHandler for PanicSymPlaceHandler {
     fn handle<'a>(
         &mut self,
         sym_value: Self::SymEntity,
-        _get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+        _get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
         panic!("Faced symbolic place: {:?}", sym_value)
     }
@@ -52,7 +52,7 @@ impl SymPlaceHandler for ProjExprSymPlaceHandler {
     fn handle<'a>(
         &mut self,
         sym_value: Self::SymEntity,
-        _get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+        _get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
         sym_value.into()
     }
@@ -65,10 +65,10 @@ impl SymPlaceHandler for ConcretizerSymPlaceHandler {
     fn handle<'a>(
         &mut self,
         sym_value: Self::SymEntity,
-        get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+        get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
         log_info!("Concretizing symbolic value: {}", sym_value.value);
-        get_conc(&sym_value).into()
+        get_conc().into()
     }
 }
 
@@ -81,16 +81,10 @@ impl SymPlaceHandler for StamperSymPlaceHandler {
     fn handle<'a>(
         &mut self,
         sym_value: Self::SymEntity,
-        get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+        get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
-        let conc_value = get_conc(&sym_value);
-
-        log_info!("Stamping {} == {}", sym_value.value, conc_value,);
-
-        self.concretizer
-            .stamp(sym_value.clone(), conc_value.clone());
-
-        ConcretizerSymPlaceHandler.handle(sym_value, Box::new(|_| conc_value))
+        let conc_value = self.concretizer.stamp(sym_value.clone(), get_conc);
+        ConcretizerSymPlaceHandler.handle(sym_value, Box::new(|| conc_value))
     }
 }
 
@@ -106,7 +100,7 @@ where
     fn handle<'a>(
         &mut self,
         sym_entity: Self::SymEntity,
-        get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+        get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
         if !sym_entity.is_index {
             sym_entity.into()

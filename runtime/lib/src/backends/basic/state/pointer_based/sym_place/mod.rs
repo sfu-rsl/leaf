@@ -134,7 +134,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             Value::Symbolic(..) => {
                 let ptr_val = self.sym_place_handler_for(usage).handle(
                     SymPlaceSymEntity::of_deref(SymValueRef::new(ptr_val)),
-                    Box::new(|_| unimplemented!("#480: Concrete value is not available")),
+                    Box::new(|| unimplemented!("#480: Concrete value is not available")),
                 );
                 if ptr_val.is_symbolic() {
                     Self::deref_sym_val(SymValueRef::new(ptr_val), ptr_type_id, || {
@@ -161,7 +161,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         if host.is_symbolic() {
             let host = sym_place_handler.handle(
                 SymPlaceSymEntity::of_deref(SymValueRef::new(host.to_value_ref())),
-                Box::new(|_| ConcreteValueRef::new(host_place.to_raw_value().to_value_ref())),
+                Box::new(|| ConcreteValueRef::new(host_place.to_raw_value().to_value_ref())),
             );
             if host.is_symbolic() {
                 Some(Self::deref_sym_val(
@@ -297,8 +297,8 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
 
     fn conc_value_obtainer<'a>(
         deter_place: &'a DeterministicPlaceValue,
-    ) -> Box<dyn FnOnce(&SymPlaceSymEntity) -> ConcreteValueRef + 'a> {
-        Box::new(|_| ConcreteValueRef::new(deter_place.to_raw_value().to_value_ref()))
+    ) -> Box<dyn FnOnce() -> ConcreteValueRef + 'a> {
+        Box::new(|| ConcreteValueRef::new(deter_place.to_raw_value().to_value_ref()))
     }
 }
 

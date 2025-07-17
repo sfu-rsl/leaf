@@ -11,6 +11,7 @@ pub(super) use pointer_based::sym_place::strategies::make_sym_place_handler;
 use crate::backends::basic as backend;
 use backend::{
     BasicBackend, CallStackInfo, ConcreteValueRef, PlaceValueRef, SymValueRef, VariablesState,
+    concrete::ConcolicValueObtainer,
 };
 
 #[derive(Debug, dm::Deref)]
@@ -28,7 +29,7 @@ pub(super) trait SymPlaceHandler {
     fn handle<'a>(
         &mut self,
         sym_entity: Self::SymEntity,
-        get_conc: Box<dyn FnOnce(&Self::SymEntity) -> Self::ConcEntity + 'a>,
+        get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity;
 }
 
