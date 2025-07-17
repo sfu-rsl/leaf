@@ -15,8 +15,9 @@ use crate::{
 use crate::backends::basic as backend;
 use backend::{
     BasicBackend, BasicValue, BasicValueExprBuilder, CallStackInfo, Implied, PlaceValueRef,
-    Precondition, TypeDatabase, ValueRef, VariablesState, alias::BasicExprBuilder,
-    expr::prelude::*, implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
+    Precondition, TypeDatabase, TypeLayoutResolver, ValueRef, VariablesState,
+    alias::BasicExprBuilder, expr::prelude::*, implication::PreconditionConstruct,
+    place::DiscriminantPossiblePlace, type_info::TypeLayoutResolverExt,
 };
 
 #[cfg(feature = "implicit_flow")]
@@ -84,8 +85,13 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
             PlaceValue::Symbolic(sym_place) => match &sym_place.base {
                 // Reborrowing
                 SymbolicPlaceBase::Deref(DerefSymHostPlace { host, .. }) => {
-                    // FIXME: retain antecedents
-                    self.set(Implied::by_unknown(host.clone().into()))
+                    let value = self.expr_builder().transmute(
+                        // FIXME: retain antecedents
+                        Implied::by_unknown(host.clone().into()),
+                        self.dest.type_info().id().unwrap(),
+                        self.dest.type_info().clone(),
+                    );
+                    self.set(value);
                 }
                 SymbolicPlaceBase::SymIndex(..) => {
                     // FIXME: retain antecedents
@@ -217,6 +223,7 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
     }
 
     fn raw_ptr_from(self, data_ptr: Self::Operand, metadata: Self::Operand, _is_mutable: bool) {
+        let data_ptr = self.ensure_type_of_ptr_for_raw_ptr(data_ptr);
         self.adt_from([data_ptr, metadata].into_iter(), None)
     }
 
@@ -398,6 +405,23 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
                 SymValueRef::new(discr_value)
             }
         }
+    }
+
+    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: BasicValue) -> BasicValue {
+        if !data_ptr.is_symbolic() {
+            return data_ptr;
+        }
+
+        let field_ty = self
+            .type_manager
+            .layouts()
+            .resolve_adt_fields(self.dest.type_id(), None)
+            .next()
+            .unwrap()
+            .0;
+
+        self.expr_builder()
+            .transmute(data_ptr, field_ty, LazyTypeInfo::from(field_ty))
     }
 
     fn get_int_type(&self, ty_info: &LazyTypeInfo) -> IntType {

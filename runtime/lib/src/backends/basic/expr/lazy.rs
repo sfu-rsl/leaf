@@ -418,7 +418,7 @@ mod retrieval {
                 .try_to_bit_rep()
                 .expect("Unexpected const value.");
 
-            let (result, mask) = match value.sym_values.iter().try_fold(
+            let result = match value.sym_values.iter().try_fold(
                 (
                     ConstValue::new_int(0u128, whole_bit_rep_ty).to_value_ref(),
                     0u128,
@@ -457,27 +457,26 @@ mod retrieval {
                     ))
                 },
             ) {
-                Ok((result, mask)) => (result, mask),
-                Err(transmuted) => {
-                    return transmuted;
-                }
-            };
-            let result = SymValueRef::new(result);
-            let result = SymValueRef::new(
-                self.expr_builder.and(
-                    (
+                Ok((result, mask)) => {
+                    let result = SymValueRef::new(result);
+                    let result = SymValueRef::new(
+                        self.expr_builder.and(
+                            (
+                                result,
+                                ConstValue::new_int(mask, whole_bit_rep_ty).to_value_ref(),
+                            )
+                                .into(),
+                        ),
+                    );
+                    let result = self.expr_builder.or((
                         result,
-                        ConstValue::new_int(mask, whole_bit_rep_ty).to_value_ref(),
+                        ConstValue::new_int(whole_bit_rep & !mask, whole_bit_rep_ty).to_value_ref(),
                     )
-                        .into(),
-                ),
-            );
-            let result = self.expr_builder.or((
-                result,
-                ConstValue::new_int(whole_bit_rep & !mask, whole_bit_rep_ty).to_value_ref(),
-            )
-                .into());
-            let result = SymValueRef::new(result);
+                        .into());
+                    SymValueRef::new(result)
+                }
+                Err(transmuted) => transmuted,
+            };
 
             let result = if let ScalarType::Bool = whole_ty {
                 Self::bit_rep_to_bool(result)

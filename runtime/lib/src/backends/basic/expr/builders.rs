@@ -548,7 +548,7 @@ mod symbolic {
                 .expect("Fat pointer type is expected")
                 .1[Self::FIELD_METADATA];
 
-            Ok(self.field_value(value, metadata_field))
+            Ok(self.field_value(value, metadata_field, None))
         }
 
         impl_singular_unary_ops_through_general!();
@@ -580,12 +580,18 @@ mod symbolic {
             };
             let to_ptr_ty_size = metadata.get_size(self.type_manager.as_ref()).unwrap();
             if ty_size == to_ptr_ty_size {
-                // Only handles fat pointer to thin pointer casts (addr extraction).
+                // This builder only takes care of fat pointer to thin pointer casts (addr extraction).
                 return Err(operand);
             }
 
             let ptr_field = &fields[Self::FIELD_PTR];
-            Ok(self.field_value(value, ptr_field))
+            let field_value = self.field_value(value, ptr_field, Some(metadata));
+            if field_value.is_symbolic() {
+                // Extraction is done, now perform the actual cast.
+                Err(SymValueRef::new(field_value))
+            } else {
+                Ok(field_value)
+            }
         }
 
         impl_singular_casts_through_general!();
@@ -623,6 +629,7 @@ mod symbolic {
                 sym_values,
             }: &PorterValue,
             field: &FieldInfo,
+            dst_type: Option<LazyTypeInfo>,
         ) -> ValueRef {
             #[cfg(debug_assertions)]
             let field_range = field.offset..self.type_manager.get_type(&field.ty).size().unwrap();
@@ -644,11 +651,13 @@ mod symbolic {
                 .unwrap_or_else(|| {
                     let as_concrete = RawConcreteValue(
                         as_concrete.0.wrapping_byte_add(field.offset as usize),
+                        dst_type.unwrap_or_else(|| {
                         LazyTypeInfo::from((
                             Some(field.ty),
                             self.type_manager
                                 .try_to_value_type(LazyTypeInfo::from(field.ty)),
-                        )),
+                            ))
+                        }),
                     );
                     as_concrete.to_value_ref()
                 })
@@ -1156,7 +1165,11 @@ mod core {
         ) -> (impl Fn(bool) -> Option<Expr>, Expr, IntType) {
             let op: OverflowingBinaryOp = wrapping_op.try_into().unwrap();
             let Ok(ValueType::Int(ty)) = ValueType::try_from(operands.as_flat().0.value()) else {
-                unreachable!("Only integer types are expected for overflowing operations.")
+                unreachable!(
+                    "Only integer types are expected for overflowing operations: observed {:?} in {:?}",
+                    operands.as_flat().0.value(),
+                    wrapping_op,
+                )
             };
             let Value::Symbolic(SymValue::Expression(wrapping_expr)) =
                 self.binary_op(operands.clone(), wrapping_op.into())
@@ -2302,9 +2315,15 @@ mod simp {
     impl CastSimplifier {
         #[inline]
         pub(crate) fn peel_transmute<'a>(source: &SymValueRef) -> &SymValueRef {
-            // NOTE: Only a single layer is expected and nested ones should not be constructed.
             match source.as_ref() {
-                SymValue::Expression(Expr::Transmutation { source, .. }) => &source,
+                SymValue::Expression(Expr::Transmutation { source, .. }) => {
+                    // NOTE: Only a single layer is expected and nested ones should not be constructed.
+                    debug_assert!(!matches!(
+                        source.value(),
+                        SymValue::Expression(Expr::Transmutation { .. })
+                    ));
+                    &source
+                }
                 _ => source,
             }
         }
