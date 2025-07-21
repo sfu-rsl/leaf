@@ -380,25 +380,23 @@ where
         let tcx = cx.tcx();
         match self {
             FieldsShape::Primitive => FieldsShapeInfo::NoFields,
-            FieldsShape::Union(count) => FieldsShapeInfo::Union(StructShape {
-                fields: (0..(*count).into())
+            FieldsShape::Union(count) => FieldsShapeInfo::Union(StructShape::new(
+                (0..(*count).into())
                     .into_iter()
                     .map(|idx| to_field_info(ty_layout, cx, FieldIdx::from_usize(idx)))
                     .collect(),
-            }),
+            )),
             FieldsShape::Array { count, .. } => FieldsShapeInfo::Array(ArrayShape {
                 len: *count,
                 item_ty: type_id(tcx, field_ty(ty_layout, cx, FieldIdx::from_usize(0))),
             }),
-            FieldsShape::Arbitrary { offsets, .. } => FieldsShapeInfo::Struct(StructShape {
-                fields: {
-                    offsets
-                        .clone()
-                        .into_iter_enumerated()
-                        .map(|(idx, _)| to_field_info(ty_layout, cx, idx))
-                        .collect()
-                },
-            }),
+            FieldsShape::Arbitrary { offsets, .. } => FieldsShapeInfo::Struct(StructShape::new(
+                offsets
+                    .clone()
+                    .into_iter_enumerated()
+                    .map(|(idx, _)| to_field_info(ty_layout, cx, idx))
+                    .collect(),
+            )),
         }
     }
 }

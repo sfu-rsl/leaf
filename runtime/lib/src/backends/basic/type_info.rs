@@ -194,9 +194,9 @@ impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutReso
 
         use FieldsShapeInfo::*;
         match &variant.fields {
-            Struct(StructShape { fields }) | Union(StructShape { fields }) => {
-                if cfg!(debug_assertions) {}
-                {
+            Struct(shape) | Union(shape) => {
+                let fields = shape.fields();
+                if cfg!(debug_assertions) {
                     if matches!(&variant.fields, Union(..)) {
                         assert!(
                             fields.iter().all(|f| f.offset == 0),

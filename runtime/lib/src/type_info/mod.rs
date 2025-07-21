@@ -70,7 +70,7 @@ impl TypeInfoExt for TypeInfo {
         match fields {
             NoFields => vec![],
             Array(ArrayShape { item_ty, .. }) => vec![*item_ty],
-            Struct(StructShape { fields }) => fields.iter().map(|f| f.ty).collect(),
+            Struct(shape) => shape.fields().iter().map(|f| f.ty).collect(),
             Union(_) => panic!("The child type id of a union is not deterministic"),
         }
     }

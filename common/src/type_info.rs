@@ -66,7 +66,7 @@ pub struct ArrayShape {
 #[cond_derive_serde_rkyv]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructShape {
-    pub fields: Vec<FieldInfo>,
+    fields: Vec<FieldInfo>,
 }
 
 // We use the same struct to avoid redundancy. Offset is not used for unions.
@@ -104,6 +104,20 @@ pub enum TagEncodingInfo {
         /// The value of the tag when the variant is at the start of the niche range.
         tag_value_start: u128,
     },
+}
+
+impl StructShape {
+    pub fn new(mut fields: Vec<FieldInfo>) -> Self {
+        fields.sort_by_key(|f| f.offset);
+        Self { fields }
+    }
+
+    /// # Remarks
+    /// The fields are sorted by their offsets.
+    #[inline(always)]
+    pub fn fields(&self) -> &[FieldInfo] {
+        &self.fields
+    }
 }
 
 #[cfg_attr(not(core_build), macro_export)]
@@ -178,6 +192,10 @@ pub trait TypeDatabase<'t> {
     fn get_type(&self, key: &TypeId) -> &'t TypeInfo {
         self.opt_get_type(key)
             .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
+    }
+
+    fn get_size(&self, key: &TypeId) -> Option<TypeSize> {
+        self.get_type(key).size()
     }
 
     fn core_types(&self) -> &CoreTypes<TypeId>;

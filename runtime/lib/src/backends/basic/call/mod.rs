@@ -324,12 +324,12 @@ mod tupling {
                 .fields
                 .as_struct()
                 .unwrap()
-                .fields
+                .fields()
                 .len() as FieldIndex
         }
 
         fn field_place(&mut self, base: Self::Place, field: FieldIndex) -> Self::Place {
-            let field_info = &self.fields_info().fields[field as usize];
+            let field_info = &self.fields_info().fields()[field as usize];
             DeterPlaceValueRef::new(
                 DeterministicPlaceValue::from_addr_type(
                     base.address().wrapping_byte_add(field_info.offset as usize),

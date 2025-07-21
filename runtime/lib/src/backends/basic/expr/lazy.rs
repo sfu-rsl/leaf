@@ -11,7 +11,7 @@ use super::*;
 mod retrieval {
     use core::num::Wrapping;
 
-    use common::type_info::{FieldsShapeInfo, VariantInfo};
+    use common::type_info::{FieldsShapeInfo, StructShape, VariantInfo};
     use common::types::TypeSize;
 
     use crate::abs::{IntType, ValueType, backend::CoreTypeProvider};
@@ -327,13 +327,13 @@ mod retrieval {
                 }
                 Union(..) => unsupported(),
                 Struct(shape) => match ty.pointee_ty {
-                    None => retrieve_struct(addr, &shape.fields, field_retriever).into(),
+                    None => retrieve_struct(addr, &shape, field_retriever).into(),
                     Some(pointee_ty) => {
                         debug_assert!(
                             !type_manager.get_type(&pointee_ty).is_sized(),
                             "Pointer with struct shape is expected to be fat."
                         );
-                        retrieve_fat_ptr(addr, ty.id, &shape.fields, field_retriever)
+                        retrieve_fat_ptr(addr, ty.id, &shape, field_retriever)
                     }
                 },
             }
@@ -362,7 +362,7 @@ mod retrieval {
 
     fn retrieve_struct(
         addr: RawAddress,
-        fields: &[FieldInfo],
+        shape: &StructShape,
         field_retriever: &dyn RawPointerRetriever,
     ) -> AdtValue {
         /* FIXME: We can do better by querying the memory in a coarser way.
@@ -371,7 +371,8 @@ mod retrieval {
          * values at the right indices. */
         AdtValue {
             kind: super::AdtKind::Struct,
-            fields: fields
+            fields: shape
+                .fields()
                 .iter()
                 .map(|f| {
                     field_retriever.retrieve(addr.wrapping_byte_offset(f.offset as isize), f.ty)
@@ -385,10 +386,10 @@ mod retrieval {
     fn retrieve_fat_ptr(
         addr: RawAddress,
         type_id: TypeId,
-        fields: &[FieldInfo],
+        shape: &StructShape,
         field_retriever: &dyn RawPointerRetriever,
     ) -> ConcreteValue {
-        let mut adt = retrieve_struct(addr, fields, field_retriever);
+        let mut adt = retrieve_struct(addr, shape, field_retriever);
         // FIXME: There is no guarantee for this structure.
         let metadata = adt.fields.pop().unwrap().value.unwrap(); // Field 1
         let address = adt.fields.pop().unwrap().value.unwrap(); // Field 0
