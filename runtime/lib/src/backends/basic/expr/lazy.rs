@@ -10,6 +10,9 @@ use super::*;
 
 mod retrieval {
     use core::num::Wrapping;
+    use core::ops::Range;
+
+    use itertools::Either;
 
     use common::type_info::{FieldsShapeInfo, StructShape, VariantInfo};
     use common::types::TypeSize;
@@ -101,6 +104,15 @@ mod retrieval {
                 "RawConcreteValue should not be unevaluated after evaluation."
             );
             ConcreteValueRef::new(result.to_value_ref())
+        }
+
+        unsafe fn access<'a>(&self, size_info: Either<&dyn TypeDatabase, TypeSize>) -> &'a [u8] {
+            let size = size_info.right_or_else(|type_db| {
+                self.1
+                    .get_size(type_db)
+                    .expect("Values from unsized types are not possible to be carried around.")
+            });
+            core::slice::from_raw_parts(self.0 as *const u8, size as usize)
         }
     }
 
@@ -237,18 +249,16 @@ mod retrieval {
                 ScalarType::Char => ValueType::Char,
                 ScalarType::Int(ty) => ValueType::Int(ty),
                 ScalarType::Float(ty) => ValueType::Float(ty),
-                ScalarType::Address => {
-                    log_warn!("Converting address type to int type.");
-                    ValueType::Int(IntType {
-                        bit_size: std::mem::size_of::<usize>() as u64 * 8,
-                        is_signed: false,
-                    })
-                }
+                ScalarType::Address => ValueType::Int(IntType {
+                    bit_size: std::mem::size_of::<usize>() as u64 * 8,
+                    is_signed: false,
+                }),
             }
         }
     }
 
     impl ScalarType {
+        #[inline]
         fn bit_size(&self) -> u64 {
             match self {
                 ScalarType::Bool => core::mem::size_of::<bool>() as u64 * 8,
@@ -257,6 +267,10 @@ mod retrieval {
                 ScalarType::Float(ty) => ty.e_bits + ty.s_bits,
                 ScalarType::Address => core::mem::size_of::<*const ()>() as u64 * 8,
             }
+        }
+
+        fn byte_size(&self) -> TypeSize {
+            (self.bit_size() / u8::BITS as u64).into()
         }
     }
 
@@ -614,6 +628,7 @@ mod retrieval {
     }
 
     impl PorterValue {
+        #[deprecated]
         pub(crate) fn try_to_masked_value<'a, 'b, EB: SymValueRefExprBuilder>(
             &self,
             type_manager: &'a dyn TypeDatabase,
@@ -625,6 +640,19 @@ mod retrieval {
                 expr_builder,
             };
             Ok(builder.build(self, whole_ty))
+        }
+
+        pub(crate) fn try_to_concatenated_scalar(
+            &self,
+            type_manager: &dyn TypeDatabase,
+            expr_builder: &mut impl SymValueRefExprBuilder,
+        ) -> Result<SymValueRef, &LazyTypeInfo> {
+            let whole_ty = self.as_concrete.type_as_scalar(type_manager)?;
+            let mut builder = ConcatenatedValueBuilder {
+                type_manager,
+                expr_builder,
+            };
+            Ok(builder.build(self, Some(whole_ty)))
         }
     }
 
@@ -640,6 +668,155 @@ mod retrieval {
                 }
                 _ => None,
             }
+        }
+    }
+
+    struct ConcatenatedValueBuilder<'a, 'b, EB: SymValueRefExprBuilder> {
+        type_manager: &'a dyn TypeDatabase,
+        expr_builder: &'b mut EB,
+    }
+
+    impl<EB: SymValueRefExprBuilder> ConcatenatedValueBuilder<'_, '_, EB> {
+        pub(crate) fn build(
+            &mut self,
+            value: &PorterValue,
+            scalar_ty: Option<ScalarType>,
+        ) -> SymValueRef {
+            let whole_bytes = unsafe {
+                value
+                    .as_concrete
+                    .access(scalar_ty.map_or(Either::Left(self.type_manager), |t| {
+                        Either::Right(t.byte_size())
+                    }))
+            };
+            let whole_size = whole_bytes.len();
+
+            let read_bytes = |range: Range<usize>| {
+                whole_bytes[range]
+                    .iter()
+                    .map(|&b| ConstValue::new_int(b, IntType::U8).to_value_ref())
+            };
+
+            let mut values = {
+                let (offset, mut values) = value.sym_values.iter().fold(
+                    (0, Vec::with_capacity(whole_size)),
+                    |(mut offset, mut values), (at, ty_id, sym_value)| {
+                        // Fill the gap
+                        {
+                            values.extend(read_bytes(offset..*at as usize));
+                            offset = *at as usize;
+                        }
+
+                        // Add the symbolic value.
+                        let (opt_sym_value_scalar_ty, sym_value_size) =
+                            self.try_type_and_size_of_sym_value(ty_id, sym_value);
+                        let sym_value =
+                            self.to_bit_rep(sym_value, opt_sym_value_scalar_ty.as_ref());
+                        values.push(sym_value.into());
+
+                        offset += sym_value_size as usize;
+                        debug_assert!(
+                            offset <= whole_size,
+                            "Overflowing porter value. {:?} @ {}",
+                            value,
+                            at,
+                        );
+                        (offset, values)
+                    },
+                );
+                values.extend(read_bytes(offset..whole_size));
+                values
+            };
+
+            let ty = LazyTypeInfo::from((
+                value.as_concrete.1.id(),
+                ValueType::try_from(&value.as_concrete.1)
+                    .ok()
+                    .or_else(|| scalar_ty.map(Into::into)),
+            ));
+            let result = if values.len() == 1 {
+                log_debug!(
+                    concat!(
+                        "A transmutation is happening as a form of porter value. ",
+                        "This is only expected to appear when there are ",
+                        "symbolic enum discriminants and raw symbolic pointer casts. ",
+                        "Whole value: {:?}",
+                    ),
+                    value,
+                );
+                debug_assert!(values[0].is_symbolic());
+                SymValueRef::new(self.expr_builder.transmute(
+                    SymValueRef::new(values.pop().unwrap()),
+                    ty.id().unwrap(),
+                    ty,
+                ))
+            } else {
+                #[cfg(target_endian = "little")]
+                {
+                    let mut reversed = Vec::with_capacity(values.len());
+                    for value in values.drain(..).rev() {
+                        let value = if value.is_symbolic() {
+                            self.expr_builder.byte_swap(SymValueRef::new(value)).into()
+                        } else {
+                            value
+                        };
+                        reversed.push(value);
+                    }
+                    values = reversed;
+                }
+                ConcatExpr::new(values, ty).to_value_ref()
+            };
+
+            let result = if let Some(ScalarType::Bool) = scalar_ty {
+                Self::bit_rep_to_bool(result)
+            } else {
+                result
+            };
+
+            result
+        }
+
+        fn try_type_and_size_of_sym_value(
+            &mut self,
+            ty_id: &std::num::NonZero<u128>,
+            sym_value: &guards::SymValueGuard<ValueRef>,
+        ) -> (Option<ScalarType>, u64) {
+            let mut sym_value_ty = LazyTypeInfo::from(*ty_id);
+            let opt_scalar_ty = ValueType::try_from(sym_value.value())
+                .ok()
+                .map(Into::into)
+                .or_else(|| {
+                    ScalarType::try_from(sym_value_ty.fetch(self.type_manager), self.type_manager)
+                        .ok()
+                });
+            (
+                opt_scalar_ty,
+                opt_scalar_ty.map_or_else(
+                    || sym_value_ty.get_size(self.type_manager).unwrap(),
+                    |t| t.byte_size(),
+                ),
+            )
+        }
+
+        fn to_bit_rep(&mut self, value: &SymValueRef, ty: Option<&ScalarType>) -> SymValueRef {
+            if ty.is_some_and(|ty| matches!(ty, ScalarType::Bool)) {
+                SymValueRef::new(self.expr_builder.to_int(
+                    value.clone(),
+                    IntType::U8,
+                    self.type_manager.u8(),
+                ))
+            } else {
+                // There is nothing special to do for other types.
+                value.clone()
+            }
+        }
+
+        fn bit_rep_to_bool(result: SymValueRef) -> SymValueRef {
+            BinaryExpr {
+                operator: BinaryOp::Ne,
+                operands: (result, ConstValue::from(0_u8).to_value_ref()).into(),
+            }
+            .to_value_ref()
         }
     }
 }

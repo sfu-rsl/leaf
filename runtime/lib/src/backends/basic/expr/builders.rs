@@ -269,9 +269,10 @@ mod symbolic {
         fn resolve_sym(&mut self, value: &mut ValueRef, expect_scalar: bool) {
             match value.as_ref() {
                 Value::Symbolic(SymValue::Expression(Expr::Partial(porter))) => {
-                    match porter
-                        .try_to_masked_value(self.type_manager.as_ref(), &mut self.sym_builder)
-                    {
+                    match porter.try_to_concatenated_scalar(
+                        self.type_manager.as_ref(),
+                        &mut self.sym_builder,
+                    ) {
                         Ok(resolved) => {
                             *value = resolved.into();
                         }
@@ -486,7 +487,7 @@ mod symbolic {
                     .expect_single_variant()
                     .fields
                     .expect_struct()
-                    .fields
+                    .fields()
                     .as_array(),
             )
         }
@@ -683,7 +684,7 @@ mod adapters {
                 if let SymValue::Expression(Expr::Binary(first)) = first.as_ref() {
                     let (x, a, is_inner_reversed) = first.operands.as_flat();
                     if let Value::Concrete(ConcreteValue::Const(a)) = a.as_ref() {
-                        if let Ok(result) = build(
+                        match build(
                             (
                                 BinaryExpr {
                                     operands: (x, a, is_inner_reversed).into(),
@@ -694,7 +695,11 @@ mod adapters {
                             )
                                 .into(),
                         ) {
-                            return Ok(result.to_value_ref().0);
+                            Ok(Ok(result)) => return Ok(result.to_value_ref().0),
+                            Ok(Err(mapped)) => {
+                                return Err(mapped.operands);
+                            }
+                            _ => (),
                         }
                     }
                 }

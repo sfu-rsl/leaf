@@ -572,7 +572,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         porter: &PorterValue,
         type_id: TypeId,
     ) {
-        let opt_masked_value = porter.try_to_masked_value(
+        let opt_masked_value = porter.try_to_concatenated_scalar(
             self.type_manager.as_ref(),
             self.expr_builder.borrow_mut().deref_mut(),
         );

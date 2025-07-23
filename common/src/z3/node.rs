@@ -121,6 +121,13 @@ impl<'ctx> AstNode<'ctx> {
             _ => panic!("Expected the value to be a bit vector: {:?}", self),
         }
     }
+
+    pub fn unwrap_as_bit_vector(self) -> ast::BV<'ctx> {
+        match self {
+            Self::BitVector(BVNode(ast, _)) => ast,
+            _ => panic!("Expected the value to be a bit vector: {:?}", self),
+        }
+    }
 }
 
 impl<'ctx> AstNode<'ctx> {

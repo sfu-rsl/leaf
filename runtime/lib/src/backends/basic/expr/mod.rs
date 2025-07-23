@@ -231,7 +231,7 @@ impl ConstValue {
                     ty: second_ty,
                 },
             ) => {
-                assert_eq!(first_ty.bit_size, second_ty.bit_size);
+                debug_assert_eq!(first_ty.bit_size, second_ty.bit_size);
 
                 let result = match operator {
                     BinaryOp::Add => first + second,
@@ -812,6 +812,8 @@ pub(crate) enum Expr {
 
     Partial(PorterValue),
 
+    Concat(ConcatExpr),
+
     #[from(ignore)]
     PtrMetadata(SymValueRef),
 }
@@ -895,6 +897,25 @@ impl PorterValue {
                 .map(|(offset, ty, value)| (offset, ty, f(ty, value)))
                 .collect(),
         }
+    }
+}
+
+/// # Remarks
+/// The concatenation happens from left to right.
+/// So if the values are bytes with the same order as their address in memory, it corresponds to a big-endian representation.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ConcatExpr {
+    values: Vec<ValueRef>,
+    ty: LazyTypeInfo,
+}
+
+impl ConcatExpr {
+    pub(crate) fn new(values: Vec<ValueRef>, ty: LazyTypeInfo) -> Self {
+        assert!(
+            values.len() > 1,
+            "ConcatExpr must have at least two values."
+        );
+        Self { values, ty }
     }
 }
 
@@ -1176,7 +1197,14 @@ mod convert {
         };
     }
 
-    impl_sym_to_value_ref!(Expr, BinaryExpr, ExtensionExpr, TruncationExpr, PorterValue,);
+    impl_sym_to_value_ref!(
+        Expr,
+        BinaryExpr,
+        ExtensionExpr,
+        TruncationExpr,
+        PorterValue,
+        ConcatExpr,
+    );
 
     impl<'a> TryFrom<&'a Value> for ValueType {
         type Error = &'a Value;
@@ -1194,38 +1222,35 @@ mod convert {
 
         fn try_from(value: &'a SymValue) -> Result<Self, Self::Error> {
             match value {
-                SymValue::Variable(SymbolicVar { id: _, ty }) => Ok(ty.clone()),
+                SymValue::Variable(SymbolicVar { ty, .. }) => Ok(ty.clone()),
                 SymValue::Expression(expr) => match expr {
-                    Expr::Unary {
-                        operator: _,
-                        operand,
-                    } => ValueType::try_from(operand.value()),
+                    Expr::Unary { operand, .. } => ValueType::try_from(operand.value()),
                     Expr::Binary(BinaryExpr { operator, operands }) => {
                         use BinaryOp::*;
                         match operator {
                             Eq | Lt | Le | Ne | Ge | Gt => Ok(ValueType::Bool),
-                            _ => ValueType::try_from(operands.first().as_ref()).map_err(|_| value),
+                            Add | Sub | Mul | Div | Rem | BitXor | BitAnd | BitOr | Offset => {
+                                ValueType::try_from(operands).map_err(|_| value)
+                            }
+                            Shl | Shr | RotateL | RotateR => {
+                                ValueType::try_from(operands.first().as_ref()).map_err(|_| value)
+                            }
+                            Cmp => {
+                                // NOTE: This is effectively an i8. But as it is different from other value types, we avoid using it.
+                                Err(value)
+                            }
                         }
                     }
                     Expr::BinaryBoundCheck { .. } => Ok(ValueType::Bool),
                     Expr::Extension(ExtensionExpr { ty, .. }) => Ok(ty.clone()),
                     Expr::Truncation(TruncationExpr { ty, .. }) => Ok((*ty).into()),
                     Expr::Ite {
-                        condition: _,
                         if_target,
                         else_target,
-                    } => Option::zip(
-                        ValueType::try_from(if_target.as_ref()).ok(),
-                        ValueType::try_from(else_target.as_ref()).ok(),
-                    )
-                    .map(|(if_ty, else_ty)| {
-                        debug_assert_eq!(
-                            if_ty, else_ty,
-                            "The types of ITE operands must be the same."
-                        );
-                        if_ty
-                    })
-                    .ok_or(value),
+                        ..
+                    } => ValueType::try_from(if_target.as_ref())
+                        .or_else(|_| ValueType::try_from(else_target.as_ref()))
+                        .map_err(|_| value),
                     Expr::Transmutation { dst_ty, .. } => dst_ty.try_into().map_err(|_| value),
                     Expr::Len(..) => Ok(IntType::USIZE.into()),
                     Expr::Multi(select) => {
@@ -1235,10 +1260,24 @@ mod convert {
                         as_concrete: RawConcreteValue(_, ty),
                         ..
                     }) => ty.try_into().map_err(|_| value),
+                    Expr::Concat(ConcatExpr { ty, .. }) => ty.try_into().map_err(|_| value),
                     Expr::Ref(..) => Err(value),
                     Expr::PtrMetadata(..) => Err(value),
                 },
             }
+        }
+    }
+
+    impl<'a> TryFrom<&'a SymBinaryOperands> for ValueType {
+        type Error = &'a SymBinaryOperands;
+
+        fn try_from(value: &'a SymBinaryOperands) -> Result<Self, Self::Error> {
+            let (sym, other, _) = value.as_flat();
+            // There is more chance to see shallower values (consts) on the may-concrete side.
+            Self::try_from(other.as_ref())
+                .ok()
+                .or_else(|| Self::try_from(sym.value()).ok())
+                .ok_or(value)
         }
     }
 
@@ -1254,10 +1293,9 @@ mod convert {
                     ConstValue::Float { bit_rep: _, ty } => Ok((*ty).into()),
                     _ => Err(value),
                 },
-                ConcreteValue::Unevaluated(UnevalValue::Lazy(RawConcreteValue(
-                    _,
-                    LazyTypeInfo::IdPrimitive(_, value_ty),
-                ))) => Ok(*value_ty),
+                ConcreteValue::Unevaluated(UnevalValue::Lazy(RawConcreteValue(_, ty))) => {
+                    ty.try_into().map_err(|_| value)
+                }
                 _ => Err(value),
             }
         }

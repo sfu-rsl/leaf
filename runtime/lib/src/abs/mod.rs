@@ -13,6 +13,7 @@ pub(crate) use common::types::trace::*;
 pub(crate) use common::types::*;
 
 use core::num::NonZeroU64;
+use core::panic;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -81,6 +82,13 @@ impl BinaryOp {
             Self::AddSaturating | Self::SubSaturating => true,
             _ => false,
         }
+    }
+
+    pub(crate) fn is_shift(&self) -> bool {
+        matches!(
+            self,
+            Self::Shl | Self::ShlUnchecked | Self::Shr | Self::ShrUnchecked
+        )
     }
 }
 
@@ -237,6 +245,14 @@ impl ValueType {
         match self {
             Self::Int(ref int_type) => Some(int_type),
             _ => None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn expect_int(self) -> IntType {
+        match self {
+            Self::Int(int_type) => int_type,
+            _ => panic!("Expected an IntType, found: {:?}", self),
         }
     }
 }

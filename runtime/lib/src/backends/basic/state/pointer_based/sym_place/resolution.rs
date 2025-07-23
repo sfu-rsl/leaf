@@ -168,6 +168,7 @@ mod implementation {
                 // Cast
                 Expr::Ite { .. } | Expr::Truncation(..) | Expr::Extension(..) => todo!(),
                 Expr::Partial(..) => todo!(),
+                Expr::Concat(..) => todo!(),
                 Expr::Transmutation { .. } => todo!(),
                 Expr::Unary { .. }
                 | Expr::BinaryBoundCheck { .. }

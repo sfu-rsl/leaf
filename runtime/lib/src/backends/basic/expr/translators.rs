@@ -290,6 +290,18 @@ pub(crate) mod z3 {
                     ast
                 }
                 Multi(select) => self.translate_select(select, None),
+                Concat(ConcatExpr { values, ty }) => {
+                    let values = values
+                        .iter()
+                        .map(|v| self.translate_value(v))
+                        .collect::<Vec<_>>();
+                    self.translate_concat_expr(
+                        values,
+                        ValueType::try_from(ty).expect(
+                            "Concatenated value at this point is expected to have an integer type.",
+                        ).is_signed(),
+                    )
+                }
                 Ref(..) | Len(..) | PtrMetadata(..) => {
                     unreachable!(
                         "Projection expressions should be resolved before translation. Got: {expr}"
@@ -718,6 +730,20 @@ pub(crate) mod z3 {
                 .reduce(|acc, byte| ast::BV::concat(&byte, &acc))
                 .unwrap();
             BVNode::new(swapped_bv, bv.is_signed()).into()
+        }
+
+        fn translate_concat_expr(
+            &mut self,
+            values: Vec<AstNode<'ctx>>,
+            is_signed: bool,
+        ) -> AstNode<'ctx> {
+            // Concatenation leads to big-endianness.
+            let concatenated = values
+                .into_iter()
+                .map(|v| v.unwrap_as_bit_vector())
+                .reduce(|acc, bv| ast::BV::concat(&acc, &bv))
+                .unwrap();
+            BVNode::new(concatenated, is_signed).into()
         }
     }
 

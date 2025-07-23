@@ -1,5 +1,7 @@
 use std::fmt::{Display, Formatter, Result};
 
+use common::utils::comma_separated;
+
 use super::{
     place::{
         DerefSymHostPlace, DeterministicPlaceValue, DeterministicProjection, PlaceValue,
@@ -156,14 +158,15 @@ impl Expr {
                 bin_expr: BinaryExpr { operator, .. },
                 is_overflow,
             } => write!(f, "{}{operator}?", if *is_overflow { "O" } else { "U" }),
-            Expr::Extension(..) => write!(f, "Extend"),
-            Expr::Truncation(..) => write!(f, "Truncate"),
+            Expr::Extension(..) => write!(f, "Ext"),
+            Expr::Truncation(..) => write!(f, "Trunc"),
             Expr::Ite { .. } => write!(f, "Ite"),
             Expr::Transmutation { .. } => write!(f, "Trans"),
             Expr::Multi(_) => write!(f, "Multi"),
             Expr::Ref(_) => write!(f, "&"),
             Expr::Len(_) => write!(f, "Len"),
             Expr::Partial(_) => write!(f, "Partial"),
+            Expr::Concat(_) => write!(f, "||"),
             Expr::PtrMetadata(..) => write!(f, ""),
         }
     }
@@ -199,6 +202,7 @@ impl Expr {
             Expr::Ref(operand) => write!(f, "{operand}"),
             Expr::Len(of) => write!(f, "{of}"),
             Expr::Partial(porter) => write!(f, "{porter}"),
+            Expr::Concat(concat) => write!(f, "{concat}"),
             Expr::PtrMetadata(operand) => write!(f, "{operand}.meta"),
         }
     }
@@ -239,6 +243,17 @@ impl Display for super::OverflowingBinaryOp {
 impl Display for PorterValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{{S({})/{}}}", self.sym_values.len(), self.as_concrete)
+    }
+}
+
+impl Display for ConcatExpr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "{{[{}]:{}}}",
+            comma_separated(self.values.iter()),
+            self.ty
+        )
     }
 }
 
