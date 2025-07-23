@@ -139,6 +139,18 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
         first: Self::Operand,
         second: Self::Operand,
     ) {
+        let second = if operator.is_shift() && second.is_symbolic() {
+            self.expr_builder().to_int(
+                second,
+                ValueType::try_from(self.dest.type_info())
+                    .unwrap()
+                    .expect_int(),
+                self.dest.type_info().clone(),
+            )
+        } else {
+            second
+        };
+
         let result_value = self.expr_builder().binary_op((first, second), operator);
         self.set(result_value)
     }
