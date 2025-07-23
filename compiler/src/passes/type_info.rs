@@ -23,9 +23,9 @@ use super::{CompilationPass, Storage};
 const TAG_TYPE_EXPORT: &str = "type_export";
 
 #[derive(Default)]
-pub(crate) struct TypeExporter;
+pub(crate) struct TypeInfoExporter;
 
-impl CompilationPass for TypeExporter {
+impl CompilationPass for TypeInfoExporter {
     fn override_flags() -> super::OverrideFlags {
         super::OverrideFlags::MAKE_CODEGEN_BACKEND
     }

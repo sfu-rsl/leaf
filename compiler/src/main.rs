@@ -219,7 +219,7 @@ mod driver_callbacks {
 
         let passes = chain!(
             prerequisites_pass,
-            <TypeExporter>,
+            <TypeInfoExporter>,
             <ProgramMapExporter>,
             <ProgramDependenceMapExporter>,
             nctfe_pass,
