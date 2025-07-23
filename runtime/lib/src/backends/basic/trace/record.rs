@@ -58,7 +58,7 @@ impl BasicExeTraceRecorder {
             })
             .filter(|c| matches!(c.format, crate::utils::file::FileFormat::JsonLines))
             .map(|c| {
-                c.open_or_create_single("exe_trace", true)
+                c.open_or_create_single("exe_trace", None, true)
                     .unwrap_or_else(|e| panic!("Could not create file for trace recording: {e}"))
             });
 

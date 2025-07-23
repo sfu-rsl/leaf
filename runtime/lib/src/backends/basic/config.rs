@@ -120,6 +120,9 @@ pub(crate) struct ExecutionTraceConfig {
     #[serde(default = "default_trace_inspectors")]
     pub inspectors: Vec<TraceInspectorType>,
 
+    #[serde(default = "default_constraint_filters")]
+    pub constraint_filters: Vec<ConstraintFilterType>,
+
     #[serde(default)]
     pub control_flow_dump: Option<OutputConfig>,
 
@@ -146,6 +149,8 @@ pub(crate) enum TraceInspectorType {
     SanityChecker {
         #[serde(default)]
         level: ConstraintSanityCheckLevel,
+        #[serde(default)]
+        output: Option<OutputConfig>,
     },
     DivergingInput {
         #[serde(default = "default_diverging_input_check_optimistic")]
@@ -194,12 +199,24 @@ fn default_trace_inspectors() -> Vec<TraceInspectorType> {
     vec![
         TraceInspectorType::SanityChecker {
             level: ConstraintSanityCheckLevel::Panic,
+            output: None,
         },
         TraceInspectorType::DivergingInput {
             check_optimistic: default_diverging_input_check_optimistic(),
             filters: vec![],
         },
     ]
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ConstraintFilterType {
+    SanityChecker { output: Option<OutputConfig> },
+}
+
+fn default_constraint_filters() -> Vec<ConstraintFilterType> {
+    vec![ConstraintFilterType::SanityChecker { output: None }]
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -27,11 +27,14 @@ where
                 FileFormat::JsonLines => {
                     const FILENAME_DEFAULT: &str = "sym_decisions";
                     let file = cfg
-                        .open_or_create_single(FILENAME_DEFAULT, true)
+                        .open_or_create_single(FILENAME_DEFAULT, None, true)
                         .unwrap_or_else(|e| {
                             panic!("Could not create file for symbolic constraints dumping: {e}")
                         });
                     StreamDumperStepInspector::json_lines(file)
+                }
+                FileFormat::Text => {
+                    unimplemented!("Format is not supported for this dumper: {:?}", cfg.format);
                 }
                 FileFormat::Binary | FileFormat::Json => unreachable!(),
             }
@@ -64,7 +67,7 @@ where
                 FileFormat::JsonLines => {
                     const FILENAME_DEFAULT: &str = "discr_preconditions";
                     let file = cfg
-                        .open_or_create_single(FILENAME_DEFAULT, true)
+                        .open_or_create_single(FILENAME_DEFAULT, None, true)
                         .unwrap_or_else(|e| {
                             panic!("Could not create file for symbolic constraints dumping: {e}")
                         });
@@ -72,6 +75,9 @@ where
                         file,
                         crate::utils::file::JsonLinesFormatter::default(),
                     )
+                }
+                FileFormat::Text => {
+                    unimplemented!("Format is not supported for this dumper: {:?}", cfg.format);
                 }
                 FileFormat::Binary | FileFormat::Json => unreachable!(),
             }

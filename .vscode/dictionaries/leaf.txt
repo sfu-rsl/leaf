@@ -30,3 +30,4 @@ streamable
 Symbolizable
 tyexp
 Uneval
+unsat

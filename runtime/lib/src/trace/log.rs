@@ -4,6 +4,8 @@ use common::log_info;
 
 use super::{Constraint, InspectionTraceManagerExt, StepInspector, TraceManager};
 
+const MAX_CONSTRAINT_LENGTH: usize = 100;
+
 pub(crate) struct LoggerTraceManager<S, V, C> {
     _phantom: core::marker::PhantomData<(S, V, C)>,
 }
@@ -18,7 +20,12 @@ impl<S, V, C> Default for LoggerTraceManager<S, V, C> {
 
 impl<S: Display, V: Display, C: Display> StepInspector<S, V, C> for LoggerTraceManager<S, V, C> {
     fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>) {
-        log_info!("Notified about constraint {} at step {}", constraint, step,);
+        log_info!(
+            "Notified about constraint {:.*} at step {}",
+            MAX_CONSTRAINT_LENGTH,
+            constraint,
+            step,
+        );
     }
 }
 

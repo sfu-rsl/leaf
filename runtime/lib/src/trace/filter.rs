@@ -32,6 +32,21 @@ pub(crate) trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
     ) -> impl TraceManager<S, V, C>
     where
         Self: Sized;
+
+    fn filtered_by_all<'f>(
+        self,
+        mut filters: Vec<impl FnMut(&S, Constraint<&V, &C>) -> bool + 'f>,
+    ) -> impl TraceManager<S, V, C> + 'f
+    where
+        Self: Sized + 'f,
+        S: 'f,
+        V: 'f,
+        C: 'f,
+    {
+        self.filtered_by(move |step, constraint| {
+            filters.iter_mut().all(|f| f(step, constraint.clone()))
+        })
+    }
 }
 
 impl<S, V, C, M: TraceManager<S, V, C>> TraceManagerExt<S, V, C> for M {

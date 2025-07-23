@@ -35,12 +35,21 @@ impl FileGenConfig {
         fs::create_dir_all(&dir).map(|_| dir)
     }
 
-    pub(crate) fn single_file_path(&self, default_filename: &str) -> PathBuf {
-        let filename = self
-            .prefix
-            .as_ref()
-            .map(AsRef::<Path>::as_ref)
-            .unwrap_or(default_filename.as_ref());
+    /// # Remarks
+    /// Prefix is dual-purpose:
+    /// - If a single file is generated, it is used as the file name.
+    /// - If multiple files are generated, it is used as a prefix for each file.
+    /// So if you want to generate a single file, and you want to give it a default name,
+    /// you use `default_prefix` and `name` as `None`.
+    pub(crate) fn single_file_path(&self, default_prefix: &str, name: Option<String>) -> PathBuf {
+        let filename = format!(
+            "{}{}",
+            self.prefix
+                .as_ref()
+                .map(|p| p.as_str())
+                .unwrap_or(default_prefix),
+            name.unwrap_or_default()
+        );
         self.dir_or_default()
             .join(filename)
             .with_added_extension(self.extension_or_default())
@@ -49,15 +58,29 @@ impl FileGenConfig {
     #[tracing::instrument(level = "debug")]
     pub(crate) fn open_or_create_single(
         &self,
-        default_filename: &str,
+        default_prefix: &str,
+        name: Option<String>,
         truncate: bool,
     ) -> std::io::Result<fs::File> {
+        self.open_or_create_single_with_path(default_prefix, name, truncate)
+            .map(|(_, f)| f)
+    }
+
+    #[tracing::instrument(level = "debug")]
+    pub(crate) fn open_or_create_single_with_path(
+        &self,
+        default_prefix: &str,
+        name: Option<String>,
+        truncate: bool,
+    ) -> std::io::Result<(PathBuf, fs::File)> {
         self.ensure_dir().and_then(|_| {
-            fs::File::options()
+            let path = self.single_file_path(default_prefix, name);
+            let file = fs::File::options()
                 .write(true)
                 .create(true)
                 .truncate(truncate)
-                .open(self.single_file_path(default_filename))
+                .open(&path);
+            file.map(|f| (path, f))
         })
     }
 
@@ -72,6 +95,8 @@ impl FileGenConfig {
 #[derive(Debug, Default, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum FileFormat {
+    #[serde(alias = "txt")]
+    Text,
     #[default]
     Json,
     #[serde(alias = "jsonl")]
@@ -82,6 +107,7 @@ pub(crate) enum FileFormat {
 impl FileFormat {
     pub(crate) fn default_extension(&self) -> &'static str {
         match self {
+            Self::Text => "txt",
             Self::Json => "json",
             Self::JsonLines => "jsonl",
             Self::Binary => "bin",
@@ -90,6 +116,7 @@ impl FileFormat {
 
     pub(crate) fn is_streamable(&self) -> bool {
         match self {
+            Self::Text => true,
             Self::Json => false,
             Self::JsonLines => true,
             Self::Binary => false,

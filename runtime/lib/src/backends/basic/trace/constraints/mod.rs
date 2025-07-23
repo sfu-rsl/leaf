@@ -15,6 +15,7 @@ use crate::{
         backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
         utils::Tagged,
     },
+    backends::basic::config::ConstraintFilterType,
     solvers::z3::Z3Solver,
     trace::{
         AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
@@ -148,12 +149,15 @@ pub(crate) fn create_trace_manager(
         .iter()
         .filter(|t| is_inner_inspector(t))
         .map(|t| match t {
-            TraceInspectorType::SanityChecker { level } => sanity_check::create_sanity_checker(
-                sym_var_manager_ref.clone(),
-                translator.clone(),
-                *level,
-                solver.clone(),
-            ),
+            TraceInspectorType::SanityChecker { level, output } => {
+                sanity_check::create_trace_inspector(
+                    sym_var_manager_ref.clone(),
+                    translator.clone(),
+                    *level,
+                    output.as_ref(),
+                    solver.clone(),
+                )
+            }
             TraceInspectorType::DivergingInput {
                 check_optimistic,
                 filters,
@@ -175,6 +179,21 @@ pub(crate) fn create_trace_manager(
 
     let agg_manager = AggregatorTraceManager::new(inner_inspectors);
 
+    let inner_filters = trace_config
+        .constraint_filters
+        .iter()
+        .map(|f| match f {
+            ConstraintFilterType::SanityChecker { output } => {
+                type_check_inner_filter(sanity_check::create_step_filter(
+                    sym_var_manager_ref.clone(),
+                    translator.clone(),
+                    output.as_ref(),
+                    solver.clone(),
+                ))
+            }
+        })
+        .collect::<Vec<_>>();
+
     let inner_step_inspectors = trace_config
         .constraints_dump
         .as_ref()
@@ -183,7 +202,11 @@ pub(crate) fn create_trace_manager(
         .into_iter()
         .collect::<Vec<_>>();
 
-    let inner_manager = type_check_inner_manager(agg_manager.inspected_by(inner_step_inspectors));
+    let inner_manager = type_check_inner_manager(
+        agg_manager
+            .inspected_by(inner_step_inspectors)
+            .filtered_by_all(inner_filters),
+    );
 
     let mut value_translator = translator.clone();
     let mut case_translator = translator.clone();
@@ -252,6 +275,17 @@ fn is_inner_inspector(t: &TraceInspectorType) -> bool {
     }
 }
 
+// These functions help with constraining the types when it is (almost) not possible to write them explicitly.
+
 fn type_check_inner_manager<'ctx, T: AbsTraceManager<IStep, IValue<'ctx>, ICase<'ctx>>>(m: T) -> T {
     m
+}
+
+fn type_check_inner_filter<
+    'ctx,
+    F: FnMut(&IStep, Constraint<&IValue<'ctx>, &ICase<'ctx>>) -> bool + 'ctx,
+>(
+    f: F,
+) -> Box<dyn FnMut(&IStep, Constraint<&IValue<'ctx>, &ICase<'ctx>>) -> bool + 'ctx> {
+    Box::new(f)
 }

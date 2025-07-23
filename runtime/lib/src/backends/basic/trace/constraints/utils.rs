@@ -1,11 +1,14 @@
 use core::borrow::Borrow;
 
+use derive_more as dm;
+
 use super::{
     CurrentSolverCase, CurrentSolverValue, IStep, Step,
     backend::{ConstValue, ValueRef},
 };
 
-#[derive(Debug)]
+#[derive(Debug, dm::Display)]
+#[display("{}", _0)]
 pub(super) struct Translation<V, T>(V, T);
 
 impl<V, T> Translation<V, T> {
@@ -115,7 +118,7 @@ pub(super) mod dumping {
                                      name: String,
                                      default_filename: &str| {
                 let mut file = config
-                    .open_or_create_single(&default_filename, false)
+                    .open_or_create_single(&default_filename, None, false)
                     .unwrap_or_else(|e| panic!("Could not create file for {name}: {e}"));
 
                 match config.format {
@@ -135,11 +138,11 @@ pub(super) mod dumping {
                             Ok(())
                         })
                     }
-                    FileFormat::JsonLines => {
-                        unimplemented!("Json stream format is not supported for this dumper")
-                    }
-                    FileFormat::Binary => {
-                        unimplemented!("Binary output format is not supported for this dumper")
+                    FileFormat::Text | FileFormat::JsonLines | FileFormat::Binary => {
+                        unimplemented!(
+                            "Format is not supported for this dumper: {:?}",
+                            config.format
+                        );
                     }
                 }
             };
@@ -155,7 +158,7 @@ pub(super) mod dumping {
     ) -> Option<Result<T, String>> {
         use std::io::Seek;
 
-        let file_path = config.single_file_path(&default_filename);
+        let file_path = config.single_file_path(&default_filename, None);
         if !file_path.exists() {
             return None;
         }

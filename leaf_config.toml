@@ -33,6 +33,20 @@ format = "jsonl"
 [[exe_trace.inspectors]]
 type = "sanity_checker"
 level = "panic"
+[exe_trace.inspectors.output]
+type = "file"
+directory = "leaf_out"
+format = "txt"
+prefix = "unsat_trace_"
+
+
+[[exe_trace.constraint_filters]]
+type = "sanity_checker"
+[exe_trace.constraint_filters.output]
+type = "file"
+directory = "leaf_out"
+format = "txt"
+prefix = "unsat_constraint_"
 
 [[exe_trace.inspectors]]
 type = "diverging_input"
@@ -59,6 +73,7 @@ check_optimistic = true
 # type = "file"
 # directory = "leaf_out"
 # format = "json"
+
 
 [solver]
 type = "z3"

@@ -185,14 +185,59 @@ mod msg_err {
 #[cfg(any(feature = "type_info_rw", feature = "directed"))]
 pub(crate) use msg_err::MessagedError;
 
-#[cfg(feature = "std")]
-pub fn comma_separated<T: core::fmt::Display>(
-    iter: impl Iterator<Item = T>,
-) -> std::string::String {
-    iter.map(|t| std::format!("{t}"))
-        .collect::<std::vec::Vec<_>>()
-        .join(", ")
+mod comma_sep {
+    use core::fmt::{Debug, Display, Formatter, Result};
+    use core::iter::IntoIterator;
+
+    /// A wrapper that formats an iterator as a comma-separated list.
+    ///
+    /// This is useful for displaying lists of items in a more readable format.
+    #[derive(Default)]
+    pub struct CommaSeparated<I>(core::cell::Cell<Option<I>>);
+
+    macro_rules! fmt_impl {
+        ($self:expr, $f:expr, $format:literal) => {
+            let mut iter = $self
+                .0
+                .take()
+                .expect("Only meant to be displayed once")
+                .into_iter();
+            if let Some(first) = iter.next() {
+                write!($f, $format, first)?;
+                for item in iter {
+                    write!($f, concat!(", ", $format), item)?;
+                }
+            }
+        };
+    }
+
+    impl<I> Display for CommaSeparated<I>
+    where
+        I: IntoIterator,
+        I::Item: Display,
+    {
+        fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            fmt_impl!(self, f, "{}");
+            Ok(())
+        }
+    }
+
+    impl<I> Debug for CommaSeparated<I>
+    where
+        I: IntoIterator,
+        I::Item: Debug,
+    {
+        fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            fmt_impl!(self, f, "{:?}");
+            Ok(())
+        }
+    }
+
+    pub fn comma_separated<I: IntoIterator>(iter: I) -> CommaSeparated<I> {
+        CommaSeparated(core::cell::Cell::new(Some(iter)))
+    }
 }
+pub use comma_sep::comma_separated;
 
 #[cfg(feature = "unsafe_wrappers")]
 mod unsafe_wrappers {

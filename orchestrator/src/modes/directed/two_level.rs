@@ -323,7 +323,7 @@ mod next {
                     log_trace!("Target: {}", target);
                     log_trace!("Callees: {:?}", callees);
                     log_trace!(
-                        "Reachers: {:?}",
+                        "Reachers: {}",
                         comma_separated(reachers.iter(|r| r.to_string()))
                     );
                     let result = callees
@@ -370,7 +370,7 @@ mod next {
                     log_trace!("Target: {}", target);
                     log_trace!("Successors: {:?}", successors);
                     log_trace!(
-                        "Reachers: {:?}",
+                        "Reachers: {}",
                         comma_separated(reachers.iter(|r| r.to_string()))
                     );
                     let result = successors
