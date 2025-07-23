@@ -14,7 +14,7 @@ mod high {
     use common::{log_debug, log_warn, pri::TypeId, types::PointerOffset};
 
     use crate::backends::basic::{
-        expr::SymValueRef,
+        expr::{Expr, SymValue, SymValueRef},
         implication::{Antecedents, Precondition, PreconditionConstraints, PreconditionQuery},
     };
 
@@ -149,8 +149,8 @@ mod high {
 
             self.value_mem.drain_range_and_apply(
                 &range,
-                |_, _, _| {
-                    let obj_range = range_from(addr, size);
+                |addr, size, _| {
+                    let obj_range = range_from(*addr, *size);
                     // Overlapping but not contained
                     if !RangeIntersection::contains(&range, &obj_range) {
                         log_warn!(
@@ -177,6 +177,8 @@ mod high {
             self.inner_erase_preconditions_in(addr, size, false);
         }
 
+        /// # Panics
+        /// If `values` are not ordered by offset.
         #[tracing::instrument(level = "debug", skip(self))]
         pub(crate) fn replace_values(
             &mut self,
@@ -208,7 +210,7 @@ mod high {
                 log_debug!("Inserting: {:?} = ({}, {})", value_range, &value, &type_id);
                 cursor
                     .insert_before(value_addr, (value_size, (value, type_id)))
-                    .unwrap();
+                    .expect("Unordered symbolic values passed");
             }
         }
 
