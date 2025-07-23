@@ -118,8 +118,10 @@ impl<'ctx, 'a> Solver<'ctx, 'a> {
 
         log_debug!(
             discr = edge.src.discr.as_ref().map(|d| d.to_string()),
-            antecedents = (!edge.src.implied_by_offset.is_empty())
-                .then(|| comma_separated(antecedents(prefix, last).map(|(_, s)| s.trace_index))),
+            antecedents = (!edge.src.implied_by_offset.is_empty()).then(|| comma_separated(
+                antecedents(prefix, last).map(|(_, s)| s.trace_index)
+            )
+            .to_string()),
             "Satisfying edge",
         );
 
