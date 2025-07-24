@@ -21,7 +21,7 @@ use crate::abs::{
     expr::sym_place::{Select, SymbolicReadTree},
 };
 pub(crate) use crate::abs::{
-    FloatType, IntType, PointerOffset, RawAddress, TypeId, ValueType, VariantIndex,
+    FloatType, IntType, PointerOffset, RawAddress, TypeId, TypeSize, ValueType, VariantIndex,
 };
 use crate::utils::meta::{define_reversible_pair, sub_enum};
 
@@ -617,6 +617,7 @@ pub(crate) enum LazyTypeInfo {
      * necessary.
      */
     IdPrimitive(TypeId, ValueType),
+    IdSize(TypeId, TypeSize),
     Fetched(&'static TypeInfo),
     #[from(ignore)]
     Forced(Rc<TypeInfo>),
@@ -628,6 +629,7 @@ impl LazyTypeInfo {
             Self::None => None,
             Self::Id(id) => Some(*id),
             Self::IdPrimitive(id, _) => Some(*id),
+            Self::IdSize(id, _) => Some(*id),
             Self::Fetched(ty) => Some(ty.id),
             Self::Forced(ty) => Some(ty.id),
         }
@@ -636,9 +638,16 @@ impl LazyTypeInfo {
 
 impl From<(Option<TypeId>, Option<ValueType>)> for LazyTypeInfo {
     fn from(pair: (Option<TypeId>, Option<ValueType>)) -> Self {
+        Self::from((pair.0, pair.1, None))
+    }
+}
+
+impl From<(Option<TypeId>, Option<ValueType>, Option<TypeSize>)> for LazyTypeInfo {
+    fn from(pair: (Option<TypeId>, Option<ValueType>, Option<TypeSize>)) -> Self {
         match pair {
-            (Some(ty_id), Some(value_ty)) => Self::IdPrimitive(ty_id, value_ty),
-            (Some(ty_id), None) => Self::Id(ty_id),
+            (Some(ty_id), Some(value_ty), _) => Self::IdPrimitive(ty_id, value_ty),
+            (Some(ty_id), None, Some(size)) => Self::IdSize(ty_id, size),
+            (Some(ty_id), _, _) => Self::Id(ty_id),
             _ => Self::None,
         }
     }

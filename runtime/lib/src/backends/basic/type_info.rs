@@ -153,7 +153,9 @@ where
     fn try_to_value_type<'a>(&self, ty: LazyTypeInfo) -> Option<ValueType> {
         match ty {
             LazyTypeInfo::IdPrimitive(_, ty) => self.try_to_value_type(ty),
-            LazyTypeInfo::Id(id) => self.try_to_value_type(self.get_type(&id)),
+            LazyTypeInfo::Id(id) | LazyTypeInfo::IdSize(id, _) => {
+                self.try_to_value_type(self.get_type(&id))
+            }
             LazyTypeInfo::Fetched(ty) => self.try_to_value_type(ty),
             LazyTypeInfo::Forced(ty) => self.try_to_value_type(ty.as_ref()),
             LazyTypeInfo::None => None,

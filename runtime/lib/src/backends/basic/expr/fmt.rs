@@ -116,7 +116,7 @@ impl Display for LazyTypeInfo {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
             LazyTypeInfo::None => write!(f, "?"),
-            LazyTypeInfo::Id(id) => write!(f, "T#{}", id),
+            LazyTypeInfo::Id(id) | LazyTypeInfo::IdSize(id, _) => write!(f, "T#{}", id),
             LazyTypeInfo::IdPrimitive(_id, ty) => write!(f, "{}", ty),
             LazyTypeInfo::Fetched(ty) => write!(f, "T#{}", ty.id),
             LazyTypeInfo::Forced(ty) => write!(f, "T#ᶠ{}", ty.id),

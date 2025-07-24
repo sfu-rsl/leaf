@@ -78,9 +78,10 @@ mod retrieval {
                         retrieve_scalar(self.0, &ty.clone().into()).to_value_ref(),
                     ));
                 }
-                LazyTypeInfo::Id(..) | LazyTypeInfo::Fetched(..) | LazyTypeInfo::Forced(..) => {
-                    self.1.get_type(type_manager).unwrap()
-                }
+                LazyTypeInfo::Id(..)
+                | LazyTypeInfo::IdSize(..)
+                | LazyTypeInfo::Fetched(..)
+                | LazyTypeInfo::Forced(..) => self.1.get_type(type_manager).unwrap(),
                 LazyTypeInfo::None => return Err(&self.1),
             };
 
@@ -119,10 +120,7 @@ mod retrieval {
     impl LazyTypeInfo {
         pub(crate) fn fetch<'a>(&'a mut self, type_manager: &dyn TypeDatabase) -> &'a TypeInfo {
             match self {
-                Self::Id(ty_id) => {
-                    *self = Self::Fetched(type_manager.get_type(ty_id));
-                }
-                Self::IdPrimitive(ty_id, _) => {
+                Self::Id(ty_id) | Self::IdPrimitive(ty_id, _) | Self::IdSize(ty_id, _) => {
                     *self = Self::Fetched(type_manager.get_type(ty_id));
                 }
                 Self::Fetched(..) | Self::Forced(..) | Self::None => {}
@@ -131,14 +129,14 @@ mod retrieval {
                 Self::Fetched(ty) => *ty,
                 Self::Forced(ref ty) => ty.as_ref(),
                 Self::None => panic!("Type info is not available."),
-                Self::Id(..) | Self::IdPrimitive(..) => unreachable!(),
+                Self::Id(..) | Self::IdPrimitive(..) | Self::IdSize(..) => unreachable!(),
             }
         }
 
         #[inline]
         pub(crate) fn get_type(&self, type_manager: &dyn TypeDatabase) -> Option<&TypeInfo> {
             match self {
-                Self::Id(ty_id) | Self::IdPrimitive(ty_id, _) => {
+                Self::Id(ty_id) | Self::IdPrimitive(ty_id, _) | Self::IdSize(ty_id, _) => {
                     Some(type_manager.get_type(&ty_id))
                 }
                 Self::Fetched(ty) => Some(*ty),
@@ -152,13 +150,10 @@ mod retrieval {
             match self {
                 Self::None => None,
                 Self::IdPrimitive(_, ty) => Some(ty.size().into()),
-                _ => match self {
-                    Self::Id(ty_id) => type_manager.get_type(&ty_id),
-                    Self::Fetched(ty) => *ty,
-                    Self::Forced(ty) => ty.as_ref(),
-                    _ => unreachable!(),
+                Self::IdSize(_, size) => Some(*size),
+                Self::Id(..) | Self::Fetched(..) | Self::Forced(..) => {
+                    self.get_type(type_manager).and_then(|ty| ty.size())
                 }
-                .size(),
             }
         }
     }
@@ -778,7 +773,7 @@ mod retrieval {
 
         fn try_type_and_size_of_sym_value(
             &mut self,
-            ty_id: &std::num::NonZero<u128>,
+            ty_id: &TypeId,
             sym_value: &guards::SymValueGuard<ValueRef>,
         ) -> (Option<ScalarType>, u64) {
             let mut sym_value_ty = LazyTypeInfo::from(*ty_id);
