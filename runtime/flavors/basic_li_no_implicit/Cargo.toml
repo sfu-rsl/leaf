@@ -10,4 +10,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
-runtime = { path = "../../lib", features = [] }
+runtime = { path = "../../lib", features = [
+    "runtime_access_raw_ptr",
+    "release_sym_value_loss_checks",
+] }
