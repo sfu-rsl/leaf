@@ -130,6 +130,7 @@ pub mod rw {
 
         impl OwnedArchivedMap {
             fn new(raw: Box<[u8]>) -> Result<Self, Error> {
+                #[cfg(debug_assertions)]
                 rkyv::access::<ArchivedMap, Error>(&raw)?;
                 Ok(Self { raw })
             }

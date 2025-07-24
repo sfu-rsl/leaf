@@ -312,8 +312,15 @@ pub mod rw {
 
         impl OwnedArchivedTypesData {
             fn new(raw: Box<[u8]>) -> Result<Self, Error> {
+                #[cfg(debug_assertions)]
                 let core_types = rkyv::access::<ArchivedTypesData, Error>(&raw)
                     .and_then(|a| rkyv::deserialize::<CoreTypes, Error>(&a.core_types))?;
+                #[cfg(not(debug_assertions))]
+                let core_types = {
+                    let serialized =
+                        unsafe { &rkyv::access_unchecked::<ArchivedTypesData>(&raw).core_types };
+                    rkyv::deserialize::<CoreTypes, Error>(serialized)
+                }?;
                 Ok(Self {
                     raw,
                     deserialized: GenericTypesData {

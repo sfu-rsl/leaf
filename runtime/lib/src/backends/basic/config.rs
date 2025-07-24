@@ -197,6 +197,7 @@ fn default_branch_depth_distance_factor() -> f32 {
 
 fn default_trace_inspectors() -> Vec<TraceInspectorType> {
     vec![
+        #[cfg(debug_assertions)]
         TraceInspectorType::SanityChecker {
             level: ConstraintSanityCheckLevel::Panic,
             output: None,
@@ -216,7 +217,10 @@ pub(crate) enum ConstraintFilterType {
 }
 
 fn default_constraint_filters() -> Vec<ConstraintFilterType> {
-    vec![ConstraintFilterType::SanityChecker { output: None }]
+    vec![
+        #[cfg(debug_assertions)]
+        ConstraintFilterType::SanityChecker { output: None },
+    ]
 }
 
 #[derive(Debug, Clone, Deserialize)]
