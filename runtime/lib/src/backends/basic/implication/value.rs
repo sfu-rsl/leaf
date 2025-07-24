@@ -155,10 +155,7 @@ impl PreconditionConstraints {
             Self::Refined(refined) => refined
                 .get()
                 .into_iter()
-                .map(|(sub_offset, sub_size, antecedents)| {
-                    debug_assert!(sub_offset + sub_size.get() <= size.into());
-                    (sub_offset + at, sub_size, antecedents)
-                })
+                .map(|(sub_offset, sub_size, antecedents)| (sub_offset + at, sub_size, antecedents))
                 .collect::<Vec<_>>(),
         })
         .unwrap()
