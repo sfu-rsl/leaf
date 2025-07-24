@@ -37,7 +37,6 @@ use self::{
     assignment::BasicAssignmentHandler,
     call::BasicCallHandler,
     concrete::BasicConcretizer,
-    config::BasicBackendConfig,
     constraint::BasicConstraintHandler,
     expr::{SymVarId, prelude::*},
     implication::{Antecedents, Implied, Precondition},
@@ -50,7 +49,7 @@ use self::{
 
 type BasicTraceManager = dyn TraceManager;
 
-pub(crate) use place::BasicPlaceBuilder;
+pub(crate) use self::{config::BasicBackendConfig, place::BasicPlaceBuilder};
 
 pub struct BasicBackend {
     call_stack_manager: BasicCallStackManager,
@@ -65,8 +64,11 @@ pub struct BasicBackend {
 }
 
 impl BasicBackend {
-    pub fn new(config: BasicBackendConfig) -> Self {
-        let type_manager_ref = Rc::new(type_info::default_type_manager());
+    pub fn new(
+        config: BasicBackendConfig,
+        types_db: impl crate::type_info::TypeDatabase<'static> + 'static,
+    ) -> Self {
+        let type_manager_ref = Rc::new(type_info::default_type_manager(types_db));
         let expr_builder_ref = Rc::new(RefCell::new(expr::builders::new_expr_builder(
             type_manager_ref.clone(),
         )));

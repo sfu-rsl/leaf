@@ -295,8 +295,11 @@ pub mod rw {
     #[cfg(feature = "rkyv")]
     mod rkyving {
 
-        use once_map::OnceMap;
-        use rkyv::rancor::{Error, OptionExt};
+        use once_map::unsync::OnceMap;
+        use rkyv::{
+            Archive,
+            rancor::{Error, OptionExt},
+        };
 
         use super::*;
 
@@ -332,7 +335,7 @@ pub mod rw {
                     .try_insert(*key, |key| {
                         self.access()
                             .all_types
-                            .get(&rkyv::primitive::ArchivedNonZeroU128::from_native(*key))
+                            .get(&<TypeId as Archive>::Archived::from_native(*key))
                             .into_error::<Error>()
                             .map(|a| {
                                 rkyv::deserialize::<TypeInfo, Error>(a)

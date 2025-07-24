@@ -7,7 +7,7 @@ use common::{log_debug, log_warn};
 
 use crate::utils::{alias::check_sym_value_loss, file::FileGenConfig};
 
-impl TryFrom<::config::Config> for super::BasicBackend {
+impl TryFrom<::config::Config> for BasicBackendConfig {
     type Error = ::config::ConfigError;
 
     fn try_from(value: ::config::Config) -> Result<Self, Self::Error> {
@@ -30,7 +30,7 @@ impl TryFrom<::config::Config> for super::BasicBackend {
             );
         }
 
-        Ok(Self::new(config))
+        Ok(config)
     }
 }
 

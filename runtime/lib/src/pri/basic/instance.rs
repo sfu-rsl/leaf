@@ -1,3 +1,7 @@
+#![cfg_attr(feature = "runtime_access_raw_ptr", allow(static_mut_refs))]
+
+use common::type_info::rw::LoadedTypeDatabase;
+
 use super::utils::{DefaultRefManager, RefManager};
 use super::{AssignmentId, OperandRef, PlaceHandler, PlaceRef, SwitchInfo};
 use crate::abs::{
@@ -13,6 +17,7 @@ use common::log_info;
 
 use std::{cell::RefCell, sync::Once};
 
+type ConfigImpl = crate::backends::basic::BasicBackendConfig;
 pub(super) type BackendImpl = crate::backends::basic::BasicBackend;
 
 type PlaceInfo = <BasicPlaceBuilder as PlaceBuilder>::Place;
@@ -32,6 +37,15 @@ cfg_if! {
     } else {
         use common::utils::UnsafeSync;
         static BACKEND: UnsafeSync<RefCell<Option<BackendImpl>>> = UnsafeSync::new(RefCell::new(None));
+    }
+}
+
+cfg_if! {
+    if #[cfg(feature = "runtime_access_raw_ptr")] {
+        static mut PROGRAM_TYPES: Option<LoadedTypeDatabase> = None;
+    } else {
+        use std::sync::OnceLock;
+        static PROGRAM_TYPES: OnceLock<LoadedTypeDatabase> = OnceLock::new();
     }
 }
 
@@ -62,10 +76,20 @@ pub(super) fn init_backend() {
     INIT.call_once(|| {
         crate::init();
 
-        let config = load_config();
         log_info!("Initializing basic backend");
-        let backend =
-            BackendImpl::try_from(config).expect("Failed to initialize backend through the config");
+        let config = load_config();
+        let config = ConfigImpl::try_from(config).expect("Failed to load config");
+
+        let types_db = common::type_info::rw::read_types_db().expect("Failed to read type info");
+        cfg_if! {
+            if #[cfg(feature = "runtime_access_raw_ptr")] {
+                unsafe { PROGRAM_TYPES = Some(types_db); }
+                let types_db = unsafe { PROGRAM_TYPES.as_ref().unwrap() };
+            } else {
+                let types_db = PROGRAM_TYPES.get_or_init(move || types_db);
+            }
+        }
+        let backend = BackendImpl::new(config, types_db);
         cfg_if! {
             if #[cfg(feature = "runtime_access_raw_ptr")] {
                 unsafe { BACKEND = Some(backend); }

@@ -27,8 +27,8 @@ impl<D: TypeDatabase<'static>> BasicTypeManager<D> {
     }
 }
 
-pub(crate) fn default_type_manager() -> BasicTypeManager<impl TypeDatabase<'static>> {
-    BasicTypeManager::new(type_info::instance::get())
+pub(crate) fn default_type_manager<D: TypeDatabase<'static>>(db: D) -> BasicTypeManager<D> {
+    BasicTypeManager::new(db)
 }
 
 impl<D: TypeDatabase<'static>> TypeDatabase<'static> for BasicTypeManager<D> {
