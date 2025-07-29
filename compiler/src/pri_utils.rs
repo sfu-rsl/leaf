@@ -74,7 +74,7 @@ pub mod sym {
 
         common::pri::pass_func_names_to!(symbols_in_pri, all_comma_separated);
 
-        pub(crate) const ALL_MAINS: [LeafSymbol; 105] =
+        pub(crate) const ALL_MAINS: [LeafSymbol; 109] =
             common::pri::pass_func_names_to!(bracket, all_comma_separated);
 
         pub(crate) mod intrinsics {
@@ -117,6 +117,10 @@ pub mod sym {
                 intrinsic_atomic_cxchg,
                 intrinsic_atomic_binary_op,
                 intrinsic_atomic_fence,
+
+                intrinsic_memory_load,
+                intrinsic_memory_store,
+                intrinsic_memory_copy,
             }
 
             pub(crate) mod atomic {
@@ -144,6 +148,31 @@ pub mod sym {
                     intrinsic_atomic_cxchg,
                     intrinsic_atomic_binary_op,
                     intrinsic_atomic_fence,
+                }
+            }
+
+            pub(crate) mod memory {
+                use super::*;
+
+                #[derive(
+                    Clone, Copy, dm::Deref, Debug, dm::Display, Hash, PartialEq, Eq, PartialOrd, Ord,
+                )]
+                #[repr(transparent)]
+                pub struct LeafMemoryIntrinsicSymbol(LeafIntrinsicSymbol);
+
+                macro_rules! symbols_for_mem_intrinsics {
+                    ($($name: ident),* $(,)?) => {
+                        $(
+                            #[allow(non_upper_case_globals)]
+                            pub(crate) const $name: LeafMemoryIntrinsicSymbol = LeafMemoryIntrinsicSymbol(super::$name);
+                        )*
+                    };
+                }
+
+                symbols_for_mem_intrinsics! {
+                    intrinsic_memory_load,
+                    intrinsic_memory_store,
+                    intrinsic_memory_copy,
                 }
             }
         }

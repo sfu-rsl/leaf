@@ -187,6 +187,10 @@ impl ProgramRuntimeInterface for BasicPri {
         Self::push_const_operand(value)
     }
     #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
+    fn ref_operand_const_addr(value: RawAddress) -> OperandRef {
+        Self::push_const_operand(value)
+    }
+    #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
     fn ref_operand_const_zst() -> OperandRef {
         Self::push_const_operand(Constant::Zst)
     }
@@ -689,6 +693,40 @@ impl ProgramRuntimeInterface for BasicPri {
         Self::assign_unary_op(id, dest, Self::UnaryOp::CountOnes, x);
     }
 
+    fn intrinsic_memory_load(
+        id: AssignmentId,
+        ptr: OperandRef,
+        ptr_type_id: Self::TypeId,
+        dest: PlaceRef,
+        _is_volatile: bool,
+        _is_aligned: bool,
+    ) {
+        Self::load(id, ptr, ptr_type_id, dest)
+    }
+
+    fn intrinsic_memory_store(
+        id: AssignmentId,
+        ptr: OperandRef,
+        ptr_type_id: Self::TypeId,
+        src: OperandRef,
+        _is_volatile: bool,
+        _is_aligned: bool,
+    ) {
+        Self::store(id, ptr, ptr_type_id, src)
+    }
+
+    fn intrinsic_memory_copy(
+        id: AssignmentId,
+        ptr: OperandRef,
+        ptr_type_id: Self::TypeId,
+        dst: OperandRef,
+        count: OperandRef,
+        is_volatile: bool,
+        is_overlapping: bool,
+    ) {
+        todo!("Implement memory copy intrinsic");
+    }
+
     fn intrinsic_atomic_load(
         _ordering: Self::AtomicOrdering,
         id: AssignmentId,
@@ -696,12 +734,7 @@ impl ProgramRuntimeInterface for BasicPri {
         ptr_type_id: Self::TypeId,
         dest: PlaceRef,
     ) {
-        let src_ptr = take_back_operand(ptr);
-        let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
-            h.from_ptr(src_ptr.clone(), ptr_type_id)
-        });
-        let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
-        assign_to(id, dest, |h| h.use_of(src_pointee_value))
+        Self::load(id, ptr, ptr_type_id, dest)
     }
 
     fn intrinsic_atomic_store(
@@ -711,12 +744,7 @@ impl ProgramRuntimeInterface for BasicPri {
         ptr_type_id: Self::TypeId,
         src: OperandRef,
     ) {
-        let dst_ptr = take_back_operand(ptr);
-        let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
-            h.from_ptr(dst_ptr.clone(), ptr_type_id)
-        });
-        let src_value = take_back_operand(src);
-        assign_to_place(id, dst_place, |h| h.use_of(src_value))
+        Self::store(id, ptr, ptr_type_id, src)
     }
 
     fn intrinsic_atomic_xchg(
@@ -822,7 +850,24 @@ impl BasicPri {
         })
     }
 
-    #[inline]
+    fn load(id: AssignmentId, ptr: OperandRef, ptr_type_id: TypeId, dest: PlaceRef) {
+        let src_ptr = take_back_operand(ptr);
+        let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
+            h.from_ptr(src_ptr.clone(), ptr_type_id)
+        });
+        let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
+        assign_to(id, dest, |h| h.use_of(src_pointee_value))
+    }
+
+    fn store(id: AssignmentId, ptr: OperandRef, ptr_type_id: TypeId, src: OperandRef) {
+        let dst_ptr = take_back_operand(ptr);
+        let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
+            h.from_ptr(dst_ptr.clone(), ptr_type_id)
+        });
+        let src_value = take_back_operand(src);
+        assign_to_place(id, dst_place, |h| h.use_of(src_value))
+    }
+
     fn update_by_ptr_return_old(
         id: AssignmentId,
         ptr: OperandRef,

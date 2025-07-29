@@ -160,6 +160,7 @@ pub(crate) enum Constant {
     Float { bit_rep: u128, ty: FloatType },
     Str(&'static str),
     ByteStr(&'static [u8]),
+    Addr(RawAddress),
     Zst,
     Some,
 }

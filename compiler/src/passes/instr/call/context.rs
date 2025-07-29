@@ -76,6 +76,12 @@ pub(crate) trait AtomicIntrinsicParamsProvider<'tcx> {
     fn ptr_ty(&self) -> Ty<'tcx>;
 }
 
+pub(crate) trait MemoryIntrinsicParamsProvider<'tcx> {
+    fn is_volatile(&self) -> bool;
+    fn ptr(&self) -> OperandRef;
+    fn ptr_ty(&self) -> Ty<'tcx>;
+}
+
 /*
  * This is the minimal required context that we expect for call adding.
  *(Otherwise, we will not be able to add new call blocks to the MIR.)
@@ -331,6 +337,26 @@ impl<'tcx, B> SwitchInfoProvider<'tcx> for BranchingContext<'_, 'tcx, B> {
     }
 }
 
+pub(crate) struct MemoryIntrinsicContext<'b, 'tcx, B> {
+    pub(super) base: &'b mut B,
+    pub(super) is_volatile: bool,
+    pub(super) ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
+}
+
+impl<'tcx, B> MemoryIntrinsicParamsProvider<'tcx> for MemoryIntrinsicContext<'_, 'tcx, B> {
+    fn is_volatile(&self) -> bool {
+        self.is_volatile
+    }
+
+    fn ptr(&self) -> OperandRef {
+        self.ptr_and_ty.unwrap().0
+    }
+
+    fn ptr_ty(&self) -> Ty<'tcx> {
+        self.ptr_and_ty.unwrap().1
+    }
+}
+
 pub(crate) struct AtomicIntrinsicContext<'b, 'tcx, B> {
     pub(super) base: &'b mut B,
     pub(super) ordering: AtomicOrdering,
@@ -533,6 +559,15 @@ make_impl_macro! {
     fn ptr_ty(&self) -> Ty<'tcx>;
 }
 
+make_impl_macro! {
+    impl_memory_intrinsic_params_provider,
+    MemoryIntrinsicParamsProvider<'tcx>,
+    self,
+    fn is_volatile(&self) -> bool;
+    fn ptr(&self) -> OperandRef;
+    fn ptr_ty(&self) -> Ty<'tcx>;
+}
+
 /// A meta macro that creates a macro able to call a list of macros with exclusions for some input.
 /// Note that the excluded macros must appear in the same order as in the original "all" list.
 macro_rules! make_caller_macro {
@@ -601,6 +636,7 @@ make_caller_macro!(impl_traits, [
     impl_cast_operand_provider,
     impl_discr_info_provider,
     impl_atomic_intrinsic_params_provider,
+    impl_memory_intrinsic_params_provider,
 ]);
 
 impl_traits!(all for TransparentContext);
@@ -612,3 +648,4 @@ impl_traits!(all - [ impl_dest_ref_provider ] for AssignmentContext<'tcxd>);
 impl_traits!(all - [ impl_cast_operand_provider ] for CastAssignmentContext);
 impl_traits!(all - [ impl_discr_info_provider ] for BranchingContext<'tcxd>);
 impl_traits!(all - [ impl_atomic_intrinsic_params_provider ] for AtomicIntrinsicContext<'tcxd>);
+impl_traits!(all - [ impl_memory_intrinsic_params_provider ] for MemoryIntrinsicContext<'tcxd>);

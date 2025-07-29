@@ -249,6 +249,10 @@ mod intrinsics {
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
         Atomic(AtomicOrdering, AtomicIntrinsicKind),
+        Memory {
+            kind: MemoryIntrinsicKind,
+            is_volatile: bool,
+        },
         NoOp,
         ConstEvaluated,
         Contract,
@@ -270,6 +274,12 @@ mod intrinsics {
         Fence {
             single_thread: bool,
         },
+    }
+
+    pub(crate) enum MemoryIntrinsicKind {
+        Load { is_ptr_aligned: bool },
+        Store { is_ptr_aligned: bool },
+        Copy { is_overlapping: bool },
     }
 
     macro_rules! of_mir_translated_funcs {
@@ -682,18 +692,27 @@ mod intrinsics {
         };
     }
 
+    macro_rules! of_memory_funcs {
+        ($macro:ident) => {
+            $macro!(
+                volatile_load,
+                volatile_store,
+                unaligned_volatile_load,
+                unaligned_volatile_store,
+                copy,
+                copy_nonoverlapping,
+                volatile_copy_nonoverlapping_memory,
+                volatile_copy_memory,
+            )
+        };
+    }
+
     macro_rules! of_to_be_supported_funcs {
         ($macro:ident) => {
             $macro!(
                 vtable_size,
                 vtable_align,
                 volatile_set_memory,
-                volatile_copy_nonoverlapping_memory,
-                volatile_load,
-                volatile_store,
-                volatile_copy_memory,
-                unaligned_volatile_store,
-                unaligned_volatile_load,
                 typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
@@ -706,8 +725,6 @@ mod intrinsics {
                 abort,
                 drop_in_place,
                 write_bytes,
-                copy,
-                copy_nonoverlapping,
                 size_of_val,
                 is_val_statically_known,
                 arith_offset,
@@ -771,6 +788,7 @@ mod intrinsics {
             of_simd_op_funcs,
             of_to_be_supported_funcs,
             of_one_to_one_funcs,
+            of_memory_funcs,
         );
 
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
@@ -801,6 +819,7 @@ mod intrinsics {
             other if other.as_str().starts_with("atomic") => {
                 decide_atomic_intrinsic_call(intrinsic)
             }
+            of_memory_funcs!(any_of) => decide_memory_intrinsic_call(intrinsic),
             _ => panic!("Uncovered intrinsic: {:?}", intrinsic),
         }
     }
@@ -823,6 +842,61 @@ mod intrinsics {
             _ => unreachable!(),
         };
         IntrinsicDecision::OneToOneAssign(pri_sym)
+    }
+
+    fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
+        let (kind, is_volatile) = match intrinsic.name {
+            rsym::volatile_load => (
+                MemoryIntrinsicKind::Load {
+                    is_ptr_aligned: true,
+                },
+                true,
+            ),
+            rsym::unaligned_volatile_load => (
+                MemoryIntrinsicKind::Load {
+                    is_ptr_aligned: false,
+                },
+                true,
+            ),
+            rsym::volatile_store => (
+                MemoryIntrinsicKind::Store {
+                    is_ptr_aligned: true,
+                },
+                true,
+            ),
+            rsym::unaligned_volatile_store => (
+                MemoryIntrinsicKind::Store {
+                    is_ptr_aligned: false,
+                },
+                true,
+            ),
+            rsym::copy => (
+                MemoryIntrinsicKind::Copy {
+                    is_overlapping: true,
+                },
+                false,
+            ),
+            rsym::copy_nonoverlapping => (
+                MemoryIntrinsicKind::Copy {
+                    is_overlapping: false,
+                },
+                false,
+            ),
+            rsym::volatile_copy_memory => (
+                MemoryIntrinsicKind::Copy {
+                    is_overlapping: true,
+                },
+                true,
+            ),
+            rsym::volatile_copy_nonoverlapping_memory => (
+                MemoryIntrinsicKind::Copy {
+                    is_overlapping: false,
+                },
+                true,
+            ),
+            _ => unreachable!(),
+        };
+        IntrinsicDecision::Memory { kind, is_volatile }
     }
 
     fn decide_atomic_intrinsic_call<'tcx>(intrinsic: IntrinsicDef) -> IntrinsicDecision {
@@ -883,7 +957,9 @@ mod intrinsics {
         }
     }
 }
-pub(super) use intrinsics::{AtomicIntrinsicKind, IntrinsicDecision, decide_intrinsic_call};
+pub(super) use intrinsics::{
+    AtomicIntrinsicKind, IntrinsicDecision, MemoryIntrinsicKind, decide_intrinsic_call,
+};
 
 mod rules {
     use std::ops::DerefMut;

@@ -39,8 +39,8 @@ use call::{
     AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
     CastAssigner, EntryFunctionHandler, FunctionHandler,
     InsertionLocation::*,
-    IntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer, RuntimeCallAdder,
-    StorageMarker,
+    IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer,
+    RuntimeCallAdder, StorageMarker,
     context::{
         AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, BodyProvider,
         PriItemsProvider, SourceInfoProvider, TyContextProvider,
@@ -720,6 +720,14 @@ where
             Atomic(ordering, kind) => {
                 self.instrument_atomic_intrinsic_call(&params, ordering, kind);
             }
+            Memory { kind, is_volatile } => {
+                self.instrument_memory_intrinsic_call(
+                    &params,
+                    self.assignment_id.unwrap(),
+                    kind,
+                    is_volatile,
+                );
+            }
             NoOp => {
                 self.instrument_noop_intrinsic_call(params);
             }
@@ -760,6 +768,37 @@ where
                     def.name, params.fn_span,
                 );
             }
+        }
+    }
+
+    fn instrument_memory_intrinsic_call(
+        &mut self,
+        params: &CallParams<'_, 'tcx>,
+        assignment_id: AssignmentId,
+        kind: decision::MemoryIntrinsicKind,
+        is_volatile: bool,
+    ) {
+        let mut call_adder = self.call_adder.before();
+        let ptr_arg = params.args.get(0);
+        let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
+        let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, call_adder.tcx()));
+        let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr_ref.zip(ptr_ty));
+        let dest_ref = call_adder.reference_place(params.destination);
+        let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
+        let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
+        use decision::MemoryIntrinsicKind::*;
+        match kind {
+            Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
+            Store { is_ptr_aligned } => {
+                let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
+                call_adder.store(val_ref, is_ptr_aligned)
+            }
+            Copy { is_overlapping } => {
+                let dst_ref = call_adder.reference_operand_spanned(&params.args[1]);
+                let count_ref = call_adder.reference_operand_spanned(&params.args[2]);
+                call_adder.copy(dst_ref, count_ref, is_overlapping)
+            }
+            _ => unreachable!(),
         }
     }
 

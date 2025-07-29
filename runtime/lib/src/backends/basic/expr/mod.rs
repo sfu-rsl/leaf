@@ -1120,6 +1120,7 @@ mod convert {
                     ty,
                 }),
                 Float { bit_rep, ty } => Ok(Self::Float { bit_rep, ty }),
+                Addr(addr) => Ok(Self::Addr(addr)),
                 Zst | Str(..) | ByteStr(..) | Some => Err(value),
             }
         }
