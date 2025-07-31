@@ -131,6 +131,12 @@ impl<T> VariablesState for T where
 {
 }
 
+pub(super) type BasicSymPlaceHandler = dyn super::state::SymPlaceHandler<
+        SymEntity = super::state::SymPlaceSymEntity,
+        ConcEntity = super::ConcreteValueRef,
+        Entity = ValueRef,
+    >;
+
 pub(super) type BasicValue = Implied<ValueRef>;
 
 pub(super) type BasicVariablesState = super::state::RawPointerVariableState<BasicSymExprBuilder>;

@@ -16,7 +16,7 @@ use crate::{
     },
 };
 
-use super::*;
+use super::{super::ValueUsageInPlace, *};
 
 use self::resolution::Select as PlaceSelect;
 use crate::backends::basic::expr::MultiValue as ValueSelect;
@@ -306,14 +306,14 @@ impl SymPlaceSymEntity {
     fn of_index(value: SymValueRef) -> Self {
         Self {
             value,
-            is_index: true,
+            kind: ValueUsageInPlace::Index,
         }
     }
 
     fn of_deref(value: SymValueRef) -> Self {
         Self {
             value,
-            is_index: false,
+            kind: ValueUsageInPlace::Deref,
         }
     }
 }

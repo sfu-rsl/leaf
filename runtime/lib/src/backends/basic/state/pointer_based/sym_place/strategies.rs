@@ -1,7 +1,7 @@
 use crate::backends::basic::{
     concrete::{ConcolicValueObtainer, Concretizer},
     config::SymbolicPlaceStrategy,
-    state::{SymPlaceHandler, SymPlaceSymEntity},
+    state::{SymPlaceHandler, SymPlaceSymEntity, ValueUsageInPlace},
 };
 
 use super::{ConcreteValueRef, ValueRef};
@@ -24,7 +24,11 @@ pub(crate) fn make_sym_place_handler(
     use SymbolicPlaceStrategy::*;
     match config {
         Panic => Box::new(PanicSymPlaceHandler),
-        ProjExpression => Box::new(ProjExprSymPlaceHandler),
+        ProjExpression => Box::new(ProjExprSymPlaceHandler {
+            size_handler: StamperSymPlaceHandler {
+                concretizer: concretizer_factory(),
+            },
+        }),
         Concretization => Box::new(ConcretizerSymPlaceHandler),
         Stamping => Box::new(StamperSymPlaceHandler {
             concretizer: concretizer_factory(),
@@ -45,16 +49,32 @@ impl SymPlaceHandler for PanicSymPlaceHandler {
     }
 }
 
-struct ProjExprSymPlaceHandler;
-impl SymPlaceHandler for ProjExprSymPlaceHandler {
+struct ProjExprSymPlaceHandler<H> {
+    size_handler: H,
+}
+impl<H> SymPlaceHandler for ProjExprSymPlaceHandler<H>
+where
+    H: SymPlaceHandler<SymEntity = SymPlaceSymEntity, Entity = ValueRef>,
+    ValueRef: From<H::ConcEntity>,
+{
+    type ConcEntity = H::ConcEntity;
     type Entity = ValueRef;
 
     fn handle<'a>(
         &mut self,
-        sym_value: Self::SymEntity,
-        _get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
+        sym_entity: Self::SymEntity,
+        get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
-        sym_value.into()
+        match sym_entity.kind {
+            ValueUsageInPlace::Size => {
+                log_info!(
+                    "Symbolic size observed: {}, which is out of the scope of support for this backend",
+                    sym_entity.value
+                );
+                self.size_handler.handle(sym_entity, get_conc)
+            }
+            ValueUsageInPlace::Deref | ValueUsageInPlace::Index => sym_entity.into(),
+        }
     }
 }
 
@@ -80,16 +100,16 @@ impl SymPlaceHandler for StamperSymPlaceHandler {
 
     fn handle<'a>(
         &mut self,
-        sym_value: Self::SymEntity,
+        sym_entity: Self::SymEntity,
         get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
-        let conc_value = self.concretizer.stamp(sym_value.clone(), get_conc);
-        ConcretizerSymPlaceHandler.handle(sym_value, Box::new(|| conc_value))
+        let conc_value = self.concretizer.stamp(sym_entity.clone(), get_conc);
+        ConcretizerSymPlaceHandler.handle(sym_entity, Box::new(|| conc_value))
     }
 }
 
-pub(in super::super) struct IndexOnlySymPlaceHandler<H>(pub H);
-impl<H> SymPlaceHandler for IndexOnlySymPlaceHandler<H>
+pub(in super::super) struct DerefBypassSymPlaceHandler<H>(pub H);
+impl<H> SymPlaceHandler for DerefBypassSymPlaceHandler<H>
 where
     H: SymPlaceHandler<SymEntity = SymPlaceSymEntity>,
 {
@@ -102,7 +122,7 @@ where
         sym_entity: Self::SymEntity,
         get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
     ) -> Self::Entity {
-        if !sym_entity.is_index {
+        if let ValueUsageInPlace::Deref = sym_entity.kind {
             sym_entity.into()
         } else {
             self.0.handle(sym_entity, get_conc)

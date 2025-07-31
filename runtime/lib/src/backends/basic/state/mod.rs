@@ -18,7 +18,14 @@ use backend::{
 pub(super) struct SymPlaceSymEntity {
     #[deref]
     value: SymValueRef,
-    is_index: bool,
+    kind: ValueUsageInPlace,
+}
+
+#[derive(Debug)]
+pub(super) enum ValueUsageInPlace {
+    Deref,
+    Index,
+    Size,
 }
 
 pub(super) trait SymPlaceHandler {

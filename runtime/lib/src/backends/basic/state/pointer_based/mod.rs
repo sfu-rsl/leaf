@@ -8,14 +8,14 @@ use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
     backends::basic::{
         GenericVariablesState, TypeLayoutResolver, ValueRef,
-        alias::{SymValueRefExprBuilder, TypeDatabase},
+        alias::{BasicSymPlaceHandler, SymValueRefExprBuilder, TypeDatabase},
         expr::{lazy::RawPointerRetriever, prelude::*},
         implication::{
             Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
         },
         place::{LocalWithMetadata, PlaceWithMetadata, Projection},
         state::{
-            SymPlaceSymEntity, pointer_based::sym_place::strategies::IndexOnlySymPlaceHandler,
+            SymPlaceSymEntity, pointer_based::sym_place::strategies::DerefBypassSymPlaceHandler,
         },
         type_info::TypeLayoutResolverExt,
     },
@@ -32,9 +32,7 @@ use memory::*;
 type Local = LocalWithMetadata;
 type Place = PlaceWithMetadata;
 
-type SymPlaceHandlerDyn = dyn SymPlaceHandler<SymEntity = SymPlaceSymEntity, ConcEntity = ConcreteValueRef, Entity = ValueRef>;
-
-type SymPlaceHandlerObject = RRef<SymPlaceHandlerDyn>;
+type SymPlaceHandlerObject = RRef<BasicSymPlaceHandler>;
 
 /* NOTE: Memory structure
  *
@@ -151,7 +149,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         Self {
             memory: Default::default(),
             type_manager,
-            sym_ref_handler: RRef::new(RefCell::new(IndexOnlySymPlaceHandler(
+            sym_ref_handler: RRef::new(RefCell::new(DerefBypassSymPlaceHandler(
                 sym_read_handler.clone(),
             ))),
             sym_read_handler,
