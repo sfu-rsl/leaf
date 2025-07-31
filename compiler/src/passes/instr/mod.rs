@@ -778,15 +778,20 @@ where
         kind: decision::MemoryIntrinsicKind,
         is_volatile: bool,
     ) {
+        use decision::MemoryIntrinsicKind::*;
+
         let mut call_adder = self.call_adder.before();
-        let ptr_arg = params.args.get(0);
+        let ptr_arg = match (&kind, is_volatile) {
+            // `volatile_copy_memory`, `volatile_copy_nonoverlapping_memory` have dst first!
+            (Copy { .. }, true) => params.args.get(1),
+            _ => params.args.get(0),
+        };
         let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
         let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, call_adder.tcx()));
         let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr_ref.zip(ptr_ty));
         let dest_ref = call_adder.reference_place(params.destination);
         let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
         let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
-        use decision::MemoryIntrinsicKind::*;
         match kind {
             Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
             Store { is_ptr_aligned } => {
@@ -794,7 +799,11 @@ where
                 call_adder.store(val_ref, is_ptr_aligned)
             }
             Copy { is_overlapping } => {
-                let dst_ref = call_adder.reference_operand_spanned(&params.args[1]);
+                let dst_ref = call_adder.reference_operand_spanned(if is_volatile {
+                    &params.args[0]
+                } else {
+                    &params.args[1]
+                });
                 let count_ref = call_adder.reference_operand_spanned(&params.args[2]);
                 call_adder.copy(dst_ref, count_ref, is_overlapping)
             }
