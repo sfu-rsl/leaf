@@ -39,8 +39,8 @@ use call::{
     AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
     CastAssigner, EntryFunctionHandler, FunctionHandler,
     InsertionLocation::*,
-    IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceReferencer,
-    RuntimeCallAdder, StorageMarker,
+    IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceRef,
+    PlaceReferencer, RuntimeCallAdder, StorageMarker,
     context::{
         AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, BodyProvider,
         PriItemsProvider, SourceInfoProvider, TyContextProvider,
@@ -235,29 +235,6 @@ fn make_orig_index_map(body: &Body, storage: &mut dyn Storage) -> HashMap<BasicB
         .collect::<HashMap<_, _>>()
 }
 
-pub(crate) fn assignment_ids_split_agnostic<'a, 'tcx>(
-    body: &'a Body<'tcx>,
-) -> impl Iterator<Item = (Location, Cow<'a, Place<'tcx>>, AssignmentId)> {
-    // Basically, the order index of which we see an assignment is used as its id.
-    body.collect_map_ordered(
-        |stmt| match stmt.kind {
-            mir::StatementKind::Assign(box (ref dest, _)) => Some(Cow::Borrowed(dest)),
-            mir::StatementKind::SetDiscriminant { ref place, .. } => Some(Cow::Borrowed(place)),
-            _ => None,
-        },
-        |terminator| match terminator.kind {
-            TerminatorKind::Call {
-                ref destination, ..
-            } => Some(Cow::Borrowed(destination)),
-            TerminatorKind::TailCall { .. } => Some(Cow::Owned(Place::return_place())),
-            _ => None,
-        },
-    )
-    .into_iter()
-    .enumerate()
-    .map(|(i, (loc, dest))| (loc, dest, i.try_into().expect("Too many assignments")))
-}
-
 pub(crate) fn clear_existing_instrumentation<'tcx>(
     tcx: TyCtxt<'tcx>,
     body: &mut Body<'tcx>,
@@ -353,9 +330,10 @@ impl VisitorFactory {
     where
         C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
-        let assignment_ids = assignment_ids_split_agnostic(call_adder.body())
-            .map(|(loc, _, id)| (loc, id))
-            .collect();
+        let assignment_ids =
+            assignment_id::assignment_ids_split_agnostic(call_adder.tcx(), call_adder.body())
+                .map(|(loc, _, id)| (loc, id))
+                .collect();
         LeafBodyVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
             assignment_ids: Rc::new(assignment_ids),
@@ -530,9 +508,38 @@ where
         Default::default()
     }
 
-    fn visit_intrinsic(&mut self, _intrinsic: &rustc_middle::mir::NonDivergingIntrinsic<'tcx>) {
-        // TODO
-        Default::default()
+    fn visit_intrinsic(&mut self, intrinsic: &mir::NonDivergingIntrinsic<'tcx>) {
+        match intrinsic {
+            mir::NonDivergingIntrinsic::Assume(_operand) => {
+                // No plans for now
+            }
+            mir::NonDivergingIntrinsic::CopyNonOverlapping(mir::CopyNonOverlapping {
+                src,
+                dst,
+                count,
+            }) => {
+                let operands = {
+                    let span = self.call_adder.source_info().span;
+                    [src, dst, count]
+                        .into_iter()
+                        .map(|op| Spanned {
+                            node: op.clone(),
+                            span,
+                        })
+                        .collect::<Vec<_>>()
+                };
+                instrument_memory_intrinsic_call(
+                    &mut self.call_adder,
+                    &operands,
+                    None,
+                    self.assignment_id.unwrap(),
+                    decision::MemoryIntrinsicKind::Copy {
+                        is_overlapping: false,
+                    },
+                    false,
+                );
+            }
+        }
     }
 
     fn visit_storage_dead(&mut self, local: &mir::Local) {
@@ -778,36 +785,14 @@ where
         kind: decision::MemoryIntrinsicKind,
         is_volatile: bool,
     ) {
-        use decision::MemoryIntrinsicKind::*;
-
-        let mut call_adder = self.call_adder.before();
-        let ptr_arg = match (&kind, is_volatile) {
-            // `volatile_copy_memory`, `volatile_copy_nonoverlapping_memory` have dst first!
-            (Copy { .. }, true) => params.args.get(1),
-            _ => params.args.get(0),
-        };
-        let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
-        let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, call_adder.tcx()));
-        let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr_ref.zip(ptr_ty));
-        let dest_ref = call_adder.reference_place(params.destination);
-        let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
-        let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
-        match kind {
-            Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
-            Store { is_ptr_aligned } => {
-                let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
-                call_adder.store(val_ref, is_ptr_aligned)
-            }
-            Copy { is_overlapping } => {
-                let dst_ref = call_adder.reference_operand_spanned(if is_volatile {
-                    &params.args[0]
-                } else {
-                    &params.args[1]
-                });
-                let count_ref = call_adder.reference_operand_spanned(&params.args[2]);
-                call_adder.copy(dst_ref, count_ref, is_overlapping, &params.args[2].node)
-            }
-        }
+        instrument_memory_intrinsic_call(
+            &mut self.call_adder,
+            &params.args,
+            Some(params.destination),
+            assignment_id,
+            kind,
+            is_volatile,
+        );
     }
 
     fn instrument_atomic_intrinsic_call(
@@ -1129,6 +1114,51 @@ impl<'tcx, C: ctxtreqs::ForOperandRef<'tcx>> RuntimeCallAdder<C> {
     }
 }
 
+fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
+    call_adder: &mut RuntimeCallAdder<C>,
+    args: &'a [Spanned<Operand<'tcx>>],
+    destination: Option<&'a Place<'tcx>>,
+    assignment_id: AssignmentId,
+    kind: decision::MemoryIntrinsicKind,
+    is_volatile: bool,
+) where
+    C: ctxtreqs::ForOperandRef<'tcx> + ctxtreqs::ForPlaceRef<'tcx>,
+{
+    use decision::MemoryIntrinsicKind::*;
+
+    let tcx = call_adder.tcx();
+    let mut call_adder = call_adder.before();
+
+    // FIXME: Destination is only used for load operation. But assignment_id is used for all.
+    // These dummy values can be avoided by breaking the context into smaller ones.
+    let dest_ref = destination.map_or(PlaceRef::INVALID, |d| call_adder.reference_place(d));
+    let dest_ty = destination.map_or(tcx.types.unit, |d| d.ty(&call_adder, tcx).ty);
+    let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
+
+    let ptr_arg = match (&kind, is_volatile) {
+        // `volatile_copy_memory`, `volatile_copy_nonoverlapping_memory` have dst first!
+        (Copy { .. }, true) => args.get(1),
+        _ => args.get(0),
+    };
+    let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
+    let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, tcx));
+    let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr_ref.zip(ptr_ty));
+
+    match kind {
+        Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
+        Store { is_ptr_aligned } => {
+            let val_ref = call_adder.reference_operand_spanned(&args[1]);
+            call_adder.store(val_ref, is_ptr_aligned)
+        }
+        Copy { is_overlapping } => {
+            let dst_ref =
+                call_adder.reference_operand_spanned(if is_volatile { &args[0] } else { &args[1] });
+            let count_ref = call_adder.reference_operand_spanned(&args[2]);
+            call_adder.copy(dst_ref, count_ref, is_overlapping, &args[2].node)
+        }
+    }
+}
+
 fn sanity_check_inserted_block<'tcx>(
     bb: &BasicBlockData<'tcx>,
     expected_called_funcs: &HashSet<DefId>,
@@ -1255,5 +1285,83 @@ impl<'tcx> TerminatorKindVisitor<'tcx, ()> for TerminatorLocationRecorder {
 
     fn visit_return(&mut self) -> () {
         self.record();
+    }
+}
+
+pub(crate) mod assignment_id {
+    use derive_more as dm;
+
+    use super::*;
+
+    #[derive(dm::From)]
+    pub(crate) enum AssignmentDestination<'a, 'tcx> {
+        Place(Cow<'a, Place<'tcx>>),
+        PtrDeref,
+    }
+
+    pub(crate) fn assignment_ids_split_agnostic<'a, 'tcx>(
+        tcx: TyCtxt<'tcx>,
+        body: &'a Body<'tcx>,
+    ) -> impl Iterator<Item = (Location, AssignmentDestination<'a, 'tcx>, AssignmentId)> {
+        // Basically, the order index of which we see an assignment is used as its id.
+        body.collect_map_ordered(
+            |stmt| match stmt.kind {
+                mir::StatementKind::Assign(box (ref dest, _)) => Some(Cow::Borrowed(dest).into()),
+                mir::StatementKind::SetDiscriminant { ref place, .. } => {
+                    Some(Cow::Borrowed(place.as_ref()).into())
+                }
+                mir::StatementKind::Intrinsic(
+                    box mir::NonDivergingIntrinsic::CopyNonOverlapping(..),
+                ) => Some(AssignmentDestination::PtrDeref),
+                _ => None,
+            },
+            |terminator| match terminator.kind {
+                TerminatorKind::Call {
+                    ref func,
+                    ref destination,
+                    ..
+                } => {
+                    if is_writing_intrinsic(tcx, func) {
+                        Some(AssignmentDestination::PtrDeref)
+                    } else {
+                        Some(Cow::Borrowed(destination).into())
+                    }
+                }
+                TerminatorKind::TailCall { .. } => Some(AssignmentDestination::from(Cow::Owned(
+                    Place::return_place(),
+                ))),
+                _ => None,
+            },
+        )
+        .into_iter()
+        .enumerate()
+        .map(|(i, (loc, dest))| (loc, dest, i.try_into().expect("Too many assignments")))
+    }
+
+    fn is_writing_intrinsic<'tcx>(tcx: TyCtxt<'tcx>, func: &Operand<'tcx>) -> bool {
+        let Some((def_id, _)) = func.const_fn_def() else {
+            return false;
+        };
+
+        let Some(intrinsic) = tcx.intrinsic(def_id) else {
+            return false;
+        };
+
+        {
+            use rustc_span::symbol::sym::*;
+            #[allow(non_upper_case_globals)]
+            match intrinsic.name {
+                write_bytes | write_via_move | nontemporal_store => true,
+                copy | copy_nonoverlapping | typed_swap_nonoverlapping => true,
+                volatile_copy_memory
+                | volatile_copy_nonoverlapping_memory
+                | volatile_store
+                | unaligned_volatile_store
+                | volatile_set_memory => true,
+                simd_shuffle | simd_scatter | simd_masked_store | simd_insert => true,
+                n if n.as_str().starts_with("atomic_store") => true,
+                _ => false,
+            }
+        }
     }
 }

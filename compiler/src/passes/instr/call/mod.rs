@@ -46,8 +46,12 @@ use std::vec;
  */
 macro_rules! make_local_wrapper {
     ($name:ident) => {
-        #[derive(Clone, Copy)]
+        #[derive(Clone, Copy, PartialEq, Eq, Debug)]
         pub struct $name(Local);
+        impl $name {
+            // Local zero is the return value local. So it can never be acquired by a ref.
+            pub const INVALID: $name = $name(Local::ZERO);
+        }
         impl From<Local> for $name {
             fn from(value: Local) -> Self {
                 Self(value)
@@ -55,6 +59,7 @@ macro_rules! make_local_wrapper {
         }
         impl From<$name> for Local {
             fn from(value: $name) -> Self {
+                assert_ne!(value, $name::INVALID);
                 value.0
             }
         }

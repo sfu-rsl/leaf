@@ -15,10 +15,11 @@ use common::{
     program_dep::{AssignmentsInfo, ControlDependencyGraph, PlainProgramDependenceMap},
 };
 
-use super::{
-    CompilationPass, OverrideFlags, Storage, StorageExt, instr::assignment_ids_split_agnostic,
+use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
+use crate::{
+    passes::instr::assignment_id::{AssignmentDestination, assignment_ids_split_agnostic},
+    utils::{control_dependence::PostDominators, file::TyCtxtFileExt, mir::InstanceKindExt},
 };
-use crate::utils::{control_dependence::PostDominators, file::TyCtxtFileExt, mir::InstanceKindExt};
 
 #[derive(Default)]
 pub(crate) struct ProgramDependenceMapExporter;
@@ -78,7 +79,7 @@ fn visit_and_add<'tcx>(pdm: &mut PlainProgramDependenceMap, tcx: TyCtxt<'tcx>, b
         .or_insert_with(|| calc_control_dep(tcx, body));
     pdm.assignments
         .entry(key)
-        .or_insert_with(|| make_assignment_info(body));
+        .or_insert_with(|| make_assignment_info(tcx, body));
 }
 
 fn calc_control_dep<'tcx>(_tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> ControlDependencyGraph {
@@ -108,7 +109,7 @@ enum LValue {
     Deref,
 }
 
-fn make_assignment_info<'tcx>(body: &Body<'tcx>) -> AssignmentsInfo {
+fn make_assignment_info<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> AssignmentsInfo {
     let dom = dominators(&body.basic_blocks);
     let post_doms: Vec<_> = exit_points(&body.basic_blocks)
         .map(|e| PostDominators::build(&body.basic_blocks, e))
@@ -121,23 +122,28 @@ fn make_assignment_info<'tcx>(body: &Body<'tcx>) -> AssignmentsInfo {
     let mut left_values = Vec::new();
     let mut observed_variants: HashMap<Local, Vec<VariantIdx>> = HashMap::new();
 
-    for (loc, lhs, _) in assignment_ids_split_agnostic(body) {
+    for (loc, lhs, _) in assignment_ids_split_agnostic(tcx, body) {
         bb_map.push(loc.block.as_u32());
 
-        let left_val = if lhs.is_indirect_first_projection() {
-            LValue::Deref
-        } else {
-            // Conservatively overapproximate over the local
-            // FIXME: This may cause large imprecisions if large objects (with many fields) are used.
-            let class = (lhs.local, variant_index_set_at(body, loc));
-            if let Some(variant_index) = class.1 {
-                observed_variants
-                    .entry(class.0)
-                    .or_default()
-                    .push(variant_index);
+        let left_val = match lhs {
+            AssignmentDestination::PtrDeref => LValue::Deref,
+            AssignmentDestination::Place(lhs) => {
+                if lhs.is_indirect_first_projection() {
+                    LValue::Deref
+                } else {
+                    // Conservatively overapproximate over the local
+                    // FIXME: This may cause large imprecisions if large objects (with many fields) are used.
+                    let class = (lhs.local, variant_index_set_at(body, loc));
+                    if let Some(variant_index) = class.1 {
+                        observed_variants
+                            .entry(class.0)
+                            .or_default()
+                            .push(variant_index);
+                    }
+                    assignments_grouped.entry(class).or_default().push(loc);
+                    LValue::Direct(class)
+                }
             }
-            assignments_grouped.entry(class).or_default().push(loc);
-            LValue::Direct(class)
         };
         left_values.push((loc, left_val));
     }
