@@ -48,7 +48,7 @@ impl Display for ConstValue {
                 write!(f, "{ty}")
             }
             ConstValue::Float { .. } => write!(f, "{self:?}"),
-            ConstValue::Addr(addr) => write!(f, "ᴬ{addr:p}"),
+            ConstValue::Addr(addr) => write!(f, "ᴬ{:p}", *addr),
         }
     }
 }

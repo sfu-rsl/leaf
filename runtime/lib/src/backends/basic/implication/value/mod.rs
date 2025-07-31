@@ -1,3 +1,5 @@
+mod fmt;
+
 use core::{
     borrow::Borrow,
     num::NonZero,
