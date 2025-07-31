@@ -251,8 +251,7 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
         #[cfg(feature = "implicit_flow")]
         super::assignment::precondition::add_antecedent(
             self.implication_investigator,
-            self.type_manager,
-            &result_dest,
+            || result_dest.type_info().get_size(self.type_manager).unwrap(),
             (call_site.body.body_id, assignment_id),
             &mut return_val,
         );

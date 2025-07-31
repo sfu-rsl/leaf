@@ -281,6 +281,7 @@ mod handlers {
         }
 
         fn from_ptr(self, ptr: Self::Operand, ptr_type_id: TypeId) -> Self::Place {
+            // FIXME: Add support for implicit flow
             self.vars_state
                 .ref_place_by_ptr(ptr, ptr_type_id, self.usage)
         }

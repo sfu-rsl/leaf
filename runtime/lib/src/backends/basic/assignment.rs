@@ -430,7 +430,7 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
             .resolve_adt_fields(self.dest.type_id(), None)
             .next()
             .unwrap()
-            .0;
+            .1;
 
         self.expr_builder()
             .transmute(data_ptr, field_ty, LazyTypeInfo::from(field_ty))
@@ -457,7 +457,7 @@ pub(super) mod precondition {
 
     use crate::backends::basic as backend;
     use backend::{
-        TypeLayoutResolver,
+        TypeLayoutResolver, TypeSize,
         implication::{PreconditionConstraints, PreconditionQuery},
         type_info::TypeLayoutResolverExt,
     };
@@ -468,8 +468,7 @@ pub(super) mod precondition {
         pub(super) fn add_antecedent(&self, value: &mut BasicValue) {
             add_antecedent(
                 self.implication_investigator,
-                self.type_manager,
-                &self.dest,
+                || self.dest.type_info().get_size(self.type_manager).unwrap(),
                 (self.current_func, self.id),
                 value,
             );
@@ -512,7 +511,7 @@ pub(super) mod precondition {
         pub(super) fn precondition_of_adt(
             &self,
             kind: &AdtKind,
-            fields: Vec<Option<Precondition>>,
+            mut fields: Vec<Option<Precondition>>,
         ) -> Precondition {
             let opt_tag_interval = self
                 .dest
@@ -603,6 +602,11 @@ pub(super) mod precondition {
                 }
             }
 
+            /* NOTE: What happens when we have ZST fields?
+             * Although these fields the same offset, they won't appear hear because:
+             * 1. Structurally, we enforce a non-zero type.
+             * 2. They are constants (most of the time), so they should not have preconditions.
+             */
             Precondition::new(
                 PreconditionConstraints::refined(fields).or(for_fields.map(Into::into)),
             )
@@ -611,8 +615,7 @@ pub(super) mod precondition {
 
     pub(crate) fn add_antecedent(
         implication_investigator: &(impl ImplicationInvestigator + ?Sized),
-        type_manager: &dyn TypeDatabase,
-        dest: &PlaceValueRef,
+        whole_size: impl FnOnce() -> TypeSize,
         assignment_id: (InstanceKindId, AssignmentId),
         value: &mut BasicValue,
     ) {
@@ -622,8 +625,6 @@ pub(super) mod precondition {
             return;
         };
 
-        value.add_antecedents(Cow::Owned(antecedent), || {
-            dest.type_info().get_size(type_manager).unwrap()
-        });
+        value.add_antecedents(Cow::Owned(antecedent), whole_size);
     }
 }
