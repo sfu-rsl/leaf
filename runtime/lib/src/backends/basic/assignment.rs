@@ -552,15 +552,14 @@ pub(super) mod precondition {
             };
 
             let mut fields = if fields.iter().flatten().any(|p| p.is_some()) {
-                let field_intervals = self
+                let with_intervals = self
                     .type_manager
                     .layouts()
                     .resolve_adt_fields(self.dest.type_id(), kind.variant_index())
-                    .map(|(_, offset, size)| (offset, size));
-                fields
-                    .into_iter()
-                    .zip(field_intervals)
-                    .flat_map(|(p, interval)| p.map(|p| (p, interval)))
+                    .flat_map(|(index, _, offset, size)| {
+                        fields[index as usize].take().map(|p| (p, (offset, size)))
+                    });
+                with_intervals
                     .map(|(mut p, (offset, size))| {
                         if let Some(for_fields) = for_fields.as_ref() {
                             p = p.add(Cow::Borrowed(for_fields), || size);

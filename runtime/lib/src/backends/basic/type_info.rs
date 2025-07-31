@@ -1,12 +1,13 @@
 use delegate::delegate;
 
-use common::type_info::{
-    CoreTypes, FieldsShapeInfo, StructShape, TypeInfo, pass_core_type_names_to,
+use common::{
+    pri::FieldIndex,
+    type_info::{CoreTypes, FieldsShapeInfo, TypeInfo, pass_core_type_names_to},
 };
 
 use crate::{
     abs::{IntType, PointerOffset, TypeSize, backend::TypeDatabase},
-    type_info::{self, TypeInfoExt},
+    type_info::TypeInfoExt,
 };
 
 use crate::backends::basic as backend;
@@ -187,7 +188,7 @@ impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutReso
         &self,
         type_id: TypeId,
         variant: Option<crate::abs::VariantIndex>,
-    ) -> impl Iterator<Item = (TypeId, PointerOffset, TypeSize)> + 't {
+    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't {
         let ty = self.0.get_type(&type_id);
         let variant = match variant {
             Some(variant) => ty.get_variant(variant).unwrap(),
@@ -197,29 +198,24 @@ impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutReso
         use FieldsShapeInfo::*;
         match &variant.fields {
             Struct(shape) | Union(shape) => {
-                let fields = shape.fields();
+                let fields = shape.fields_in_offset_order();
                 if cfg!(debug_assertions) {
                     if matches!(&variant.fields, Union(..)) {
                         assert!(
-                            fields.iter().all(|f| f.offset == 0),
+                            fields.clone().into_iter().all(|(_, f)| f.offset == 0),
                             "Union fields must have zero offset"
                         );
                     }
                 }
 
                 // We collect them to break the borrow
-                let field_tys = fields
-                    .iter()
-                    .map(|f| self.0.get_type(&f.ty))
+                let field_sizes = fields
+                    .clone()
+                    .map(|(_, f)| self.0.get_size(&f.ty).unwrap())
                     .collect::<Vec<_>>();
                 fields
-                    .iter()
-                    .zip(field_tys.into_iter())
-                    .map(|(f, field_ty)| {
-                        let offset = f.offset;
-                        let size = field_ty.size().unwrap();
-                        (field_ty.id, offset, size)
-                    })
+                    .zip(field_sizes.into_iter())
+                    .map(|((index, f), size)| (index, f.ty, f.offset, size))
             }
             NoFields | Array(..) => panic!(
                 "Unexpected shape for fields of an ADT: {:?}",

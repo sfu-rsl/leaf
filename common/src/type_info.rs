@@ -67,6 +67,7 @@ pub struct ArrayShape {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StructShape {
     fields: Vec<FieldInfo>,
+    indices_ordered_by_offset: Vec<FieldIndex>,
 }
 
 // We use the same struct to avoid redundancy. Offset is not used for unions.
@@ -107,16 +108,34 @@ pub enum TagEncodingInfo {
 }
 
 impl StructShape {
-    pub fn new(mut fields: Vec<FieldInfo>) -> Self {
-        fields.sort_by_key(|f| f.offset);
-        Self { fields }
+    pub fn new(fields: Vec<FieldInfo>) -> Self {
+        let indices_ordered_by_offset = {
+            let mut indices: Vec<_> = (0..fields.len()).collect();
+            indices.sort_by_key(|i| fields[*i as usize].offset);
+            indices
+                .into_iter()
+                .map(|i| FieldIndex::try_from(i).unwrap())
+                .collect()
+        };
+        Self {
+            fields,
+            indices_ordered_by_offset,
+        }
     }
 
     /// # Remarks
-    /// The fields are sorted by their offsets.
+    /// The order is based on the field indices used in MIR.
+    /// The offsets do not necessarily match the order of the fields in the struct.
     #[inline(always)]
     pub fn fields(&self) -> &[FieldInfo] {
         &self.fields
+    }
+
+    pub fn fields_in_offset_order(&self) -> impl Iterator<Item = (FieldIndex, &FieldInfo)> + Clone {
+        self.indices_ordered_by_offset.iter().copied().map(|i| {
+            let field = &self.fields[i as usize];
+            (FieldIndex::try_from(i).unwrap(), field)
+        })
     }
 }
 

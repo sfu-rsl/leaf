@@ -529,8 +529,13 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
          * Even if it it is niche, it will be calculated based on a field value which is
          * taken care of in the assignment logic. */
 
-        for (field, (field_ty, field_offset, field_size)) in adt.fields.iter().zip(field_ranges) {
-            if let Some(value) = &field.value {
+        for (field_index, field_ty, field_offset, field_size) in field_ranges {
+            if let Some(value) = adt
+                .fields
+                // For unions, the list of fields may be incomplete.
+                .get(field_index as usize)
+                .and_then(|f| f.value.as_ref())
+            {
                 self.to_sym_values(
                     values,
                     base_offset + field_offset,
