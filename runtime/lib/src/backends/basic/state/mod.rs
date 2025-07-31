@@ -1,61 +1,32 @@
 mod pointer_based;
-mod utils;
+mod sym_place;
 
 use core::num::NonZero;
 
 use std::borrow::Cow;
 
 use common::{log_warn, pri::TypeSize};
-use derive_more as dm;
 
-use crate::{
-    abs::{
-        PlaceUsage,
-        backend::{AssignmentHandler, MemoryHandler, PlaceHandler, RuntimeBackend},
-        expr::BinaryExprBuilder,
-    },
-    backends::basic::{
-        BasicPlaceValue, BasicValue, GenericVariablesState, Implied, Precondition,
-        ValueRefExprBuilderWrapper,
-        expr::{ConcreteValue, ConstValue, UnevalValue, Value, ValueRef},
-        implication::PreconditionConstruct,
-    },
+use crate::abs::{
+    PlaceUsage,
+    backend::{AssignmentHandler, MemoryHandler, PlaceHandler, RuntimeBackend},
+    expr::BinaryExprBuilder,
 };
 
 pub(super) use pointer_based::RawPointerVariableState;
-pub(super) use pointer_based::sym_place::strategies::make_sym_place_handler;
+pub(super) use sym_place::{
+    SymPlaceHandler, SymPlaceSymEntity, strategies::make_sym_place_handler,
+};
 
 use crate::backends::basic as backend;
 use backend::{
-    AssignmentId, BasicBackend, CallStackInfo, ConcreteValueRef, SymValueRef, TypeId,
-    VariablesState, concrete::ConcolicValueObtainer,
+    AssignmentId, BasicBackend, BasicPlaceValue, BasicValue, CallStackInfo, ConcreteValueRef,
+    GenericVariablesState, Implied, Precondition, TypeId, ValueRefExprBuilderWrapper,
+    VariablesState,
+    concrete::ConcolicValueObtainer,
+    expr::{ConcreteValue, ConstValue, SymValueRef, UnevalValue, Value, ValueRef},
+    implication::PreconditionConstruct,
 };
-
-#[derive(Debug, dm::Deref)]
-pub(super) struct SymPlaceSymEntity {
-    #[deref]
-    value: SymValueRef,
-    kind: ValueUsageInPlace,
-}
-
-#[derive(Debug)]
-pub(super) enum ValueUsageInPlace {
-    Deref,
-    Index,
-    Size,
-}
-
-pub(super) trait SymPlaceHandler {
-    type SymEntity = SymPlaceSymEntity;
-    type ConcEntity = ConcreteValueRef;
-    type Entity: From<Self::SymEntity> + From<Self::ConcEntity>;
-
-    fn handle<'a>(
-        &mut self,
-        sym_entity: Self::SymEntity,
-        get_conc: Box<ConcolicValueObtainer<'a, Self::ConcEntity>>,
-    ) -> Self::Entity;
-}
 
 pub(crate) struct BasicMemoryHandler<'a> {
     // FIXME: Keeping a reference to the backend is a result of low cohesion.
@@ -135,10 +106,7 @@ impl<'a> BasicMemoryHandler<'a> {
     fn check_count(&mut self, count: &BasicValue, conc_count: usize) {
         if count.is_symbolic() {
             let count = self.backend.sym_place_handler.handle(
-                SymPlaceSymEntity {
-                    value: SymValueRef::new(count.value.clone()),
-                    kind: ValueUsageInPlace::Size,
-                },
+                SymPlaceSymEntity::of_size(SymValueRef::new(count.value.clone())),
                 Box::new(|| ConcreteValueRef::new(ConstValue::from(conc_count).to_value_ref())),
             );
             if count.is_symbolic() {

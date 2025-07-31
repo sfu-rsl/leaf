@@ -1,5 +1,4 @@
 mod resolution;
-pub(crate) mod strategies;
 
 use core::{iter, ops::Bound};
 
@@ -11,17 +10,14 @@ use crate::{
         place::HasMetadata,
     },
     backends::basic::{
-        expr::{SliceIndex, place::*},
+        expr::{MultiValue as ValueSelect, SliceIndex, place::*},
         place::PlaceMetadata,
     },
 };
 
-use super::{super::ValueUsageInPlace, *};
+use super::*;
 
-use self::resolution::Select as PlaceSelect;
-use crate::backends::basic::expr::MultiValue as ValueSelect;
-
-use self::resolution::{DefaultSymPlaceResolver, SinglePlaceResult};
+use self::resolution::{DefaultSymPlaceResolver, Select as PlaceSelect, SinglePlaceResult};
 
 impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     pub(super) fn get_place<'a, 'b>(
@@ -120,7 +116,15 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         ptr_type_id: TypeId,
         usage: PlaceUsage,
     ) -> PlaceValueRef {
-        let ptr_val = self.retrieve_value(ptr_val, ptr_type_id);
+        let mut ptr_val = self.retrieve_value(ptr_val, ptr_type_id);
+
+        if ptr_val.is_symbolic() {
+            ptr_val = self.sym_place_handler_for(usage).handle(
+                SymPlaceSymEntity::of_deref(SymValueRef::new(ptr_val)),
+                Box::new(|| unimplemented!("#480: Concrete value is not available")),
+            );
+        }
+
         let pointee_ty = self
             .type_manager
             .get_type(&ptr_type_id)
@@ -132,18 +136,8 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 DeterministicPlaceValue::from_addr_type(*addr, pointee_ty).to_value_ref()
             }
             Value::Symbolic(..) => {
-                let ptr_val = self.sym_place_handler_for(usage).handle(
-                    SymPlaceSymEntity::of_deref(SymValueRef::new(ptr_val)),
-                    Box::new(|| unimplemented!("#480: Concrete value is not available")),
-                );
-                if ptr_val.is_symbolic() {
-                    Self::deref_sym_val(SymValueRef::new(ptr_val), ptr_type_id, || {
-                        pointee_ty.into()
-                    })
+                Self::deref_sym_val(SymValueRef::new(ptr_val), ptr_type_id, || pointee_ty.into())
                     .into()
-                } else {
-                    self.get_deref_of_ptr(ptr_val, ptr_type_id, usage)
-                }
             }
             _ => panic!("Unexpected value for dereference: {:?}", ptr_val),
         }
@@ -299,22 +293,6 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         deter_place: &'a DeterministicPlaceValue,
     ) -> Box<dyn FnOnce() -> ConcreteValueRef + 'a> {
         Box::new(|| ConcreteValueRef::new(deter_place.to_raw_value().to_value_ref()))
-    }
-}
-
-impl SymPlaceSymEntity {
-    fn of_index(value: SymValueRef) -> Self {
-        Self {
-            value,
-            kind: ValueUsageInPlace::Index,
-        }
-    }
-
-    fn of_deref(value: SymValueRef) -> Self {
-        Self {
-            value,
-            kind: ValueUsageInPlace::Deref,
-        }
     }
 }
 

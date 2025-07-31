@@ -14,9 +14,7 @@ use crate::{
             Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
         },
         place::{LocalWithMetadata, PlaceWithMetadata, Projection},
-        state::{
-            SymPlaceSymEntity, pointer_based::sym_place::strategies::DerefBypassSymPlaceHandler,
-        },
+        state::{SymPlaceSymEntity, sym_place::strategies::DerefBypassSymPlaceHandler},
         type_info::TypeLayoutResolverExt,
     },
     type_info::TypeInfoExt,
