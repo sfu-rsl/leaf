@@ -143,6 +143,8 @@ pub(super) type BasicVariablesState = super::state::RawPointerVariableState<Basi
 
 pub(super) type BasicPlaceInfo = super::place::PlaceWithMetadata;
 
+pub(super) type BasicPlaceValue = PlaceValueRef;
+
 pub(super) use super::constraint::Constraint as BasicConstraint;
 pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;
 pub(super) type BasicDecisionTraceRecorder =

@@ -717,14 +717,18 @@ impl ProgramRuntimeInterface for BasicPri {
 
     fn intrinsic_memory_copy(
         id: AssignmentId,
-        ptr: OperandRef,
+        src: OperandRef,
         ptr_type_id: Self::TypeId,
         dst: OperandRef,
         count: OperandRef,
-        is_volatile: bool,
-        is_overlapping: bool,
+        _is_volatile: bool,
+        _is_overlapping: bool,
+        conc_count: usize,
     ) {
-        todo!("Implement memory copy intrinsic");
+        let src_ptr = take_back_operand(src);
+        let dst_ptr = take_back_operand(dst);
+        let count = take_back_operand(count);
+        memory(|h| h.copy(id, src_ptr, dst_ptr, count, ptr_type_id, conc_count))
     }
 
     fn intrinsic_atomic_load(

@@ -18,7 +18,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
     type AssignmentHandler<'a>: AssignmentHandler<Place = Self::Place, Operand = Self::Operand>
     where
         Self: 'a;
-    type MemoryHandler<'a>: MemoryHandler<Place = Self::Place>
+    type MemoryHandler<'a>: MemoryHandler<Place = Self::Place, Operand = Self::Operand>
     where
         Self: 'a;
     type ConstraintHandler<'a>: ConstraintHandler<Operand = Self::Operand>
@@ -208,8 +208,19 @@ pub(crate) trait AssignmentHandler: Sized {
 
 pub(crate) trait MemoryHandler {
     type Place;
+    type Operand;
 
     fn mark_dead(self, place: Self::Place);
+
+    fn copy(
+        self,
+        assignment_id: AssignmentId,
+        src_ptr: Self::Operand,
+        dst_ptr: Self::Operand,
+        count: Self::Operand,
+        ptr_type_id: TypeId,
+        conc_count: usize,
+    );
 }
 
 pub(crate) trait ConstraintHandler {

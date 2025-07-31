@@ -316,12 +316,13 @@ pub mod macros {
           #[allow(unused_parens)]
           { fn intrinsic_memory_copy(
                 id: AssignmentId,
-                ptr: OperandRef,
+                src: OperandRef,
                 ptr_type_id: ($type_id_ty),
                 dst: OperandRef,
                 count: OperandRef,
                 is_volatile: bool,
                 is_overlapping: bool,
+                conc_count: usize,
           ) }
 
           { fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
@@ -701,7 +702,7 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_memory_store(id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_copy(id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),dst:OperandRef,count:OperandRef,is_volatile:bool,is_overlapping:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_copy(id:AssignmentId,src:OperandRef,ptr_type_id:($type_id_ty),dst:OperandRef,count:OperandRef,is_volatile:bool,is_overlapping:bool,conc_count: usize,);
             }$modifier!{
                 fn intrinsic_assign_bswap(id:AssignmentId,dest:PlaceRef,x:OperandRef);
             }$modifier!{

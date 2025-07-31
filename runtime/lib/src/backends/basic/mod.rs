@@ -19,7 +19,7 @@ use std::{cell::RefCell, rc::Rc};
 
 use common::{
     log_info,
-    pri::{AssignmentId, BasicBlockIndex},
+    pri::{AssignmentId, BasicBlockIndex, FieldIndex},
     types::InstanceKindId,
 };
 
@@ -58,6 +58,7 @@ pub struct BasicBackend {
     expr_builder: RRef<BasicExprBuilder>,
     sym_values: RRef<BasicSymVariablesManager>,
     type_manager: Rc<dyn TypeDatabase>,
+    sym_place_handler: RRef<BasicSymPlaceHandler>,
     #[cfg(feature = "implicit_flow")]
     implication_investigator: Rc<dyn ImplicationInvestigator>,
     tags: RRef<Vec<Tag>>,
@@ -117,6 +118,8 @@ impl BasicBackend {
         };
         let sym_read_handler_ref = sym_place_handler_factory(config.sym_place.read);
         let sym_write_handler_ref = sym_place_handler_factory(config.sym_place.write);
+        // Writes are more difficult, and the handler is usually more restrictive, so we use the write handler as the general one.
+        let sym_place_handler = sym_write_handler_ref.clone();
 
         Self {
             call_stack_manager: BasicCallStackManager::new(
@@ -141,6 +144,7 @@ impl BasicBackend {
             ))),
             sym_values: sym_var_manager.clone(),
             type_manager,
+            sym_place_handler,
             #[cfg(feature = "implicit_flow")]
             implication_investigator,
             tags: tags_ref.clone(),

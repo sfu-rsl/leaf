@@ -805,9 +805,8 @@ where
                     &params.args[1]
                 });
                 let count_ref = call_adder.reference_operand_spanned(&params.args[2]);
-                call_adder.copy(dst_ref, count_ref, is_overlapping)
+                call_adder.copy(dst_ref, count_ref, is_overlapping, &params.args[2].node)
             }
-            _ => unreachable!(),
         }
     }
 
