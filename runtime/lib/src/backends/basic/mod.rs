@@ -7,6 +7,7 @@ mod config;
 mod constraint;
 mod expr;
 mod implication;
+mod memory;
 mod operand;
 mod outgen;
 mod place;
@@ -40,6 +41,7 @@ use self::{
     constraint::BasicConstraintHandler,
     expr::{SymVarId, prelude::*},
     implication::{Antecedents, Implied, Precondition},
+    memory::BasicRawMemoryHandler,
     operand::BasicOperandHandler,
     place::BasicPlaceHandler,
     state::{BasicMemoryHandler, RawPointerVariableState, make_sym_place_handler},
@@ -164,12 +166,17 @@ impl RuntimeBackend for BasicBackend {
         Self: 'a;
 
     type AssignmentHandler<'a>
-        = BasicAssignmentHandler<'a, BasicExprBuilder>
+        = BasicAssignmentHandler<'a, 'a, BasicExprBuilder>
     where
         Self: 'a;
 
     type MemoryHandler<'a>
         = BasicMemoryHandler<'a>
+    where
+        Self: 'a;
+
+    type RawMemoryHandler<'a>
+        = BasicRawMemoryHandler<'a, BasicExprBuilder>
     where
         Self: 'a;
 
@@ -210,6 +217,10 @@ impl RuntimeBackend for BasicBackend {
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
         BasicMemoryHandler::new(self)
+    }
+
+    fn raw_memory<'a>(&'a mut self) -> Self::RawMemoryHandler<'a> {
+        BasicRawMemoryHandler::new(self)
     }
 
     fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_> {

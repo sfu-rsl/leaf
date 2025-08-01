@@ -196,6 +196,15 @@ pub(super) fn memory<T>(
     })
 }
 
+pub(super) fn raw_memory<T>(
+    memory_action: impl FnOnce(<BackendImpl as RuntimeBackend>::RawMemoryHandler<'_>) -> T,
+) -> T {
+    perform_on_backend(|r| {
+        let handler = r.raw_memory();
+        memory_action(handler)
+    })
+}
+
 pub(super) fn constraint_at<T>(
     location: BasicBlockIndex,
     constraint_action: impl FnOnce(<BackendImpl as RuntimeBackend>::ConstraintHandler<'_>) -> T,

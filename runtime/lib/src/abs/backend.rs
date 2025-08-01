@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use super::{
     AssertKind, AssignmentId, BasicBlockIndex, BasicBlockLocation, BinaryOp, CalleeDef, CastKind,
     Constraint, ConstraintKind, FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection,
-    SymVariable, Tag, TypeId, UnaryOp, ValueType, VariantIndex,
+    RawAddress, SymVariable, Tag, TypeId, UnaryOp, ValueType, VariantIndex,
 };
 
 pub(crate) trait RuntimeBackend: Shutdown {
@@ -18,7 +18,10 @@ pub(crate) trait RuntimeBackend: Shutdown {
     type AssignmentHandler<'a>: AssignmentHandler<Place = Self::Place, Operand = Self::Operand>
     where
         Self: 'a;
-    type MemoryHandler<'a>: MemoryHandler<Place = Self::Place, Operand = Self::Operand>
+    type MemoryHandler<'a>: MemoryHandler<Place = Self::Place>
+    where
+        Self: 'a;
+    type RawMemoryHandler<'a>: RawMemoryHandler<Place = Self::Place, Operand = Self::Operand>
     where
         Self: 'a;
     type ConstraintHandler<'a>: ConstraintHandler<Operand = Self::Operand>
@@ -46,6 +49,8 @@ pub(crate) trait RuntimeBackend: Shutdown {
     ) -> Self::AssignmentHandler<'a>;
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a>;
+
+    fn raw_memory<'a>(&'a mut self) -> Self::RawMemoryHandler<'a>;
 
     fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_>;
 
@@ -208,18 +213,53 @@ pub(crate) trait AssignmentHandler: Sized {
 
 pub(crate) trait MemoryHandler {
     type Place;
-    type Operand;
 
     fn mark_dead(self, place: Self::Place);
+}
+
+pub(crate) trait RawMemoryHandler {
+    type Place;
+    type Operand;
+
+    fn place_from_ptr(
+        self,
+        ptr: Self::Operand,
+        conc_ptr: RawAddress,
+        ptr_type_id: TypeId,
+        usage: PlaceUsage,
+    ) -> Self::Place;
 
     fn copy(
         self,
         assignment_id: AssignmentId,
         src_ptr: Self::Operand,
+        conc_src_ptr: RawAddress,
         dst_ptr: Self::Operand,
+        conc_dst_ptr: RawAddress,
         count: Self::Operand,
-        ptr_type_id: TypeId,
         conc_count: usize,
+        ptr_type_id: TypeId,
+    );
+
+    fn swap(
+        self,
+        assignment_id: AssignmentId,
+        first_ptr: Self::Operand,
+        conc_first_ptr: RawAddress,
+        second_ptr: Self::Operand,
+        conc_second_ptr: RawAddress,
+        ptr_type_id: TypeId,
+    );
+
+    fn set(
+        self,
+        assignment_id: AssignmentId,
+        ptr: Self::Operand,
+        conc_ptr: RawAddress,
+        value: Self::Operand,
+        count: Self::Operand,
+        conc_count: usize,
+        ptr_type_id: TypeId,
     );
 }
 

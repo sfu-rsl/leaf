@@ -1,7 +1,7 @@
 use core::{
-    borrow::Borrow,
+    borrow::{Borrow, BorrowMut},
     fmt::Display,
-    ops::{Deref, RangeBounds},
+    ops::{Deref, DerefMut, RangeBounds},
 };
 
 use derive_more as dm;
@@ -129,5 +129,49 @@ impl<T> Borrow<T> for Indexed<T> {
 impl<T: Display> Display for Indexed<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}: {}", self.index, self.value)
+    }
+}
+
+#[derive(dm::From)]
+pub(crate) enum MutAccess<'a, T> {
+    Borrowed(&'a mut T),
+    Owned(T),
+}
+
+impl<'a, T> Borrow<T> for MutAccess<'a, T> {
+    fn borrow(&self) -> &T {
+        match self {
+            MutAccess::Borrowed(t) => t,
+            MutAccess::Owned(t) => t,
+        }
+    }
+}
+
+impl<'a, T> BorrowMut<T> for MutAccess<'a, T> {
+    fn borrow_mut(&mut self) -> &mut T {
+        match self {
+            MutAccess::Borrowed(t) => t,
+            MutAccess::Owned(t) => t,
+        }
+    }
+}
+
+impl<'a, T> Deref for MutAccess<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            MutAccess::Borrowed(t) => t,
+            MutAccess::Owned(t) => t,
+        }
+    }
+}
+
+impl<'a, T> DerefMut for MutAccess<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        match self {
+            MutAccess::Borrowed(t) => t,
+            MutAccess::Owned(t) => t,
+        }
     }
 }

@@ -9,7 +9,7 @@ use crate::{
         backend::AssignmentHandler,
         expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
     },
-    utils::alias::RRef,
+    utils::{MutAccess, alias::RRef},
 };
 
 use crate::backends::basic as backend;
@@ -23,41 +23,63 @@ use backend::{
 #[cfg(feature = "implicit_flow")]
 use backend::ImplicationInvestigator;
 
-pub(crate) struct BasicAssignmentHandler<'s, EB> {
+pub(super) struct AssignmentServices<'a, EB> {
     #[cfg(feature = "implicit_flow")]
-    id: AssignmentId,
+    pub(super) current_func: InstanceKindId,
+    pub(super) vars_state: &'a mut dyn VariablesState,
+    pub(super) expr_builder: RRef<EB>,
+    pub(super) type_manager: &'a dyn TypeDatabase,
     #[cfg(feature = "implicit_flow")]
-    current_func: InstanceKindId,
-    dest: PlaceValueRef,
-    vars_state: &'s mut dyn VariablesState,
-    expr_builder: RRef<EB>,
-    type_manager: &'s dyn TypeDatabase,
-    #[cfg(feature = "implicit_flow")]
-    implication_investigator: &'s dyn ImplicationInvestigator,
+    pub(super) implication_investigator: &'a dyn ImplicationInvestigator,
 }
 
-impl<'s> BasicAssignmentHandler<'s, BasicExprBuilder> {
-    pub(super) fn new(
+// Meant for leveraging field-level borrowing to avoid borrowing issues.
+macro_rules! services_from_backend {
+    ($backend:expr) => {{
+        use crate::backends::basic::CallStackInfo;
+        AssignmentServices {
+            current_func: $backend.call_stack_manager.current_func().body_id,
+            vars_state: $backend.call_stack_manager.top(),
+            expr_builder: $backend.expr_builder.clone(),
+            type_manager: $backend.type_manager.as_ref(),
+            #[cfg(feature = "implicit_flow")]
+            implication_investigator: $backend.implication_investigator.as_ref(),
+        }
+    }};
+}
+pub(super) use services_from_backend;
+
+pub(crate) struct BasicAssignmentHandler<'s, 'a: 's, EB> {
+    #[cfg(feature = "implicit_flow")]
+    id: AssignmentId,
+    dest: PlaceValueRef,
+    services: MutAccess<'s, AssignmentServices<'a, EB>>,
+}
+
+impl BasicAssignmentHandler<'_, '_, BasicExprBuilder> {
+    pub(super) fn new<'a>(
         id: AssignmentId,
         dest: PlaceValueRef,
-        backend: &'s mut BasicBackend,
-    ) -> Self {
-        Self {
+        backend: &'a mut BasicBackend,
+    ) -> BasicAssignmentHandler<'a, 'a, BasicExprBuilder> {
+        BasicAssignmentHandler::with_services(id, dest, services_from_backend!(backend).into())
+    }
+
+    pub(super) fn with_services<'s, 'a, EB>(
+        id: AssignmentId,
+        dest: PlaceValueRef,
+        services: MutAccess<'s, AssignmentServices<'a, EB>>,
+    ) -> BasicAssignmentHandler<'s, 'a, EB> {
+        BasicAssignmentHandler {
             #[cfg(feature = "implicit_flow")]
             id,
-            #[cfg(feature = "implicit_flow")]
-            current_func: backend.call_stack_manager.current_func().body_id,
             dest,
-            vars_state: backend.call_stack_manager.top(),
-            expr_builder: backend.expr_builder.clone(),
-            type_manager: backend.type_manager.as_ref(),
-            #[cfg(feature = "implicit_flow")]
-            implication_investigator: backend.implication_investigator.as_ref(),
+            services,
         }
     }
 }
 
-impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_, EB> {
+impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_, '_, EB> {
     type Place = PlaceValueRef;
     type DiscriminablePlace = DiscriminantPossiblePlace;
     type Operand = BasicValue;
@@ -174,7 +196,7 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
                     .to_value_ref(),
             ),
             DiscriminantPossiblePlace::TagPlaceWithInfo(tag_place, tag_encoding) => {
-                let tag_value = self.vars_state.copy_place(&tag_place);
+                let tag_value = self.services.vars_state.copy_place(&tag_place);
                 if tag_value.is_symbolic() {
                     tag_value.map_value(|value| {
                         self.build_discriminant_expr(
@@ -267,9 +289,9 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
             are_eq.map_value(|value| {
                 // As it will be abstracted to Some, we need to resolve them explicitly here.
                 let current = ConcreteValueRef::new(current.value.clone())
-                    .try_resolve_as_const(self.type_manager);
+                    .try_resolve_as_const(self.type_manager());
                 let expected =
-                    ConcreteValueRef::new(expected.value).try_resolve_as_const(self.type_manager);
+                    ConcreteValueRef::new(expected.value).try_resolve_as_const(self.type_manager());
                 match (current, expected) {
                     (Some(current), Some(expected)) => {
                         let are_eq = current == expected;
@@ -294,7 +316,15 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
     }
 }
 
-impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
+impl<'a, EB> BasicAssignmentHandler<'_, 'a, EB> {
+    fn expr_builder(&self) -> impl DerefMut<Target = EB> + '_ {
+        self.services.expr_builder.as_ref().borrow_mut()
+    }
+
+    fn type_manager(&self) -> &'a dyn TypeDatabase {
+        self.services.type_manager
+    }
+
     #[inline]
     fn set_value(&mut self, value: Implied<Value>) {
         self.set(value.map_value(Value::to_value_ref));
@@ -308,13 +338,21 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
 
     #[inline]
     fn set_no_ant(&mut self, value: BasicValue) {
-        self.vars_state.set_place(&self.dest, value);
+        self.services.vars_state.set_place(&self.dest, value);
     }
 
-    fn expr_builder(&self) -> impl DerefMut<Target = EB> + '_ {
-        self.expr_builder.as_ref().borrow_mut()
+    fn get_int_type(&self, ty_info: &LazyTypeInfo) -> IntType {
+        let ty = self
+            .type_manager()
+            .try_to_value_type(ty_info.clone())
+            .expect("Expected the type of the discriminant raw value to be a primitive");
+        *ty.as_int()
+            // https://doc.rust-lang.org/reference/type-layout.html#primitive-representations
+            .unwrap_or_else(|| panic!("Expected the type of the tag to be a int type: {:?}", ty))
     }
+}
 
+impl<'s, EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, '_, EB> {
     #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
     fn set_adt_value(
         &mut self,
@@ -425,7 +463,7 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
         }
 
         let field_ty = self
-            .type_manager
+            .type_manager()
             .layouts()
             .resolve_adt_fields(self.dest.type_id(), None)
             .next()
@@ -434,16 +472,6 @@ impl<EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, EB> {
 
         self.expr_builder()
             .transmute(data_ptr, field_ty, LazyTypeInfo::from(field_ty))
-    }
-
-    fn get_int_type(&self, ty_info: &LazyTypeInfo) -> IntType {
-        let ty = self
-            .type_manager
-            .try_to_value_type(ty_info.clone())
-            .expect("Expected the type of the discriminant raw value to be a primitive");
-        *ty.as_int()
-            // https://doc.rust-lang.org/reference/type-layout.html#primitive-representations
-            .unwrap_or_else(|| panic!("Expected the type of the tag to be a int type: {:?}", ty))
     }
 }
 
@@ -464,25 +492,33 @@ pub(super) mod precondition {
 
     use super::*;
 
-    impl<EB> BasicAssignmentHandler<'_, EB> {
+    impl<'s, EB> BasicAssignmentHandler<'_, '_, EB> {
+        fn current_func(&self) -> InstanceKindId {
+            self.services.current_func
+        }
+
+        fn implication_investigator(&self) -> &dyn ImplicationInvestigator {
+            self.services.implication_investigator
+        }
+
         pub(super) fn add_antecedent(&self, value: &mut BasicValue) {
             add_antecedent(
-                self.implication_investigator,
-                || self.dest.type_info().get_size(self.type_manager).unwrap(),
-                (self.current_func, self.id),
+                self.implication_investigator(),
+                || self.dest.type_info().get_size(self.type_manager()).unwrap(),
+                (self.current_func(), self.id),
                 value,
             );
         }
 
         pub(super) fn precondition_of_array(&self, elements: Vec<Precondition>) -> Precondition {
             let for_elements = self
-                .implication_investigator
-                .antecedent_of_latest_assignment((self.current_func, self.id));
+                .implication_investigator()
+                .antecedent_of_latest_assignment((self.current_func(), self.id));
 
             // If non of the elements have preconditions, don't bother with refined information.
             let elements = if elements.iter().any(|p| p.is_some()) {
                 let element_intervals = self
-                    .type_manager
+                    .type_manager()
                     .layouts()
                     .resolve_array_elements(self.dest.type_id())
                     .1;
@@ -516,13 +552,13 @@ pub(super) mod precondition {
             let opt_tag_interval = self
                 .dest
                 .type_info()
-                .get_type(self.type_manager)
+                .get_type(self.type_manager())
                 .unwrap()
                 .tag
                 .as_ref()
                 .and_then(|tag| {
                     if let TagInfo::Regular { as_field, encoding } = tag {
-                        let tag_ty = self.type_manager.get_type(&as_field.ty);
+                        let tag_ty = self.type_manager().get_type(&as_field.ty);
                         Some((
                             (
                                 as_field.offset,
@@ -537,22 +573,22 @@ pub(super) mod precondition {
 
             let (for_fields, for_tag) = if opt_tag_interval.is_some() {
                 let antecedents = self
-                    .implication_investigator
-                    .antecedent_of_latest_enum_assignment((self.current_func, self.id));
+                    .implication_investigator()
+                    .antecedent_of_latest_enum_assignment((self.current_func(), self.id));
 
                 let (for_fields, for_tag) = antecedents.map(|a| (a.fields, a.tag)).unzip();
                 (for_fields.flatten(), for_tag)
             } else {
                 // If not enum, work as regular.
                 let for_fields = self
-                    .implication_investigator
-                    .antecedent_of_latest_assignment((self.current_func, self.id));
+                    .implication_investigator()
+                    .antecedent_of_latest_assignment((self.current_func(), self.id));
                 (for_fields, None)
             };
 
             let mut fields = if fields.iter().flatten().any(|p| p.is_some()) {
                 let with_intervals = self
-                    .type_manager
+                    .type_manager()
                     .layouts()
                     .resolve_adt_fields(self.dest.type_id(), kind.variant_index())
                     .flat_map(|(index, _, offset, size)| {

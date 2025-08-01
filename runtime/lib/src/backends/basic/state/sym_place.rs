@@ -33,21 +33,21 @@ pub(crate) trait SymPlaceHandler {
 }
 
 impl SymPlaceSymEntity {
-    pub(super) fn of_index(value: SymValueRef) -> Self {
+    pub(crate) fn of_index(value: SymValueRef) -> Self {
         Self {
             value,
             kind: ValueUsageInPlace::Index,
         }
     }
 
-    pub(super) fn of_deref(value: SymValueRef) -> Self {
+    pub(crate) fn of_deref(value: SymValueRef) -> Self {
         Self {
             value,
             kind: ValueUsageInPlace::Deref,
         }
     }
 
-    pub(super) fn of_size(value: SymValueRef) -> Self {
+    pub(crate) fn of_size(value: SymValueRef) -> Self {
         Self {
             value,
             kind: ValueUsageInPlace::Size,

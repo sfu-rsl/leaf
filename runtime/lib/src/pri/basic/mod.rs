@@ -728,7 +728,18 @@ impl ProgramRuntimeInterface for BasicPri {
         let src_ptr = take_back_operand(src);
         let dst_ptr = take_back_operand(dst);
         let count = take_back_operand(count);
-        memory(|h| h.copy(id, src_ptr, dst_ptr, count, ptr_type_id, conc_count))
+        raw_memory(|h| {
+            h.copy(
+                id,
+                src_ptr,
+                todo!(),
+                dst_ptr,
+                todo!(),
+                count,
+                conc_count,
+                ptr_type_id,
+            )
+        })
     }
 
     fn intrinsic_atomic_load(
