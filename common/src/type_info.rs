@@ -323,6 +323,7 @@ pub mod rw {
         use once_map::unsync::OnceMap;
         use rkyv::{
             Archive,
+            hash::FxHasher64,
             rancor::{Error, OptionExt},
         };
 
@@ -330,9 +331,21 @@ pub mod rw {
 
         type ArchivedTypesData = <TypesData as rkyv::Archive>::Archived;
 
+        #[derive(Default)]
+        struct FxBuildHasher64;
+
+        impl core::hash::BuildHasher for FxBuildHasher64 {
+            type Hasher = FxHasher64;
+
+            fn build_hasher(&self) -> Self::Hasher {
+                Default::default()
+            }
+        }
+
         pub struct OwnedArchivedTypesData {
             raw: Box<[u8]>,
-            deserialized: GenericTypesData<OnceMap<TypeId, Box<TypeInfo>>, CoreTypes>,
+            deserialized:
+                GenericTypesData<OnceMap<TypeId, Box<TypeInfo>, FxBuildHasher64>, CoreTypes>,
         }
 
         impl OwnedArchivedTypesData {
@@ -360,6 +373,17 @@ pub mod rw {
             }
         }
 
+        impl ArchivedTypeInfo {
+            #[inline(always)]
+            pub fn is_sized(&self) -> bool {
+                self.size != TypeInfo::SIZE_UNSIZED
+            }
+
+            pub fn size(&self) -> Option<TypeSize> {
+                self.is_sized().then_some(self.size.to_native())
+            }
+        }
+
         impl<'t> TypeDatabase<'t> for &'static OwnedArchivedTypesData {
             fn opt_get_type(&self, key: &TypeId) -> Option<&'static TypeInfo> {
                 self.deserialized
@@ -376,6 +400,14 @@ pub mod rw {
                             })
                     })
                     .ok()
+            }
+
+            fn get_size(&self, key: &TypeId) -> Option<TypeSize> {
+                self.access()
+                    .all_types
+                    .get(&key.into())
+                    .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
+                    .size()
             }
 
             fn core_types(&self) -> &CoreTypes<TypeId> {
