@@ -113,6 +113,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     pub(super) fn get_deref_of_ptr<'a>(
         &self,
         ptr_val: ValueRef,
+        conc_ptr: RawAddress,
         ptr_type_id: TypeId,
         usage: PlaceUsage,
     ) -> PlaceValueRef {
@@ -121,7 +122,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         if ptr_val.is_symbolic() {
             ptr_val = self.sym_place_handler_for(usage).handle(
                 SymPlaceSymEntity::of_deref(SymValueRef::new(ptr_val)),
-                Box::new(|| unimplemented!("#480: Concrete value is not available")),
+                Box::new(|| ConcreteValueRef::new(ConstValue::Addr(conc_ptr).to_value_ref())),
             );
         }
 

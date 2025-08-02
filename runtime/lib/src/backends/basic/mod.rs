@@ -272,6 +272,7 @@ trait GenericVariablesState {
     fn ref_place_by_ptr(
         &self,
         ptr: Self::Value,
+        conc_ptr: RawAddress,
         ptr_type_id: TypeId,
         usage: PlaceUsage,
     ) -> Self::PlaceValue;

@@ -81,7 +81,8 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
 
         // Read everything first, so that overlapping writes do not cause issues.
 
-        let size = NonZero::new(self.type_manager().get_size(&ptr_type_id).unwrap()).unwrap();
+        let size =
+            NonZero::new(self.type_manager().get_pointee_size(&ptr_type_id).unwrap()).unwrap();
 
         let values = self
             .ptr_at_offsets(&src_ptr, conc_src_ptr, count.clone(), size)
@@ -150,7 +151,7 @@ impl<'a, EB> BasicRawMemoryHandler<'a, EB> {
     ) -> BasicPlaceValue {
         self.services
             .vars_state
-            .ref_place_by_ptr(ptr, ptr_type_id, usage)
+            .ref_place_by_ptr(ptr, conc_ptr, ptr_type_id, usage)
     }
 
     fn type_manager(&self) -> &'a dyn TypeDatabase {
@@ -217,10 +218,10 @@ impl<'a, EB: BasicValueExprBuilder + 'static> BasicRawMemoryHandler<'a, EB> {
                 let expr_builder = self.services.expr_builder.clone();
                 let ptr = ptr.value.clone();
                 Box::new((0..count.value).map(move |i| {
-                    expr_builder
-                        .borrow_mut()
-                        .inner()
-                        .offset((ptr.clone(), ConstValue::from(i).to_value_ref()))
+                    expr_builder.borrow_mut().inner().offset(
+                        (ptr.clone(), ConstValue::from(i).to_value_ref()),
+                        size.get(),
+                    )
                 }))
             }
         };

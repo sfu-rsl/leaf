@@ -281,7 +281,7 @@ pub mod macros {
           { fn override_return_value(operand: OperandRef) }
           { fn after_call_func(id: AssignmentId, dest: PlaceRef) }
 
-          // ----- Atomic -----
+          // ----- Intrinsics -----
           { fn intrinsic_assign_identity(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_rotate_left(id: AssignmentId, dest: PlaceRef, x: OperandRef, shift: OperandRef) }
           { fn intrinsic_assign_rotate_right(id: AssignmentId, dest: PlaceRef, x: OperandRef, shift: OperandRef) }
@@ -294,82 +294,14 @@ pub mod macros {
           { fn intrinsic_assign_ctpop(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
-          // ----- Memory -----
-          #[allow(unused_parens)]
-          { fn intrinsic_memory_load(
-                id: AssignmentId,
-                ptr: OperandRef,
-                ptr_type_id: ($type_id_ty),
-                dest: PlaceRef,
-                is_volatile: bool,
-                is_aligned: bool,
-          ) }
-          #[allow(unused_parens)]
-          { fn intrinsic_memory_store(
-                id: AssignmentId,
-                ptr: OperandRef,
-                ptr_type_id: ($type_id_ty),
-                val: OperandRef,
-                is_volatile: bool,
-                is_aligned: bool,
-          ) }
-          #[allow(unused_parens)]
-          { fn intrinsic_memory_copy(
-                id: AssignmentId,
-                src: OperandRef,
-                ptr_type_id: ($type_id_ty),
-                dst: OperandRef,
-                count: OperandRef,
-                is_volatile: bool,
-                is_overlapping: bool,
-                conc_count: usize,
-          ) }
-
           { fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
-
-          // All atomic operations have an ordering, majority get applied on a pointer.
-          #[allow(unused_parens)]
-          { fn intrinsic_atomic_load(
-              ordering: ($atomic_ord_ty),
-              id: AssignmentId,
-              ptr: OperandRef,
-              ptr_type_id: ($type_id_ty),
-              dest: PlaceRef,
-          ) }
-          #[allow(unused_parens)]
-          { fn intrinsic_atomic_store(
-              ordering: ($atomic_ord_ty),
-              id: AssignmentId,
-              ptr: OperandRef,
-              ptr_type_id: ($type_id_ty),
-              val: OperandRef,
-          ) }
-          #[allow(unused_parens)]
-          { fn intrinsic_atomic_xchg(
-              ordering: ($atomic_ord_ty),
-              id: AssignmentId,
-              ptr: OperandRef,
-              ptr_type_id: ($type_id_ty),
-              val: OperandRef,
-              prev_dest: PlaceRef,
-          ) }
-          #[allow(unused_parens)]
-          { fn intrinsic_atomic_cxchg(
-              ordering: ($atomic_ord_ty),
-              id: AssignmentId,
-              ptr: OperandRef,
-              ptr_type_id: ($type_id_ty),
-              failure_ordering: ($atomic_ord_ty),
-              weak: bool,
-              old: OperandRef,
-              src: OperandRef,
-              prev_dest: PlaceRef,
-          ) }
-          #[allow(unused_parens)]
+          // ----- Atomic -----
+           #[allow(unused_parens)]
           { fn intrinsic_atomic_binary_op(
               ordering: ($atomic_ord_ty),
               id: AssignmentId,
               ptr: OperandRef,
+              conc_ptr: RawAddress,
               ptr_type_id: ($type_id_ty),
               operator: ($atomic_bin_op_ty),
               src: OperandRef,
@@ -379,6 +311,83 @@ pub mod macros {
           { fn intrinsic_atomic_fence(
               ordering: ($atomic_ord_ty),
               single_thread: bool,
+          ) }
+          // ----- Memory -----
+          #[allow(unused_parens)]
+          { fn intrinsic_memory_load(
+                id: AssignmentId,
+                ptr: OperandRef,
+                conc_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                dest: PlaceRef,
+                is_volatile: bool,
+                is_aligned: bool,
+          ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_memory_store(
+                id: AssignmentId,
+                ptr: OperandRef,
+                conc_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                val: OperandRef,
+                is_volatile: bool,
+                is_aligned: bool,
+          ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_memory_copy(
+                id: AssignmentId,
+                src_ptr: OperandRef,
+                conc_src_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                dst_ptr: OperandRef,
+                conc_dst_ptr: RawAddress,
+                count: OperandRef,
+                conc_count: usize,
+                is_volatile: bool,
+                is_overlapping: bool,
+          ) }
+          // ----- Atomic (Memory) -----
+          // All atomic operations have an ordering, majority get applied on a pointer.
+          #[allow(unused_parens)]
+          { fn intrinsic_atomic_load(
+              ordering: ($atomic_ord_ty),
+              id: AssignmentId,
+              ptr: OperandRef,
+              conc_ptr: RawAddress,
+              ptr_type_id: ($type_id_ty),
+              dest: PlaceRef,
+          ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_atomic_store(
+              ordering: ($atomic_ord_ty),
+              id: AssignmentId,
+              ptr: OperandRef,
+              conc_ptr: RawAddress,
+              ptr_type_id: ($type_id_ty),
+              val: OperandRef,
+          ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_atomic_xchg(
+              ordering: ($atomic_ord_ty),
+              id: AssignmentId,
+              ptr: OperandRef,
+              conc_ptr: RawAddress,
+              ptr_type_id: ($type_id_ty),
+              val: OperandRef,
+              prev_dest: PlaceRef,
+          ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_atomic_cxchg(
+              ordering: ($atomic_ord_ty),
+              id: AssignmentId,
+              ptr: OperandRef,
+              conc_ptr: RawAddress,
+              ptr_type_id: ($type_id_ty),
+              failure_ordering: ($atomic_ord_ty),
+              weak: bool,
+              old: OperandRef,
+              src: OperandRef,
+              prev_dest: PlaceRef,
           ) }
         }
     };
@@ -698,25 +707,25 @@ pub mod macros {
             }$modifier!{
                 fn intrinsic_assign_ctlz(id:AssignmentId,dest:PlaceRef,x:OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_load(id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,is_volatile:bool,is_aligned:bool,);
-            }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_store(id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
-            }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_copy(id:AssignmentId,src:OperandRef,ptr_type_id:($type_id_ty),dst:OperandRef,count:OperandRef,is_volatile:bool,is_overlapping:bool,conc_count: usize,);
-            }$modifier!{
                 fn intrinsic_assign_bswap(id:AssignmentId,dest:PlaceRef,x:OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_load(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),dest:PlaceRef,);
-            }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_store(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,);
-            }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_xchg(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),val:OperandRef,prev_dest:PlaceRef,);
-            }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_cxchg(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),failure_ordering:($atomic_ord_ty),weak:bool,old:OperandRef,src:OperandRef,prev_dest:PlaceRef,);
-            }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,ptr_type_id:($type_id_ty),operator:($atomic_bin_op_ty),src:OperandRef,prev_dest:PlaceRef,);
+                #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),operator:($atomic_bin_op_ty),src:OperandRef,prev_dest:PlaceRef,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_memory_load(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),dest:PlaceRef,is_volatile:bool,is_aligned:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_memory_store(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_memory_copy(id:AssignmentId,src_ptr:OperandRef,conc_src_ptr:RawAddress,ptr_type_id:($type_id_ty),dst_ptr:OperandRef,conc_dst_ptr:RawAddress,count:OperandRef,conc_count:usize,is_volatile:bool,is_overlapping:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_atomic_load(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),dest:PlaceRef,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_atomic_store(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_atomic_xchg(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,prev_dest:PlaceRef,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_atomic_cxchg(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),failure_ordering:($atomic_ord_ty),weak:bool,old:OperandRef,src:OperandRef,prev_dest:PlaceRef,);
             }
         };
         (modifier: $modifier:path) => {

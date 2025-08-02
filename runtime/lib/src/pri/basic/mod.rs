@@ -6,8 +6,8 @@ use common::{log_debug, log_info, pri::*};
 
 use self::instance::*;
 use crate::abs::{
-    self, AssertKind, CastKind, Constant, FloatType, IntType, Local, SymVariable, ValueType,
-    backend::*,
+    self, AssertKind, CastKind, Constant, FloatType, IntType, Local, PlaceUsage, SymVariable,
+    ValueType, backend::*,
 };
 
 use leaf_macros::trait_log_fn;
@@ -685,124 +685,19 @@ impl ProgramRuntimeInterface for BasicPri {
         Self::assign_unary_op(id, dest, Self::UnaryOp::LeadingZeros, x);
     }
 
-    fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
-        Self::assign_unary_op(id, dest, Self::UnaryOp::ByteSwap, x);
-    }
-
     fn intrinsic_assign_ctpop(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
         Self::assign_unary_op(id, dest, Self::UnaryOp::CountOnes, x);
     }
 
-    fn intrinsic_memory_load(
-        id: AssignmentId,
-        ptr: OperandRef,
-        ptr_type_id: Self::TypeId,
-        dest: PlaceRef,
-        _is_volatile: bool,
-        _is_aligned: bool,
-    ) {
-        Self::load(id, ptr, ptr_type_id, dest)
-    }
-
-    fn intrinsic_memory_store(
-        id: AssignmentId,
-        ptr: OperandRef,
-        ptr_type_id: Self::TypeId,
-        src: OperandRef,
-        _is_volatile: bool,
-        _is_aligned: bool,
-    ) {
-        Self::store(id, ptr, ptr_type_id, src)
-    }
-
-    fn intrinsic_memory_copy(
-        id: AssignmentId,
-        src: OperandRef,
-        ptr_type_id: Self::TypeId,
-        dst: OperandRef,
-        count: OperandRef,
-        _is_volatile: bool,
-        _is_overlapping: bool,
-        conc_count: usize,
-    ) {
-        let src_ptr = take_back_operand(src);
-        let dst_ptr = take_back_operand(dst);
-        let count = take_back_operand(count);
-        raw_memory(|h| {
-            h.copy(
-                id,
-                src_ptr,
-                todo!(),
-                dst_ptr,
-                todo!(),
-                count,
-                conc_count,
-                ptr_type_id,
-            )
-        })
-    }
-
-    fn intrinsic_atomic_load(
-        _ordering: Self::AtomicOrdering,
-        id: AssignmentId,
-        ptr: OperandRef,
-        ptr_type_id: Self::TypeId,
-        dest: PlaceRef,
-    ) {
-        Self::load(id, ptr, ptr_type_id, dest)
-    }
-
-    fn intrinsic_atomic_store(
-        _ordering: Self::AtomicOrdering,
-        id: AssignmentId,
-        ptr: OperandRef,
-        ptr_type_id: Self::TypeId,
-        src: OperandRef,
-    ) {
-        Self::store(id, ptr, ptr_type_id, src)
-    }
-
-    fn intrinsic_atomic_xchg(
-        _ordering: Self::AtomicOrdering,
-        id: AssignmentId,
-        ptr: OperandRef,
-        ptr_type_id: Self::TypeId,
-        val: OperandRef,
-        prev_dest: PlaceRef,
-    ) {
-        Self::update_by_ptr_return_old(id, ptr, ptr_type_id, val, prev_dest, |h, _current, val| {
-            h.use_of(val)
-        })
-    }
-
-    fn intrinsic_atomic_cxchg(
-        _ordering: Self::AtomicOrdering,
-        id: AssignmentId,
-        ptr: OperandRef,
-        ptr_type_id: Self::TypeId,
-        failure_ordering: Self::AtomicOrdering,
-        _weak: bool,
-        old: OperandRef,
-        src: OperandRef,
-        prev_dest: PlaceRef,
-    ) {
-        let old = take_back_operand(old);
-
-        Self::update_by_ptr(
-            id,
-            ptr,
-            ptr_type_id,
-            src,
-            prev_dest,
-            |h, current, src| h.use_if_eq(src, current, old.clone()),
-            |h, current| h.use_and_check_eq(current, old.clone()),
-        )
+    fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
+        Self::assign_unary_op(id, dest, Self::UnaryOp::ByteSwap, x);
     }
 
     fn intrinsic_atomic_binary_op(
         _ordering: Self::AtomicOrdering,
         id: AssignmentId,
         ptr: OperandRef,
+        conc_ptr: RawAddress,
         ptr_type_id: Self::TypeId,
         operator: Self::AtomicBinaryOp,
         src: OperandRef,
@@ -820,13 +715,140 @@ impl ProgramRuntimeInterface for BasicPri {
             abs::AtomicBinaryOp::Max => todo!(),
         };
 
-        Self::update_by_ptr_return_old(id, ptr, ptr_type_id, src, prev_dest, |h, current, src| {
-            h.binary_op_between(binary_op, current, src)
-        });
+        Self::update_by_ptr_return_old(
+            id,
+            ptr,
+            conc_ptr,
+            ptr_type_id,
+            src,
+            prev_dest,
+            |h, current, src| h.binary_op_between(binary_op, current, src),
+        );
     }
 
     fn intrinsic_atomic_fence(_ordering: Self::AtomicOrdering, _single_thread: bool) {
         // No-op.
+    }
+
+    fn intrinsic_memory_load(
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        dest: PlaceRef,
+        _is_volatile: bool,
+        _is_aligned: bool,
+    ) {
+        Self::load(id, ptr, conc_ptr, ptr_type_id, dest)
+    }
+
+    fn intrinsic_memory_store(
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        value: OperandRef,
+        _is_volatile: bool,
+        _is_aligned: bool,
+    ) {
+        Self::store(id, ptr, conc_ptr, ptr_type_id, value)
+    }
+
+    fn intrinsic_memory_copy(
+        id: AssignmentId,
+        src_ptr: OperandRef,
+        conc_src_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        dst_ptr: OperandRef,
+        conc_dst_ptr: RawAddress,
+        count: OperandRef,
+        conc_count: usize,
+        _is_volatile: bool,
+        _is_overlapping: bool,
+    ) {
+        let src_ptr = take_back_operand(src_ptr);
+        let dst_ptr = take_back_operand(dst_ptr);
+        let count = take_back_operand(count);
+        raw_memory(|h| {
+            h.copy(
+                id,
+                src_ptr,
+                conc_src_ptr,
+                dst_ptr,
+                conc_dst_ptr,
+                count,
+                conc_count,
+                ptr_type_id,
+            )
+        })
+    }
+
+    fn intrinsic_atomic_load(
+        _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        dest: PlaceRef,
+    ) {
+        Self::load(id, ptr, conc_ptr, ptr_type_id, dest)
+    }
+
+    fn intrinsic_atomic_store(
+        _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        src: OperandRef,
+    ) {
+        Self::store(id, ptr, conc_ptr, ptr_type_id, src)
+    }
+
+    fn intrinsic_atomic_xchg(
+        _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        val: OperandRef,
+        prev_dest: PlaceRef,
+    ) {
+        Self::update_by_ptr_return_old(
+            id,
+            ptr,
+            conc_ptr,
+            ptr_type_id,
+            val,
+            prev_dest,
+            |h, _current, val| h.use_of(val),
+        )
+    }
+
+    fn intrinsic_atomic_cxchg(
+        _ordering: Self::AtomicOrdering,
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        failure_ordering: Self::AtomicOrdering,
+        _weak: bool,
+        old: OperandRef,
+        src: OperandRef,
+        prev_dest: PlaceRef,
+    ) {
+        let old = take_back_operand(old);
+
+        Self::update_by_ptr(
+            id,
+            ptr,
+            conc_ptr,
+            ptr_type_id,
+            src,
+            prev_dest,
+            |h, current, src| h.use_if_eq(src, current, old.clone()),
+            |h, current| h.use_and_check_eq(current, old.clone()),
+        )
     }
 }
 
@@ -865,27 +887,39 @@ impl BasicPri {
         })
     }
 
-    fn load(id: AssignmentId, ptr: OperandRef, ptr_type_id: TypeId, dest: PlaceRef) {
+    fn load(
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: TypeId,
+        dest: PlaceRef,
+    ) {
         let src_ptr = take_back_operand(ptr);
-        let src_place = get_backend_place(abs::PlaceUsage::Read, |h| {
-            h.from_ptr(src_ptr.clone(), ptr_type_id)
+        let src_place = raw_memory(|h| {
+            h.place_from_ptr(src_ptr.clone(), conc_ptr, ptr_type_id, PlaceUsage::Read)
         });
         let src_pointee_value = take_back_operand(push_operand(|h| h.copy_of(src_place.clone())));
         assign_to(id, dest, |h| h.use_of(src_pointee_value))
     }
 
-    fn store(id: AssignmentId, ptr: OperandRef, ptr_type_id: TypeId, src: OperandRef) {
+    fn store(
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: TypeId,
+        value: OperandRef,
+    ) {
         let dst_ptr = take_back_operand(ptr);
-        let dst_place = get_backend_place(abs::PlaceUsage::Write, |h| {
-            h.from_ptr(dst_ptr.clone(), ptr_type_id)
-        });
-        let src_value = take_back_operand(src);
-        assign_to_place(id, dst_place, |h| h.use_of(src_value))
+        let dst_place =
+            raw_memory(|h| h.place_from_ptr(dst_ptr, conc_ptr, ptr_type_id, PlaceUsage::Write));
+        let value = take_back_operand(value);
+        assign_to_place(id, dst_place, |h| h.use_of(value))
     }
 
     fn update_by_ptr_return_old(
         id: AssignmentId,
         ptr: OperandRef,
+        conc_ptr: RawAddress,
         ptr_type_id: TypeId,
         src: OperandRef,
         prev_dest: PlaceRef,
@@ -898,6 +932,7 @@ impl BasicPri {
         Self::update_by_ptr(
             id,
             ptr,
+            conc_ptr,
             ptr_type_id,
             src,
             prev_dest,
@@ -909,6 +944,7 @@ impl BasicPri {
     fn update_by_ptr(
         id: AssignmentId,
         ptr: OperandRef,
+        conc_ptr: RawAddress,
         ptr_type_id: TypeId,
         src: OperandRef,
         prev_dest: PlaceRef,
@@ -923,16 +959,14 @@ impl BasicPri {
         ),
     ) {
         let ptr = take_back_operand(ptr);
-        let ptr_place = get_backend_place(abs::PlaceUsage::Read, |h| {
-            h.from_ptr(ptr.clone(), ptr_type_id)
-        });
+        let ptr_place =
+            raw_memory(|h| h.place_from_ptr(ptr.clone(), conc_ptr, ptr_type_id, PlaceUsage::Read));
         let current = take_back_operand(push_operand(|h| h.copy_of(ptr_place.clone())));
 
-        let ptr_place = get_backend_place(abs::PlaceUsage::Write, |h| {
-            h.from_ptr(ptr.clone(), ptr_type_id)
-        });
+        let ptr_place =
+            raw_memory(|h| h.place_from_ptr(ptr, conc_ptr, ptr_type_id, PlaceUsage::Write));
         let src = take_back_operand(src);
-        assign_to_place(id, ptr_place.clone(), |h| {
+        assign_to_place(id, ptr_place, |h| {
             ptr_update_action(h, current.clone(), src)
         });
 

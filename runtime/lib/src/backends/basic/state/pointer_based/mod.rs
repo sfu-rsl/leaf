@@ -188,10 +188,11 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
     fn ref_place_by_ptr(
         &self,
         ptr: Self::Value,
+        conc_ptr: RawAddress,
         ptr_type_id: TypeId,
         usage: PlaceUsage,
     ) -> PlaceValueRef {
-        self.get_deref_of_ptr(ptr.value, ptr_type_id, usage)
+        self.get_deref_of_ptr(ptr.value, conc_ptr, ptr_type_id, usage)
     }
 
     #[tracing::instrument(level = "debug", skip(self))]

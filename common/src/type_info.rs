@@ -217,6 +217,12 @@ pub trait TypeDatabase<'t> {
         self.get_type(key).size()
     }
 
+    fn get_pointee_size(&self, key: &TypeId) -> Option<TypeSize> {
+        self.get_type(key)
+            .pointee_ty
+            .and_then(|pointee| self.get_size(&pointee))
+    }
+
     fn core_types(&self) -> &CoreTypes<TypeId>;
 }
 

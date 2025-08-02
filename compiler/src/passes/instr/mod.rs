@@ -28,7 +28,10 @@ use common::{log_debug, log_info, log_warn, pri::AssignmentId};
 use crate::{
     config::InstrumentationRules,
     mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
-    passes::{StorageExt, instr::call::context::PriItems},
+    passes::{
+        StorageExt,
+        instr::call::context::{PointerPackage, PriItems},
+    },
     utils::mir::{BodyExt, TyCtxtExt},
     visit::*,
 };
@@ -803,9 +806,8 @@ where
     ) {
         let mut call_adder = self.call_adder.before();
         let ptr_arg = params.args.get(0);
-        let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
-        let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, call_adder.tcx()));
-        let mut call_adder = call_adder.perform_atomic_op(ordering, ptr_ref.zip(ptr_ty));
+        let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
+        let mut call_adder = call_adder.perform_atomic_op(ordering, ptr);
         use decision::AtomicIntrinsicKind::*;
         match kind {
             Load | Store | Exchange | CompareExchange { .. } | BinOp(..) => {
@@ -1112,6 +1114,18 @@ impl<'tcx, C: ctxtreqs::ForOperandRef<'tcx>> RuntimeCallAdder<C> {
             })
             .reference_operand(&operand.node)
     }
+
+    fn reference_ptr_for_intrinsic(
+        &mut self,
+        operand: &Spanned<Operand<'tcx>>,
+    ) -> PointerPackage<'tcx> {
+        let reference = self.reference_operand_spanned(operand);
+        PointerPackage {
+            reference,
+            value: operand.node.clone(),
+            ty: operand.node.ty(self, self.tcx()),
+        }
+    }
 }
 
 fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
@@ -1140,9 +1154,8 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
         (Copy { .. }, true) => args.get(1),
         _ => args.get(0),
     };
-    let ptr_ref = ptr_arg.map(|a| call_adder.reference_operand_spanned(a));
-    let ptr_ty = ptr_arg.map(|a| a.node.ty(&call_adder, tcx));
-    let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr_ref.zip(ptr_ty));
+    let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
+    let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr);
 
     match kind {
         Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
@@ -1151,10 +1164,16 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
             call_adder.store(val_ref, is_ptr_aligned)
         }
         Copy { is_overlapping } => {
-            let dst_ref =
-                call_adder.reference_operand_spanned(if is_volatile { &args[0] } else { &args[1] });
+            let dest = if is_volatile { &args[0] } else { &args[1] };
+            let dst_ref = call_adder.reference_operand_spanned(dest);
             let count_ref = call_adder.reference_operand_spanned(&args[2]);
-            call_adder.copy(dst_ref, count_ref, is_overlapping, &args[2].node)
+            call_adder.copy(
+                dst_ref,
+                &dest.node,
+                count_ref,
+                &args[2].node,
+                is_overlapping,
+            )
         }
     }
 }

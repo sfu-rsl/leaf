@@ -208,10 +208,11 @@ pub(crate) trait MemoryIntrinsicHandler<'tcx> {
 
     fn copy(
         &mut self,
-        dst: OperandRef,
-        count: OperandRef,
-        is_overlapping: bool,
+        dst_ref: OperandRef,
+        dst_value: &Operand<'tcx>,
+        count_ref: OperandRef,
         count_value: &Operand<'tcx>,
+        is_overlapping: bool,
     );
 }
 
@@ -481,24 +482,24 @@ mod implementation {
         pub fn perform_atomic_op<'b, 'tcx>(
             &'b mut self,
             ordering: AtomicOrdering,
-            ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
+            ptr: Option<PointerPackage<'tcx>>,
         ) -> RuntimeCallAdder<AtomicIntrinsicContext<'b, 'tcx, C>> {
             self.with_context(|base| AtomicIntrinsicContext {
                 base,
                 ordering,
-                ptr_and_ty,
+                ptr,
             })
         }
 
         pub fn perform_memory_op<'b, 'tcx>(
             &'b mut self,
             is_volatile: bool,
-            ptr_and_ty: Option<(OperandRef, Ty<'tcx>)>,
+            ptr: Option<PointerPackage<'tcx>>,
         ) -> RuntimeCallAdder<MemoryIntrinsicContext<'b, 'tcx, C>> {
             self.with_context(|base| MemoryIntrinsicContext {
                 base,
                 is_volatile,
-                ptr_and_ty,
+                ptr,
             })
         }
 
@@ -2110,6 +2111,7 @@ mod implementation {
                     operand::const_from_bool(self.tcx(), is_ptr_aligned),
                 ],
                 Default::default(),
+                Default::default(),
             );
         }
 
@@ -2122,25 +2124,37 @@ mod implementation {
                     operand::const_from_bool(self.tcx(), is_ptr_aligned),
                 ],
                 Default::default(),
+                Default::default(),
             )
         }
 
         fn copy(
             &mut self,
             dst_ref: OperandRef,
+            dst_value: &Operand<'tcx>,
             count_ref: OperandRef,
-            is_overlapping: bool,
             count_value: &Operand<'tcx>,
+            is_overlapping: bool,
         ) {
+            let mut stmts = Vec::new();
+
+            let conc_dst_ptr_local = {
+                let (stmt, id_local) = self.make_conc_ptr_assignment(dst_value.clone());
+                stmts.push(stmt);
+                id_local
+            };
+
             self.add_bb_for_memory_op_intrinsic_call(
                 sym::intrinsics::memory::intrinsic_memory_copy,
                 vec![
                     operand::move_for_local(dst_ref.into()),
+                    operand::move_for_local(conc_dst_ptr_local),
                     operand::move_for_local(count_ref.into()),
+                    count_value.to_copy(),
                     operand::const_from_bool(self.tcx(), self.context.is_volatile()),
                     operand::const_from_bool(self.tcx(), is_overlapping),
-                    count_value.to_copy(),
                 ],
+                stmts,
                 Default::default(),
             )
         }
@@ -2155,28 +2169,33 @@ mod implementation {
             &mut self,
             func: LeafMemoryIntrinsicSymbol,
             additional_args: Vec<Operand<'tcx>>,
+            additional_stmts: Vec<Statement<'tcx>>,
             additional_blocks: Vec<BasicBlockData<'tcx>>,
         ) {
+            let mut stmts = additional_stmts;
             let mut blocks = additional_blocks;
 
-            let ptr_type_id_local = {
-                let (block, id_local) = self.make_type_id_of_bb(self.context.ptr_ty());
-                blocks.push(block);
-                id_local
+            let [ptr_ref, ptr_value, ptr_type_id] = {
+                let (ptr_block, ptr_stmt, args) = self.make_ptr_pack_args();
+                stmts.push(ptr_stmt);
+                blocks.push(ptr_block);
+                args
             };
 
-            let block = self.make_bb_for_call(
+            let mut block = self.make_bb_for_call(
                 **func,
                 [
                     vec![
                         operand::const_from_uint(self.tcx(), self.assignment_id()),
-                        operand::move_for_local(self.context.ptr().into()),
-                        operand::move_for_local(ptr_type_id_local),
+                        ptr_ref,
+                        ptr_value,
+                        ptr_type_id,
                     ],
                     additional_args,
                 ]
                 .concat(),
             );
+            block.statements.extend(stmts);
             blocks.push(block);
 
             self.insert_blocks(blocks);
@@ -2290,6 +2309,7 @@ mod implementation {
                 sym::intrinsics::atomic::intrinsic_atomic_fence,
                 vec![operand::const_from_bool(self.tcx(), single_thread)],
                 Default::default(),
+                Default::default(),
             );
         }
     }
@@ -2306,12 +2326,14 @@ mod implementation {
         ) where
             Self: Assigner<'tcx>,
         {
+            let mut stmts = Vec::new();
             let mut blocks = additional_blocks;
 
-            let dst_ptr_type_id_local = {
-                let (block, id_local) = self.make_type_id_of_bb(self.context.ptr_ty());
-                blocks.push(block);
-                id_local
+            let [ptr_ref, ptr_value, ptr_type_id] = {
+                let (ptr_block, ptr_stmt, args) = self.make_ptr_pack_args();
+                stmts.push(ptr_stmt);
+                blocks.push(ptr_block);
+                args
             };
 
             self.add_bb_for_atomic_intrinsic_call(
@@ -2319,12 +2341,14 @@ mod implementation {
                 vec![
                     vec![
                         operand::const_from_uint(self.tcx(), self.assignment_id()),
-                        operand::move_for_local(self.context.ptr().into()),
-                        operand::move_for_local(dst_ptr_type_id_local),
+                        ptr_ref,
+                        ptr_value,
+                        ptr_type_id,
                     ],
                     additional_args,
                 ]
                 .concat(),
+                stmts,
                 blocks,
             );
         }
@@ -2333,6 +2357,7 @@ mod implementation {
             &mut self,
             func: LeafAtomicIntrinsicSymbol,
             additional_args: Vec<Operand<'tcx>>,
+            additional_stmts: Vec<Statement<'tcx>>,
             additional_blocks: Vec<BasicBlockData<'tcx>>,
         ) {
             let mut blocks = additional_blocks;
@@ -2343,7 +2368,7 @@ mod implementation {
                 bb.1
             };
 
-            let block = self.make_bb_for_call(
+            let mut block = self.make_bb_for_call(
                 **func,
                 [
                     vec![operand::move_for_local(ordering_local)],
@@ -2351,9 +2376,50 @@ mod implementation {
                 ]
                 .concat(),
             );
+            block.statements.extend(additional_stmts);
             blocks.push(block);
 
             self.insert_blocks(blocks);
+        }
+    }
+
+    impl<'tcx, C> RuntimeCallAdder<C>
+    where
+        Self: MirCallAdder<'tcx>,
+        C: Basic<'tcx>,
+    {
+        fn make_ptr_pack_args(
+            &mut self,
+        ) -> (BasicBlockData<'tcx>, Statement<'tcx>, [Operand<'tcx>; 3])
+        where
+            C: PointerInfoProvider<'tcx>,
+        {
+            let (conc_ptr_assignment, conc_ptr_local) =
+                self.make_conc_ptr_assignment(self.context.ptr_value().clone());
+
+            let (ptr_type_id_block, ptr_type_id_local) =
+                self.make_type_id_of_bb(self.context.ptr_ty());
+
+            (ptr_type_id_block, conc_ptr_assignment, [
+                operand::move_for_local(self.context.ptr_operand_ref().into()),
+                operand::move_for_local(conc_ptr_local),
+                operand::move_for_local(ptr_type_id_local),
+            ])
+        }
+
+        fn make_conc_ptr_assignment(
+            &mut self,
+            ptr_value: Operand<'tcx>,
+        ) -> (Statement<'tcx>, Local) {
+            let tcx = self.tcx();
+            let raw_addr_ty = Ty::new_imm_ptr(tcx, tcx.types.unit);
+            let local = self.add_local(raw_addr_ty);
+            let assignment = assignment::create(
+                Place::from(local),
+                mir::Rvalue::Cast(CastKind::PtrToPtr, ptr_value, raw_addr_ty),
+            );
+
+            (assignment, local)
         }
     }
 
@@ -3904,20 +3970,24 @@ mod implementation {
         impl<'tcx, C> ForEntryFunction<'tcx> for C where C: ForInsertion<'tcx> + InEntryFunction {}
 
         pub(crate) trait ForAtomicIntrinsic<'tcx>:
-            ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx>
+            ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
         {
         }
         impl<'tcx, C> ForAtomicIntrinsic<'tcx> for C where
-            C: ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx>
+            C: ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
         {
         }
 
         pub(crate) trait ForMemoryIntrinsic<'tcx>:
-            ForAssignment<'tcx> + MemoryIntrinsicParamsProvider<'tcx>
+            ForAssignment<'tcx>
+            + MemoryIntrinsicParamsProvider<'tcx>
+            + PointerInfoProvider<'tcx>
         {
         }
         impl<'tcx, C> ForMemoryIntrinsic<'tcx> for C where
-            C: ForAssignment<'tcx> + MemoryIntrinsicParamsProvider<'tcx>
+            C: ForAssignment<'tcx>
+                + MemoryIntrinsicParamsProvider<'tcx>
+                + PointerInfoProvider<'tcx>
         {
         }
     }
