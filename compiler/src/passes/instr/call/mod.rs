@@ -456,7 +456,7 @@ mod implementation {
             id: AssignmentId,
             dest_ref: PlaceRef,
             dest_ty: Ty<'tcx>,
-        ) -> RuntimeCallAdder<AssignmentContext<'_, 'tcx, C>> {
+        ) -> RuntimeCallAdder<AssignmentContext<'b, 'tcx, C>> {
             self.with_context(|base| AssignmentContext {
                 base,
                 id,
@@ -1517,16 +1517,6 @@ mod implementation {
                 ]
                 .concat(),
             )
-        }
-
-        fn add_and_set_local_for_enum(
-            &mut self,
-            enum_ty: Ty<'tcx>,
-            discr: impl Into<u128>,
-        ) -> (Local, Vec<Statement<'tcx>>) {
-            let local = self.context.add_local(enum_ty);
-            let statements = enums::set_variant_to_local(self.tcx(), enum_ty, discr.into(), local);
-            (local, statements)
         }
     }
 
@@ -2643,12 +2633,11 @@ mod implementation {
                 SourceInfo, Statement,
             },
             query::Key,
-            ty::{ParamEnv, Ty, TyCtxt, TyKind, TypingEnv, adjustment::PointerCoercion},
+            ty::{Ty, TyCtxt, TyKind, TypingEnv, adjustment::PointerCoercion},
         };
         use rustc_span::DUMMY_SP;
 
         use crate::mir_transform::{BodyLocalManager, NEXT_BLOCK};
-        use crate::utils::mir::TyCtxtExt;
 
         pub(super) use self::assignment::rvalue;
 
@@ -2779,54 +2768,8 @@ mod implementation {
                 tcx: TyCtxt<'tcx>,
                 def_id: DefId,
                 substs: impl IntoIterator<Item = GenericArg<'tcx>>,
-            ) -> Operand {
+            ) -> Operand<'tcx> {
                 Operand::function_handle(tcx, def_id, substs, DUMMY_SP)
-            }
-        }
-
-        pub(super) mod enums {
-            use rustc_target::abi::VariantIdx;
-
-            use super::*;
-
-            pub fn set_variant_to_local<'tcx>(
-                tcx: TyCtxt<'tcx>,
-                enum_ty: Ty<'tcx>,
-                variant_discr: u128,
-                local: Local,
-            ) -> Vec<Statement<'tcx>> {
-                let place = Place::from(local);
-
-                let deinit = Statement {
-                    source_info: SourceInfo::outermost(DUMMY_SP),
-                    kind: rustc_middle::mir::StatementKind::Deinit(Box::new(place)),
-                };
-
-                let disc = Statement {
-                    source_info: SourceInfo::outermost(DUMMY_SP),
-                    kind: rustc_middle::mir::StatementKind::SetDiscriminant {
-                        place: Box::new(place),
-                        variant_index: get_variant_index_by_discr(tcx, enum_ty, variant_discr),
-                    },
-                };
-
-                vec![deinit, disc]
-            }
-
-            pub fn get_variant_index_by_discr<'tcx>(
-                tcx: TyCtxt<'tcx>,
-                ty: Ty<'tcx>,
-                discr: u128,
-            ) -> VariantIdx {
-                let adt_def = match ty.kind() {
-                    TyKind::Adt(def, _) => def,
-                    _ => unreachable!(),
-                };
-                adt_def
-                    .discriminants(tcx)
-                    .find(|(_, d)| d.val == discr)
-                    .expect("Discriminant value is not valid.")
-                    .0
             }
         }
 
@@ -2948,14 +2891,6 @@ mod implementation {
                     _ => unreachable!("Unexpected floating point bit size: {}", bit_size),
                 } as u64;
                 (bit_size - sbit_size, sbit_size)
-            }
-
-            #[inline]
-            pub fn is_ref_assignable<'tcx>(ty: &Ty<'tcx>, from: &Ty<'tcx>) -> bool {
-                match (ty.kind(), from.kind()) {
-                    (TyKind::Ref(_, ty, _), TyKind::Ref(_, from, _)) => is_ref_assignable(ty, from),
-                    _ => ty == from,
-                }
             }
 
             /// Returns the corresponding FnDef type of a closure when called,
