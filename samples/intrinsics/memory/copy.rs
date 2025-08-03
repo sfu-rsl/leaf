@@ -30,29 +30,29 @@ fn sym_count() {
 fn sym_src_ptr() {
     let src = [1u8, 2, 3];
     let mut dst = [0u8, 0, 0];
-    let count = 1;
+    let count = N - 1;
 
-    let i = 0u8.mark_symbolic() as usize;
+    let i = 1u8.mark_symbolic() as usize;
     let src_ptr = src[i..].as_ptr();
     let dst_ptr = &mut dst as *mut u8;
 
     copy(src_ptr, dst_ptr, count);
 
-    assert_eq!(dst[0], src[0]);
+    assert_eq!(dst[0], src[i]);
 }
 
 fn sym_dst_ptr() {
     let src = [1u8, 2, 3];
     let mut dst = [0u8, 0, 0];
-    let count = 1;
+    let count = N - 1;
 
-    let i = 0u8.mark_symbolic() as usize;
+    let i = 1u8.mark_symbolic() as usize;
     let src_ptr = &src as *const u8;
     let dst_ptr = dst[i..].as_mut_ptr();
 
     copy(src_ptr, dst_ptr, count);
 
-    assert_eq!(dst[0], src[0]);
+    assert_eq!(dst[i], src[0]);
 }
 
 fn sym_content() {
