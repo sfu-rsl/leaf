@@ -6,10 +6,7 @@ use common::log_debug;
 
 use crate::abs::CastKind;
 
-use super::{
-    BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder,
-    macros::macro_rules_method_with_optional_args,
-};
+use super::{macros::macro_rules_method_with_optional_args, *};
 
 pub(crate) const TAG: &str = "expr_builder";
 const SPAN_BINARY: &str = "binary_op";
@@ -120,11 +117,7 @@ where
     type ExprRefPair<'a> = B::ExprRefPair<'a>;
     type Expr<'a> = B::Expr<'a>;
 
-    fn binary_op<'a>(
-        &mut self,
-        operands: Self::ExprRefPair<'a>,
-        op: crate::abs::BinaryOp,
-    ) -> Self::Expr<'a> {
+    fn binary_op<'a>(&mut self, operands: Self::ExprRefPair<'a>, op: BinaryOp) -> Self::Expr<'a> {
         let span = debug_span!(
             target: TAG, SPAN_BINARY,
             op =  %op, operands = %operands)
@@ -145,7 +138,7 @@ where
     impl_binary_expr_method!(shl shl_unchecked shr shr_unchecked);
     impl_binary_expr_method!(rotate_left rotate_right);
     impl_binary_expr_method!(eq ne lt le gt ge cmp);
-    impl_binary_expr_method!(offset);
+    impl_binary_expr_method!(offset + pointee_size: TypeSize);
 }
 
 impl<B> UnaryExprBuilder for LoggerExprBuilder<B>
@@ -157,7 +150,7 @@ where
     type ExprRef<'a> = B::ExprRef<'a>;
     type Expr<'a> = B::Expr<'a>;
 
-    impl_unary_expr_method!(unary_op + op: crate::abs::UnaryOp);
+    impl_unary_expr_method!(unary_op + op: UnaryOp);
 
     impl_unary_expr_method!(no_op not neg ptr_metadata);
     impl_unary_expr_method!(bit_reverse count_ones byte_swap);
@@ -174,7 +167,7 @@ where
     type ExprRefTriple<'a> = B::ExprRefTriple<'a>;
     type Expr<'a> = B::Expr<'a>;
 
-    impl_ternary_expr_method!(ternary_op + op: crate::abs::TernaryOp);
+    impl_ternary_expr_method!(ternary_op + op: TernaryOp);
 
     impl_ternary_expr_method!(if_then_else);
 }

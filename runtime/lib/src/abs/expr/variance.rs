@@ -1,12 +1,12 @@
 /// This module provides some traits to make it easier to implement expression builders for wrappers
 /// that work as adapters. Most of the adapters provide non-trivial covariance and contravariance
 /// over the input and output types of the wrapped expression builder.
+use core::ops::DerefMut;
+
 use super::{
-    BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder,
-    macros::macro_rules_method_with_optional_args,
+    BinaryExprBuilder, BinaryOp, CastExprBuilder, CastKind, TernaryExprBuilder, TernaryOp,
+    TypeSize, UnaryExprBuilder, UnaryOp, macros::macro_rules_method_with_optional_args,
 };
-use crate::abs::{BinaryOp, CastKind, TernaryOp, UnaryOp};
-use std::ops::DerefMut;
 
 use BinaryExprBuilder as BEB;
 use CastExprBuilder as CEB;
@@ -63,7 +63,7 @@ where
     delegate_binary_op!(shl shl_unchecked shr shr_unchecked);
     delegate_binary_op!(rotate_left rotate_right);
     delegate_binary_op!(eq ne lt le gt ge cmp);
-    delegate_binary_op!(offset);
+    delegate_binary_op!(offset + pointee_size: TypeSize);
 }
 
 pub(crate) trait UnaryExprBuilderAdapter: DerefMut

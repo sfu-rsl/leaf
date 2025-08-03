@@ -13,15 +13,15 @@ pub(crate) mod z3 {
         ast::{self, Ast},
     };
 
-    use crate::{
-        abs::{IntType, ValueType, expr::sym_place::SelectTarget},
-        backends::basic::expr::{OverflowingBinaryOp, SymBinaryOperands, SymVarId, prelude::*},
-    };
+    use crate::abs::{IntType, ValueType, expr::sym_place::SelectTarget};
 
     use common::log_debug;
     use common::z3::*;
 
-    use super::TAG;
+    use super::{
+        super::{BinaryOp, OverflowingBinaryOp, SymBinaryOperands, SymVarId, UnaryOp, prelude::*},
+        TAG,
+    };
 
     const CHAR_BIT_SIZE: u32 = size_of::<char>() as u32 * 8;
     const USIZE_BIT_SIZE: u32 = size_of::<usize>() as u32 * 8;
@@ -249,6 +249,13 @@ pub(crate) mod z3 {
                     let (left, right) = self.translate_binary_operands(operands);
                     self.translate_binary_bound_check(*operator, left, right, *is_overflow)
                 }
+                Offset {
+                    operands,
+                    pointee_size,
+                } => {
+                    let (left, right) = self.translate_binary_operands(operands);
+                    self.translate_offset_expr(left, right, *pointee_size)
+                }
                 Extension(ExtensionExpr {
                     source,
                     is_zero_ext,
@@ -424,8 +431,6 @@ pub(crate) mod z3 {
                             (BinaryOp::Shr, false) => Some(ast::BV::bvlshr),
                             (BinaryOp::RotateL, _) => Some(ast::BV::bvrotl),
                             (BinaryOp::RotateR, _) => Some(ast::BV::bvrotr),
-                            // TODO: Double-check if this is correct.
-                            (BinaryOp::Offset, _) => Some(ast::BV::bvadd),
                             _ => None,
                         };
                         f.map(|f| left_node.map(|left| f(left, right_bv)).into())
@@ -477,6 +482,19 @@ pub(crate) mod z3 {
                 }
                 _ => unreachable!("Binary expressions are not supported for this type: {left:#?}"),
             }
+        }
+
+        fn translate_offset_expr(
+            &mut self,
+            pointer: AstNode<'ctx>,
+            offset: AstNode<'ctx>,
+            pointee_size: crate::abs::TypeSize,
+        ) -> AstNode<'ctx> {
+            let pointer = pointer.as_bit_vector();
+            let offset = offset.as_bit_vector();
+            let size = ast::BV::from_u64(self.context, pointee_size as u64, USIZE_BIT_SIZE);
+            let byte_offset = offset.bvmul(&size);
+            BVNode::new(pointer.bvadd(&byte_offset), false).into()
         }
 
         fn translate_extension_expr(

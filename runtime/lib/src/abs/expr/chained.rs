@@ -144,7 +144,7 @@ where
     impl_binary_expr_method!(shl shl_unchecked shr shr_unchecked);
     impl_binary_expr_method!(rotate_left rotate_right);
     impl_binary_expr_method!(eq ne lt le gt ge cmp);
-    impl_binary_expr_method!(offset);
+    impl_binary_expr_method!(offset + pointee_size: TypeSize);
 }
 
 impl<C, N, E, CE> UnaryExprBuilder for ChainedExprBuilder<C, N, E, CE>

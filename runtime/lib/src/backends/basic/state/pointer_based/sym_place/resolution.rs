@@ -163,14 +163,14 @@ mod implementation {
             };
             match expr {
                 Expr::Multi(multi) => self.deref_multi(multi, pointee_type_id),
-                // Offset
-                Expr::Binary(_) => todo!(),
+                Expr::Offset { .. } => todo!(),
                 // Cast
                 Expr::Ite { .. } | Expr::Truncation(..) | Expr::Extension(..) => todo!(),
                 Expr::Partial(..) => todo!(),
                 Expr::Concat(..) => todo!(),
                 Expr::Transmutation { .. } => todo!(),
                 Expr::Unary { .. }
+                | Expr::Binary(..)
                 | Expr::BinaryBoundCheck { .. }
                 | Expr::Ref(_)
                 | Expr::Len(_)

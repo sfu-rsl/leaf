@@ -1,7 +1,5 @@
 use delegate::delegate;
 
-use crate::abs::{BinaryOp, UnaryOp};
-
 use super::*;
 
 /// This is the main expression builder, which is simply an interface for the
@@ -104,7 +102,7 @@ where
     impl_binary_expr_method!(shl shl_unchecked shr shr_unchecked);
     impl_binary_expr_method!(rotate_left rotate_right);
     impl_binary_expr_method!(eq ne lt le gt ge cmp);
-    impl_binary_expr_method!(offset);
+    impl_binary_expr_method!(offset + pointee_size: TypeSize);
 }
 
 impl<B, U, T, C> UnaryExprBuilder for CompositeExprBuilder<B, U, T, C>

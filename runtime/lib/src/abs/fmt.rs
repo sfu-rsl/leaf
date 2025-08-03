@@ -116,7 +116,6 @@ impl Display for BinaryOp {
 impl Display for UnaryOp {
     fn fmt(&self, f: &mut Formatter) -> Result {
         f.write_str(match self {
-            UnaryOp::NoOp => "",
             UnaryOp::Not => "!",
             UnaryOp::Neg => "-",
             UnaryOp::PtrMetadata => "m",

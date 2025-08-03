@@ -6,9 +6,123 @@ pub(crate) mod proj;
 pub(crate) mod sym_place;
 pub(crate) mod variance;
 
+use common::pri::TypeSize;
+
+use crate::utils::meta::{aug_enum, super_enum};
+
 use self::macros::macro_rules_method_with_optional_args;
 
-use super::{BinaryOp, CastKind, FloatType, IntType, TernaryOp, TypeId, UnaryOp};
+use super::{CastKind, FloatType, IntType, TypeId};
+
+aug_enum! {
+    #[repr(u8)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum BinaryOp from super::BinaryOp {
+        Add, AddUnchecked, AddWithOverflow, AddSaturating,
+        Sub, SubUnchecked, SubWithOverflow, SubSaturating,
+        Mul, MulUnchecked, MulWithOverflow,
+        Div, DivExact, Rem,
+        BitXor, BitAnd, BitOr,
+        Shl, ShlUnchecked, Shr, ShrUnchecked,
+        RotateL, RotateR,
+        Eq, Lt, Le, Ne, Ge, Gt, Cmp,
+        +
+        Offset(TypeSize),
+    }
+    with |_abs_op| -> OffsetWithoutSize { OffsetWithoutSize }
+}
+
+pub(crate) struct OffsetWithoutSize;
+
+impl OffsetWithoutSize {
+    pub(crate) fn with_size(self, size: TypeSize) -> BinaryOp {
+        BinaryOp::Offset(size)
+    }
+}
+
+impl BinaryOp {
+    #[inline]
+    pub(crate) fn is_unchecked(&self) -> bool {
+        match self {
+            Self::AddUnchecked
+            | Self::SubUnchecked
+            | Self::MulUnchecked
+            | Self::ShlUnchecked
+            | Self::ShrUnchecked
+            | Self::DivExact => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_with_overflow(&self) -> bool {
+        match self {
+            Self::AddWithOverflow | Self::SubWithOverflow | Self::MulWithOverflow => true,
+            _ => false,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn is_saturating(&self) -> bool {
+        match self {
+            Self::AddSaturating | Self::SubSaturating => true,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn is_shift(&self) -> bool {
+        matches!(
+            self,
+            Self::Shl | Self::ShlUnchecked | Self::Shr | Self::ShrUnchecked
+        )
+    }
+}
+
+super_enum! {
+    #[repr(u8)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub(crate) enum UnaryOp from super::UnaryOp {
+        Not,
+        Neg,
+        PtrMetadata,
+        BitReverse,
+        NonZeroTrailingZeros,
+        TrailingZeros,
+        CountOnes,
+        NonZeroLeadingZeros,
+        LeadingZeros,
+        ByteSwap,
+        +
+        NoOp,
+    }
+}
+
+#[repr(u8)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum TernaryOp {
+    IfThenElse = 1,
+}
+
+mod fmt {
+    use core::fmt::{Display, Formatter, Result};
+
+    use super::{BinaryOp, UnaryOp};
+
+    impl Display for BinaryOp {
+        fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            write!(f, "{}", super::super::BinaryOp::from(self))
+        }
+    }
+
+    impl Display for UnaryOp {
+        fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+            match self {
+                UnaryOp::NoOp => write!(f, ""),
+                _ => write!(f, "{}", super::super::UnaryOp::try_from(self).unwrap()),
+            }
+        }
+    }
+}
 
 macro_rules_method_with_optional_args! (bin_fn_signature {
     ($method: ident + $($arg: ident : $arg_type: ty),* $(,)?) => {
@@ -65,7 +179,7 @@ pub(crate) trait BinaryExprBuilder {
     bin_fn_signature!(shl shl_unchecked shr shr_unchecked);
     bin_fn_signature!(rotate_left rotate_right);
     bin_fn_signature!(eq ne lt le gt ge cmp);
-    bin_fn_signature!(offset);
+    bin_fn_signature!(offset + pointee_size: TypeSize);
 }
 
 pub(crate) trait UnaryExprBuilder {

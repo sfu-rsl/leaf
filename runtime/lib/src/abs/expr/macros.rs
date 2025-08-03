@@ -11,106 +11,93 @@ macro_rules! impl_general_binary_op_through_singulars {
         fn binary_op<'a>(
             &mut self,
             operands: Self::ExprRefPair<'a>,
-            op: crate::abs::BinaryOp,
+            op: $crate::abs::expr::BinaryOp,
         ) -> Self::Expr<'a> {
-            use crate::abs::BinaryOp::*;
-            let binop = match op {
-                Add => Self::add,
-                AddUnchecked => Self::add_unchecked,
-                AddWithOverflow => Self::add_with_overflow,
-                AddSaturating => Self::add_saturating,
-                Sub => Self::sub,
-                SubUnchecked => Self::sub_unchecked,
-                SubWithOverflow => Self::sub_with_overflow,
-                SubSaturating => Self::sub_saturating,
-                Mul => Self::mul,
-                MulUnchecked => Self::mul_unchecked,
-                MulWithOverflow => Self::mul_with_overflow,
-                Div => Self::div,
-                DivExact => Self::div_exact,
-                Rem => Self::rem,
-                BitXor => Self::xor,
-                BitAnd => Self::and,
-                BitOr => Self::or,
-                Shl => Self::shl,
-                ShlUnchecked => Self::shl_unchecked,
-                Shr => Self::shr,
-                ShrUnchecked => Self::shr_unchecked,
-                RotateL => Self::rotate_left,
-                RotateR => Self::rotate_right,
-                Eq => Self::eq,
-                Lt => Self::lt,
-                Le => Self::le,
-                Ne => Self::ne,
-                Ge => Self::ge,
-                Gt => Self::gt,
-                Cmp => Self::cmp,
-                Offset => Self::offset,
-            };
-            binop(self, operands)
+            use $crate::abs::expr::BinaryOp::*;
+            match op {
+                Add => self.add(operands),
+                AddUnchecked => self.add_unchecked(operands),
+                AddWithOverflow => self.add_with_overflow(operands),
+                AddSaturating => self.add_saturating(operands),
+                Sub => self.sub(operands),
+                SubUnchecked => self.sub_unchecked(operands),
+                SubWithOverflow => self.sub_with_overflow(operands),
+                SubSaturating => self.sub_saturating(operands),
+                Mul => self.mul(operands),
+                MulUnchecked => self.mul_unchecked(operands),
+                MulWithOverflow => self.mul_with_overflow(operands),
+                Div => self.div(operands),
+                DivExact => self.div_exact(operands),
+                Rem => self.rem(operands),
+                BitXor => self.xor(operands),
+                BitAnd => self.and(operands),
+                BitOr => self.or(operands),
+                Shl => self.shl(operands),
+                ShlUnchecked => self.shl_unchecked(operands),
+                Shr => self.shr(operands),
+                ShrUnchecked => self.shr_unchecked(operands),
+                RotateL => self.rotate_left(operands),
+                RotateR => self.rotate_right(operands),
+                Eq => self.eq(operands),
+                Lt => self.lt(operands),
+                Le => self.le(operands),
+                Ne => self.ne(operands),
+                Ge => self.ge(operands),
+                Gt => self.gt(operands),
+                Cmp => self.cmp(operands),
+                Offset(pointee_size) => self.offset(operands, pointee_size),
+            }
         }
     };
 }
 
 macro_rules! impl_general_binary_op_for {
-    ($($method:ident = $op:expr)*) => {
-        $(
-            #[inline(always)]
-            fn $method<'a>(
-                &mut self,
-                operands: <Self as BinaryExprBuilder>::ExprRefPair<'a>,
-            ) -> <Self as BinaryExprBuilder>::Expr<'a> {
-                self.binary_op(operands, $op)
-            }
-        )*
-    };
-    ($($method:ident = $op:expr)* , $arg: ident : $arg_type: ty) => {
-        $(
-            #[inline(always)]
-            fn $method<'a>(
-                &mut self,
-                operands: <Self as BinaryExprBuilder>::ExprRefPair<'a>,
-                $arg: $arg_type,
-            ) -> <Self as BinaryExprBuilder>::Expr<'a> {
-                self.binary_op(operands, $op, $arg)
-            }
-        )*
+    (($method:ident $(+ $($arg: ident : $arg_type: ty),*)? = $op:expr)) => {
+        #[inline(always)]
+        fn $method<'a>(
+            &mut self,
+            operands: <Self as BinaryExprBuilder>::ExprRefPair<'a>,
+            $($($arg: $arg_type,)*)?
+        ) -> <Self as BinaryExprBuilder>::Expr<'a> {
+            self.binary_op(operands, $op)
+        }
     };
 }
 macro_rules! impl_singular_binary_ops_through_general {
     () => {
-        impl_general_binary_op_for!(
-            add = abs::BinaryOp::Add
-            add_unchecked = abs::BinaryOp::AddUnchecked
-            add_with_overflow = abs::BinaryOp::AddWithOverflow
-            add_saturating = abs::BinaryOp::AddSaturating
-            sub = abs::BinaryOp::Sub
-            sub_unchecked = abs::BinaryOp::SubUnchecked
-            sub_with_overflow = abs::BinaryOp::SubWithOverflow
-            sub_saturating = abs::BinaryOp::SubSaturating
-            mul = abs::BinaryOp::Mul
-            mul_unchecked = abs::BinaryOp::MulUnchecked
-            mul_with_overflow = abs::BinaryOp::MulWithOverflow
-            div = abs::BinaryOp::Div
-            div_exact = abs::BinaryOp::DivExact
-            rem = abs::BinaryOp::Rem
-            xor = abs::BinaryOp::BitXor
-            and = abs::BinaryOp::BitAnd
-            or = abs::BinaryOp::BitOr
-            shl = abs::BinaryOp::Shl
-            shl_unchecked = abs::BinaryOp::ShlUnchecked
-            shr = abs::BinaryOp::Shr
-            shr_unchecked = abs::BinaryOp::ShrUnchecked
-            rotate_left = abs::BinaryOp::RotateL
-            rotate_right = abs::BinaryOp::RotateR
-            eq = abs::BinaryOp::Eq
-            lt = abs::BinaryOp::Lt
-            le = abs::BinaryOp::Le
-            ne = abs::BinaryOp::Ne
-            ge = abs::BinaryOp::Ge
-            gt = abs::BinaryOp::Gt
-            cmp = abs::BinaryOp::Cmp
-            offset = abs::BinaryOp::Offset
+        repeat_macro_for!(
+            impl_general_binary_op_for;
+            (add = $crate::abs::expr::BinaryOp::Add)
+            (add_unchecked = $crate::abs::expr::BinaryOp::AddUnchecked)
+            (add_with_overflow = $crate::abs::expr::BinaryOp::AddWithOverflow)
+            (add_saturating = $crate::abs::expr::BinaryOp::AddSaturating)
+            (sub = $crate::abs::expr::BinaryOp::Sub)
+            (sub_unchecked = $crate::abs::expr::BinaryOp::SubUnchecked)
+            (sub_with_overflow = $crate::abs::expr::BinaryOp::SubWithOverflow)
+            (sub_saturating = $crate::abs::expr::BinaryOp::SubSaturating)
+            (mul = $crate::abs::expr::BinaryOp::Mul)
+            (mul_unchecked = $crate::abs::expr::BinaryOp::MulUnchecked)
+            (mul_with_overflow = $crate::abs::expr::BinaryOp::MulWithOverflow)
+            (div = $crate::abs::expr::BinaryOp::Div)
+            (div_exact = $crate::abs::expr::BinaryOp::DivExact)
+            (rem = $crate::abs::expr::BinaryOp::Rem)
+            (xor = $crate::abs::expr::BinaryOp::BitXor)
+            (and = $crate::abs::expr::BinaryOp::BitAnd)
+            (or = $crate::abs::expr::BinaryOp::BitOr)
+            (shl = $crate::abs::expr::BinaryOp::Shl)
+            (shl_unchecked = $crate::abs::expr::BinaryOp::ShlUnchecked)
+            (shr = $crate::abs::expr::BinaryOp::Shr)
+            (shr_unchecked = $crate::abs::expr::BinaryOp::ShrUnchecked)
+            (rotate_left = $crate::abs::expr::BinaryOp::RotateL)
+            (rotate_right = $crate::abs::expr::BinaryOp::RotateR)
+            (eq = $crate::abs::expr::BinaryOp::Eq)
+            (lt = $crate::abs::expr::BinaryOp::Lt)
+            (le = $crate::abs::expr::BinaryOp::Le)
+            (ne = $crate::abs::expr::BinaryOp::Ne)
+            (ge = $crate::abs::expr::BinaryOp::Ge)
+            (gt = $crate::abs::expr::BinaryOp::Gt)
+            (cmp = $crate::abs::expr::BinaryOp::Cmp)
+            (offset + pointee_size: TypeSize = $crate::abs::expr::BinaryOp::Offset(pointee_size))
         );
     };
 }
@@ -121,9 +108,9 @@ macro_rules! impl_general_unary_op_through_singulars {
         fn unary_op<'a>(
             &mut self,
             operand: Self::ExprRef<'a>,
-            op: crate::abs::UnaryOp,
+            op: $crate::abs::expr::UnaryOp,
         ) -> Self::Expr<'a> {
-            use crate::abs::UnaryOp::*;
+            use $crate::abs::expr::UnaryOp::*;
             match op {
                 NoOp => self.no_op(operand),
                 Not => self.not(operand),
@@ -157,25 +144,25 @@ macro_rules! impl_singular_unary_ops_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_unary_op_through_general;
-            (no_op = crate::abs::UnaryOp::NoOp)
-            (not = crate::abs::UnaryOp::Not)
-            (neg = crate::abs::UnaryOp::Neg)
-            (ptr_metadata = crate::abs::UnaryOp::PtrMetadata)
-            (bit_reverse = crate::abs::UnaryOp::BitReverse)
+            (no_op = $crate::abs::expr::UnaryOp::NoOp)
+            (not = $crate::abs::expr::UnaryOp::Not)
+            (neg = $crate::abs::expr::UnaryOp::Neg)
+            (ptr_metadata = $crate::abs::expr::UnaryOp::PtrMetadata)
+            (bit_reverse = $crate::abs::expr::UnaryOp::BitReverse)
             (trailing_zeros + non_zero: bool =
                 if non_zero {
-                    crate::abs::UnaryOp::NonZeroTrailingZeros
+                    $crate::abs::expr::UnaryOp::NonZeroTrailingZeros
                 } else {
-                    crate::abs::UnaryOp::TrailingZeros
+                    $crate::abs::expr::UnaryOp::TrailingZeros
                 })
-            (count_ones = crate::abs::UnaryOp::CountOnes)
+            (count_ones = $crate::abs::expr::UnaryOp::CountOnes)
             (leading_zeros + non_zero: bool =
                 if non_zero {
-                    crate::abs::UnaryOp::NonZeroLeadingZeros
+                    $crate::abs::expr::UnaryOp::NonZeroLeadingZeros
                 } else {
-                    crate::abs::UnaryOp::LeadingZeros
+                    $crate::abs::expr::UnaryOp::LeadingZeros
                 })
-            (byte_swap = crate::abs::UnaryOp::ByteSwap)
+            (byte_swap = $crate::abs::expr::UnaryOp::ByteSwap)
         );
     };
 }
@@ -186,9 +173,9 @@ macro_rules! impl_general_ternary_op_through_singulars {
         fn ternary_op<'a>(
             &mut self,
             operands: Self::ExprRefTriple<'a>,
-            op: crate::abs::TernaryOp,
+            op: $crate::abs::expr::TernaryOp,
         ) -> Self::Expr<'a> {
-            use crate::abs::TernaryOp::*;
+            use $crate::abs::expr::TernaryOp::*;
             match op {
                 IfThenElse => self.if_then_else(operands),
             }
@@ -212,7 +199,7 @@ macro_rules! impl_singular_ternary_ops_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_ternary_op_through_general;
-            (if_then_else = crate::abs::TernaryOp::IfThenElse)
+            (if_then_else = $crate::abs::expr::TernaryOp::IfThenElse)
         );
     };
 }
@@ -223,7 +210,7 @@ macro_rules! impl_general_cast_through_singulars {
         fn cast<'a>(
             &mut self,
             operand: Self::ExprRef<'a>,
-            target: crate::abs::CastKind<
+            target: $crate::abs::CastKind<
                 Self::IntType,
                 Self::FloatType,
                 Self::PtrType,
@@ -231,7 +218,7 @@ macro_rules! impl_general_cast_through_singulars {
             >,
             metadata: Self::Metadata<'a>,
         ) -> Self::Expr<'a> {
-            use crate::abs::CastKind::*;
+            use $crate::abs::CastKind::*;
             match target {
                 ToChar => self.to_char(operand, metadata),
                 ToInt(ty) => self.to_int(operand, ty, metadata),
@@ -263,14 +250,14 @@ macro_rules! impl_singular_casts_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_cast_through_general;
-            (to_char = crate::abs::CastKind::ToChar)
-            (to_int + ty: Self::IntType = crate::abs::CastKind::ToInt(ty))
-            (to_float + ty: Self::FloatType = crate::abs::CastKind::ToFloat(ty))
-            (to_ptr + ty: Self::PtrType = crate::abs::CastKind::ToPointer(ty))
-            (ptr_unsize = crate::abs::CastKind::PointerUnsize)
-            (expose_prov = crate::abs::CastKind::ExposeProvenance)
-            (sized_dyn = crate::abs::CastKind::SizedDynamize)
-            (transmute + ty: Self::GenericType = crate::abs::CastKind::Transmute(ty))
+            (to_char = $crate::abs::CastKind::ToChar)
+            (to_int + ty: Self::IntType = $crate::abs::CastKind::ToInt(ty))
+            (to_float + ty: Self::FloatType = $crate::abs::CastKind::ToFloat(ty))
+            (to_ptr + ty: Self::PtrType = $crate::abs::CastKind::ToPointer(ty))
+            (ptr_unsize = $crate::abs::CastKind::PointerUnsize)
+            (expose_prov = $crate::abs::CastKind::ExposeProvenance)
+            (sized_dyn = $crate::abs::CastKind::SizedDynamize)
+            (transmute + ty: Self::GenericType = $crate::abs::CastKind::Transmute(ty))
         );
     };
 }

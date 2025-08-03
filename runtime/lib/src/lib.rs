@@ -14,6 +14,7 @@
 #![feature(try_trait_v2)]
 #![feature(cold_path)]
 #![feature(slice_as_array)]
+#![feature(more_qualified_paths)]
 
 pub mod abs;
 mod backends;

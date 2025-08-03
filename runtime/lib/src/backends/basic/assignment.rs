@@ -4,7 +4,7 @@ use common::type_info::TagEncodingInfo;
 
 use crate::{
     abs::{
-        AssignmentId, BinaryOp, CastKind, FieldIndex, InstanceKindId, IntType, UnaryOp,
+        self, AssignmentId, BinaryOp, CastKind, FieldIndex, InstanceKindId, IntType, UnaryOp,
         VariantIndex,
         backend::AssignmentHandler,
         expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
@@ -161,6 +161,9 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
         first: Self::Operand,
         second: Self::Operand,
     ) {
+        let operator =
+            self.to_expr_builder_binary_op(operator, first.is_symbolic() || second.is_symbolic());
+
         let second = if operator.is_shift() && second.is_symbolic() {
             self.expr_builder().to_int(
                 second,
@@ -178,7 +181,7 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
     }
 
     fn unary_op_on(mut self, operator: UnaryOp, operand: Self::Operand) {
-        let result_value = self.expr_builder().unary_op(operand, operator);
+        let result_value = self.expr_builder().unary_op(operand, operator.into());
         self.set(result_value)
     }
 
@@ -472,6 +475,24 @@ impl<'s, EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, '_, EB> {
 
         self.expr_builder()
             .transmute(data_ptr, field_ty, LazyTypeInfo::from(field_ty))
+    }
+
+    fn to_expr_builder_binary_op(
+        &self,
+        operator: BinaryOp,
+        has_symbolic: bool,
+    ) -> abs::expr::BinaryOp {
+        match crate::abs::expr::BinaryOp::try_from(operator) {
+            Ok(operator) => operator,
+            Err(offset) => offset.with_size(if has_symbolic {
+                self.type_manager()
+                    .get_pointee_size(&self.dest.type_info().id().unwrap())
+                    .unwrap()
+            } else {
+                // Avoid type lookup if we are not going to be building expressions.
+                common::type_info::TypeInfo::SIZE_UNSIZED
+            }),
+        }
     }
 }
 

@@ -158,6 +158,7 @@ impl Expr {
                 bin_expr: BinaryExpr { operator, .. },
                 is_overflow,
             } => write!(f, "{}{operator}?", if *is_overflow { "O" } else { "U" }),
+            Expr::Offset { .. } => write!(f, "{}", crate::abs::BinaryOp::Offset),
             Expr::Extension(..) => write!(f, "Ext"),
             Expr::Truncation(..) => write!(f, "Trunc"),
             Expr::Ite { .. } => write!(f, "Ite"),
@@ -178,7 +179,8 @@ impl Expr {
             | Expr::BinaryBoundCheck {
                 bin_expr: BinaryExpr { operands, .. },
                 is_overflow: _,
-            } => {
+            }
+            | Expr::Offset { operands, .. } => {
                 write!(f, "{}, {}", operands.first(), operands.second())
             }
             Expr::Extension(ExtensionExpr {
@@ -221,15 +223,13 @@ impl Display for SliceIndex<SymValueRef> {
 
 impl Display for super::UnaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let op: abs::UnaryOp = (*self).into();
-        op.fmt(f)
+        abs::expr::UnaryOp::from(self).fmt(f)
     }
 }
 
 impl Display for super::BinaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        let op: abs::BinaryOp = (*self).into();
-        op.fmt(f)
+        abs::expr::BinaryOp::from(self).fmt(f)
     }
 }
 

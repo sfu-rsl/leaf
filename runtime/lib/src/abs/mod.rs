@@ -54,48 +54,9 @@ pub enum BinaryOp {
     Offset = common::pri::BinaryOp::OFFSET.as_u8(),
 }
 
-impl BinaryOp {
-    #[inline]
-    pub(crate) fn is_unchecked(&self) -> bool {
-        match self {
-            Self::AddUnchecked
-            | Self::SubUnchecked
-            | Self::MulUnchecked
-            | Self::ShlUnchecked
-            | Self::ShrUnchecked
-            | Self::DivExact => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn is_with_overflow(&self) -> bool {
-        match self {
-            Self::AddWithOverflow | Self::SubWithOverflow | Self::MulWithOverflow => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn is_saturating(&self) -> bool {
-        match self {
-            Self::AddSaturating | Self::SubSaturating => true,
-            _ => false,
-        }
-    }
-
-    pub(crate) fn is_shift(&self) -> bool {
-        matches!(
-            self,
-            Self::Shl | Self::ShlUnchecked | Self::Shr | Self::ShrUnchecked
-        )
-    }
-}
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum UnaryOp {
-    NoOp,
     Not = common::pri::UnaryOp::NOT.as_u8(),
     Neg = common::pri::UnaryOp::NEG.as_u8(),
     PtrMetadata = common::pri::UnaryOp::PTR_METADATA.as_u8(),
@@ -106,12 +67,6 @@ pub enum UnaryOp {
     NonZeroLeadingZeros = common::pri::UnaryOp::CTLZ_NONZERO.as_u8(),
     LeadingZeros = common::pri::UnaryOp::CTLZ.as_u8(),
     ByteSwap = common::pri::UnaryOp::BSWAP.as_u8(),
-}
-
-#[derive(Clone, Copy, Debug)]
-#[repr(u8)]
-pub enum TernaryOp {
-    IfThenElse = 1,
 }
 
 #[derive(Clone, Copy, Debug)]

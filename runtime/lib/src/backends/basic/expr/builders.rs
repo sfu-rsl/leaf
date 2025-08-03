@@ -4,10 +4,11 @@ use super::super::alias::{
 };
 use super::{BinaryOp as BasicBinaryOp, UnaryOp as BasicUnaryOp, *};
 use crate::abs::{
-    BinaryOp as AbsBinaryOp, CastKind, TernaryOp as AbsTernaryOp, UnaryOp as AbsUnaryOp,
+    CastKind,
     expr::{
-        BinaryExprBuilder, CastExprBuilder, ChainedExprBuilder, CompositeExprBuilder,
-        LoggerExprBuilder, TernaryExprBuilder, UnaryExprBuilder, macros::*,
+        BinaryExprBuilder, BinaryOp as AbsBinaryOp, CastExprBuilder, ChainedExprBuilder,
+        CompositeExprBuilder, LoggerExprBuilder, TernaryExprBuilder, TernaryOp as AbsTernaryOp,
+        UnaryExprBuilder, UnaryOp as AbsUnaryOp, macros::*,
     },
 };
 use crate::backends::basic::alias::ImpliedValueRefUnaryExprBuilder;
@@ -30,7 +31,9 @@ pub(crate) fn new_expr_builder(type_manager: Rc<dyn TypeDatabase>) -> DefaultExp
     DefaultExprBuilder::new(type_manager)
 }
 
-pub(crate) fn to_sym_expr_builder(expr_builder: RRef<DefaultExprBuilder>) -> DefaultSymExprBuilder {
+pub(crate) fn to_sym_expr_builder<T: ValueRefExprBuilder>(
+    expr_builder: RRef<T>,
+) -> adapters::SymValueRefExprBuilderAdapter<T> {
     adapters::SymValueRefExprBuilderAdapter(expr_builder)
 }
 
@@ -955,6 +958,12 @@ mod core {
                     _ => unreachable!(),
                 };
                 self.saturating_op(operands, wrapping_op).into()
+            } else if let AbsBinaryOp::Offset(pointee_size) = op {
+                Expr::Offset {
+                    operands,
+                    pointee_size,
+                }
+                .into()
             } else {
                 Expr::Binary(BinaryExpr {
                     operator: op.try_into().unwrap(),
@@ -1743,8 +1752,17 @@ mod simp {
             Err(operands)
         }
 
-        fn offset<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
-            Err(operands)
+        fn offset<'a>(
+            &mut self,
+            operands: Self::ExprRefPair<'a>,
+            _pointee_size: TypeSize,
+        ) -> Self::Expr<'a> {
+            // x + 0 = x
+            if operands.is_second_zero() {
+                Ok(operands.other_into())
+            } else {
+                Err(operands)
+            }
         }
     }
 
@@ -2169,7 +2187,12 @@ mod simp {
             Err(operands)
         }
 
-        fn offset<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
+        fn offset<'a>(
+            &mut self,
+            operands: Self::ExprRefPair<'a>,
+            _pointee_size: TypeSize,
+        ) -> Self::Expr<'a> {
+            // FIXME: Structural limitation to fold offsets.
             Err(operands)
         }
     }

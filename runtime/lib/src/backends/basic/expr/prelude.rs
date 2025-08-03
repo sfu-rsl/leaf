@@ -1,9 +1,8 @@
 pub(crate) use super::{
-    AdtField, AdtKind, AdtValue, ArrayValue, BinaryExpr, BinaryOp, ConcatExpr, ConcreteValue,
+    AdtField, AdtKind, AdtValue, ArrayValue, BinaryExpr, ConcatExpr, ConcreteValue,
     ConcreteValueRef, ConstValue, Expr, ExtensionExpr, FatPtrValue, LazyTypeInfo, MultiValue,
     MultiValueLeaf, MultiValueTree, PorterValue, RawAddress, RawConcreteValue, SymValue,
-    SymValueRef, SymbolicVar, TruncationExpr, TypeId, UnaryOp, UnevalValue, Value, ValueRef,
-    ValueType,
+    SymValueRef, SymbolicVar, TruncationExpr, TypeId, UnevalValue, Value, ValueRef, ValueType,
     place::{
         DeterPlaceValueRef, DeterministicPlaceValue, PlaceValue, PlaceValueRef, SymPlaceValueRef,
         SymbolicPlaceValue,
