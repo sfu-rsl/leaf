@@ -217,9 +217,7 @@ mod handlers {
     use crate::abs::{PlaceUsage, backend::PlaceHandler};
 
     use super::*;
-    use backend::{
-        BasicBackend, BasicPlaceInfo, BasicValue, CallStackInfo, TypeDatabase, VariablesState,
-    };
+    use backend::{BasicBackend, BasicPlaceInfo, CallStackInfo, TypeDatabase, VariablesState};
 
     pub(crate) struct BasicPlaceHandler<'a> {
         vars_state: &'a mut dyn VariablesState,
@@ -241,7 +239,6 @@ mod handlers {
         type PlaceInfo<'a> = BasicPlaceInfo;
         type Place = PlaceValueRef;
         type DiscriminablePlace = DiscriminantPossiblePlace;
-        type Operand = BasicValue;
 
         fn from_info<'a>(self, info: Self::PlaceInfo<'a>) -> Self::Place {
             self.vars_state.ref_place(&info, self.usage)
@@ -278,12 +275,6 @@ mod handlers {
             place.add_projection(Projection::Field(0));
             place.push_metadata(metadata);
             DiscriminantPossiblePlace::TagPlaceWithInfo(self.from_info(place), tag_encoding)
-        }
-
-        fn from_ptr(self, ptr: Self::Operand, ptr_type_id: TypeId) -> Self::Place {
-            // FIXME: Add support for implicit flow
-            self.vars_state
-                .ref_place_by_ptr(ptr, ptr_type_id, self.usage)
         }
     }
 
