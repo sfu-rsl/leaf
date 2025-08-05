@@ -299,6 +299,18 @@ mod symbolic {
                 _ => (),
             }
         }
+
+        fn expect_and_transmute_partial(
+            mut value: SymValueRef,
+            dst_ty: LazyTypeInfo,
+        ) -> SymValueRef {
+            let SymValue::Expression(Expr::Partial(porter)) = SymValueRef::make_mut(&mut value)
+            else {
+                unreachable!()
+            };
+            porter.as_concrete.1 = dst_ty;
+            value
+        }
     }
 
     impl<EB: SymValueRefExprBuilder> BinaryExprBuilder for UnevaluatedResolver<EB> {
@@ -383,12 +395,21 @@ mod symbolic {
             if let SymValue::Expression(Expr::Partial(..)) = operand.as_ref() {
                 match target {
                     CastKind::Transmute(_dst_ty) => {
-                        let SymValue::Expression(Expr::Partial(porter)) =
-                            SymValueRef::make_mut(&mut operand)
-                        else {
-                            unreachable!()
-                        };
-                        porter.as_concrete.1 = metadata;
+                        let operand = Self::expect_and_transmute_partial(operand, metadata);
+                        return Ok(operand.into());
+                    }
+                    CastKind::ToPointer(_dst_ty)
+                        if {
+                            if let SymValue::Expression(Expr::Partial(porter)) = operand.value() {
+                                porter.as_concrete.1.get_size(self.type_manager.as_ref())
+                                    == metadata.get_size(self.type_manager.as_ref())
+                            } else {
+                                false
+                            }
+                        } =>
+                    {
+                        // This is also a transmutation.
+                        let operand = Self::expect_and_transmute_partial(operand, metadata);
                         return Ok(operand.into());
                     }
                     _ if ValueType::try_from(&metadata).is_ok() => {
@@ -1309,7 +1330,14 @@ mod core {
                 self.trans(peeled, dst_ty)
             } else {
                 Expr::Transmutation {
-                    source: peeled,
+                    source: {
+                        debug_assert!(
+                            !matches!(peeled.value(), SymValue::Expression(Expr::Partial(_))),
+                            "Porter value is not resolved yet: {:?}",
+                            peeled,
+                        );
+                        peeled
+                    },
                     dst_ty,
                 }
                 .to_value_ref()
@@ -1549,7 +1577,7 @@ mod simp {
         }
 
         fn mul_with_overflow<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
-            self.mul(operands)
+            Err(operands)
         }
 
         fn div<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
