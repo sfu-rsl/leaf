@@ -701,6 +701,7 @@ mod intrinsics {
                 volatile_store,
                 unaligned_volatile_load,
                 unaligned_volatile_store,
+                nontemporal_store,
                 copy,
                 copy_nonoverlapping,
                 volatile_copy_nonoverlapping_memory,
@@ -722,7 +723,6 @@ mod intrinsics {
                 ptr_mask,
                 ptr_offset_from_unsigned,
                 ptr_offset_from,
-                nontemporal_store,
                 compare_bytes,
                 catch_unwind,
                 abort,
@@ -871,6 +871,12 @@ mod intrinsics {
                     is_ptr_aligned: false,
                 },
                 true,
+            ),
+            rsym::nontemporal_store => (
+                MemoryIntrinsicKind::Store {
+                    is_ptr_aligned: true,
+                },
+                false,
             ),
             rsym::copy => (
                 MemoryIntrinsicKind::Copy {

@@ -20,5 +20,5 @@ fn main() {
         };
     }
 
-    call_all_and_test!(volatile_store, unaligned_volatile_store,);
+    call_all_and_test!(volatile_store, unaligned_volatile_store, nontemporal_store,);
 }
