@@ -296,6 +296,7 @@ pub mod macros {
           { fn intrinsic_assign_ctlz(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           // ----- Atomic -----
+          // All atomic operations have an ordering, majority get applied on a pointer.
            #[allow(unused_parens)]
           { fn intrinsic_atomic_binary_op(
               ordering: ($atomic_ord_ty),
@@ -346,8 +347,27 @@ pub mod macros {
                 is_volatile: bool,
                 is_overlapping: bool,
           ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_memory_set(
+                id: AssignmentId,
+                ptr: OperandRef,
+                conc_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                val: OperandRef,
+                count: OperandRef,
+                conc_count: usize,
+                is_volatile: bool,
+          ) }
+          #[allow(unused_parens)]
+          { fn intrinsic_memory_swap(
+                id: AssignmentId,
+                first_ptr: OperandRef,
+                conc_first_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                second_ptr: OperandRef,
+                conc_second_ptr: RawAddress,
+          ) }
           // ----- Atomic (Memory) -----
-          // All atomic operations have an ordering, majority get applied on a pointer.
           #[allow(unused_parens)]
           { fn intrinsic_atomic_load(
               ordering: ($atomic_ord_ty),
@@ -500,7 +520,8 @@ pub mod macros {
         }
     }
 }
-    // NOTE: Because of a bug in the compiler, we need to perform the expansion manually.
+    // NOTE: Because of a bug in the compiler (or by its design), we need to perform the expansion manually.
+    // Use the rust analyzer's command on the following line and then copy-paste the result.
     // pass_func_decls_to!(make_list_func_decls_macro);
     // Recursive expansion of pass_func_decls_to! macro
     // =================================================
@@ -718,6 +739,10 @@ pub mod macros {
                 #[allow(unused_parens)]fn intrinsic_memory_store(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_memory_copy(id:AssignmentId,src_ptr:OperandRef,conc_src_ptr:RawAddress,ptr_type_id:($type_id_ty),dst_ptr:OperandRef,conc_dst_ptr:RawAddress,count:OperandRef,conc_count:usize,is_volatile:bool,is_overlapping:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_memory_set(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,count:OperandRef,conc_count:usize,is_volatile:bool,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_memory_swap(id:AssignmentId,first_ptr:OperandRef,conc_first_ptr:RawAddress,ptr_type_id:($type_id_ty),second_ptr:OperandRef,conc_second_ptr:RawAddress,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_load(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),dest:PlaceRef,);
             }$modifier!{

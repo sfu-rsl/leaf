@@ -214,6 +214,10 @@ pub(crate) trait MemoryIntrinsicHandler<'tcx> {
         count_value: &Operand<'tcx>,
         is_overlapping: bool,
     );
+
+    fn set(&mut self, val: OperandRef, count_ref: OperandRef, count_value: &Operand<'tcx>);
+
+    fn swap(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>);
 }
 
 pub(crate) trait AtomicIntrinsicHandler<'tcx> {
@@ -2143,6 +2147,40 @@ mod implementation {
                     count_value.to_copy(),
                     operand::const_from_bool(self.tcx(), self.context.is_volatile()),
                     operand::const_from_bool(self.tcx(), is_overlapping),
+                ],
+                stmts,
+                Default::default(),
+            )
+        }
+
+        fn set(&mut self, val: OperandRef, count_ref: OperandRef, count_value: &Operand<'tcx>) {
+            self.add_bb_for_memory_op_intrinsic_call(
+                sym::intrinsics::memory::intrinsic_memory_set,
+                vec![
+                    operand::move_for_local(val.into()),
+                    operand::move_for_local(count_ref.into()),
+                    count_value.to_copy(),
+                    operand::const_from_bool(self.tcx(), self.context.is_volatile()),
+                ],
+                Default::default(),
+                Default::default(),
+            )
+        }
+
+        fn swap(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>) {
+            let mut stmts = Vec::new();
+
+            let conc_second_ptr_local = {
+                let (stmt, id_local) = self.make_conc_ptr_assignment(second_value.clone());
+                stmts.push(stmt);
+                id_local
+            };
+
+            self.add_bb_for_memory_op_intrinsic_call(
+                sym::intrinsics::memory::intrinsic_memory_swap,
+                vec![
+                    operand::move_for_local(second_ref.into()),
+                    operand::move_for_local(conc_second_ptr_local),
                 ],
                 stmts,
                 Default::default(),

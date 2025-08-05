@@ -783,6 +783,45 @@ impl ProgramRuntimeInterface for BasicPri {
         })
     }
 
+    #[allow(unused_parens)]
+    fn intrinsic_memory_set(
+        id: AssignmentId,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        val: OperandRef,
+        count: OperandRef,
+        conc_count: usize,
+        _is_volatile: bool,
+    ) {
+        let ptr = take_back_operand(ptr);
+        let val = take_back_operand(val);
+        let count = take_back_operand(count);
+        raw_memory(|h| h.set(id, ptr, conc_ptr, val, count, conc_count, ptr_type_id));
+    }
+
+    fn intrinsic_memory_swap(
+        id: AssignmentId,
+        first_ptr: OperandRef,
+        conc_first_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        second_ptr: OperandRef,
+        conc_second_ptr: RawAddress,
+    ) {
+        let first_ptr = take_back_operand(first_ptr);
+        let second_ptr = take_back_operand(second_ptr);
+        raw_memory(|h| {
+            h.swap(
+                id,
+                first_ptr,
+                conc_first_ptr,
+                second_ptr,
+                conc_second_ptr,
+                ptr_type_id,
+            )
+        });
+    }
+
     fn intrinsic_atomic_load(
         _ordering: Self::AtomicOrdering,
         id: AssignmentId,

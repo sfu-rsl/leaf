@@ -280,6 +280,8 @@ mod intrinsics {
         Load { is_ptr_aligned: bool },
         Store { is_ptr_aligned: bool },
         Copy { is_overlapping: bool },
+        Set,
+        Swap,
     }
 
     macro_rules! of_mir_translated_funcs {
@@ -703,6 +705,9 @@ mod intrinsics {
                 copy_nonoverlapping,
                 volatile_copy_nonoverlapping_memory,
                 volatile_copy_memory,
+                write_bytes,
+                volatile_set_memory,
+                typed_swap_nonoverlapping,
             )
         };
     }
@@ -712,8 +717,6 @@ mod intrinsics {
             $macro!(
                 vtable_size,
                 vtable_align,
-                volatile_set_memory,
-                typed_swap_nonoverlapping,
                 select_unpredictable,
                 raw_eq,
                 ptr_mask,
@@ -724,7 +727,6 @@ mod intrinsics {
                 catch_unwind,
                 abort,
                 drop_in_place,
-                write_bytes,
                 size_of_val,
                 is_val_statically_known,
                 arith_offset,
@@ -894,6 +896,9 @@ mod intrinsics {
                 },
                 true,
             ),
+            rsym::write_bytes => (MemoryIntrinsicKind::Set, false),
+            rsym::volatile_set_memory => (MemoryIntrinsicKind::Set, true),
+            rsym::typed_swap_nonoverlapping => (MemoryIntrinsicKind::Swap, false),
             _ => unreachable!(),
         };
         IntrinsicDecision::Memory { kind, is_volatile }

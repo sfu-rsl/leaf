@@ -1175,6 +1175,16 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
                 is_overlapping,
             )
         }
+        Set => {
+            let val_ref = call_adder.reference_operand_spanned(&args[1]);
+            let count_ref = call_adder.reference_operand_spanned(&args[2]);
+            call_adder.set(val_ref, count_ref, &args[2].node);
+        }
+        Swap => {
+            let second = &args[1];
+            let second_ref = call_adder.reference_operand_spanned(&second);
+            call_adder.swap(second_ref, &second.node);
+        }
     }
 }
 

@@ -130,17 +130,12 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             .type_manager
             .get_type(&ptr_type_id)
             .pointee_ty
-            .unwrap()
-            .into();
-        match ptr_val.as_ref() {
-            Value::Concrete(ConcreteValue::Const(ConstValue::Addr(addr))) => {
-                DeterministicPlaceValue::from_addr_type(*addr, pointee_ty).to_value_ref()
-            }
-            Value::Symbolic(..) => {
-                Self::deref_sym_val(SymValueRef::new(ptr_val), ptr_type_id, || pointee_ty.into())
-                    .into()
-            }
-            _ => panic!("Unexpected value for dereference: {:?}", ptr_val),
+            .unwrap();
+
+        if ptr_val.is_symbolic() {
+            Self::deref_sym_val(SymValueRef::new(ptr_val), ptr_type_id, || pointee_ty.into()).into()
+        } else {
+            DeterministicPlaceValue::from_addr_type(conc_ptr, pointee_ty).to_value_ref()
         }
     }
 

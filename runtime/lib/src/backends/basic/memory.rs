@@ -1,22 +1,21 @@
-use core::num::NonZero;
-
 use std::borrow::Cow;
 
-use common::{log_info, log_warn};
+use common::log_warn;
 
-use crate::abs::backend::{AssignmentHandler, RuntimeBackend};
-use crate::abs::expr::BinaryExprBuilder;
 use crate::abs::{
-    AssignmentId, PlaceUsage, RawAddress, TypeId, TypeSize, backend::RawMemoryHandler,
+    AssignmentId, PlaceUsage, RawAddress, TypeId, TypeSize,
+    backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
+    expr::BinaryExprBuilder,
 };
 
-use crate::backends::basic::assignment::AssignmentServices;
-use crate::backends::basic::{self as backend, BasicExprBuilder};
+use crate::backends::basic::{self as backend};
 use backend::{
-    BasicBackend, BasicPlaceValue, BasicSymPlaceHandler, BasicValue, BasicValueExprBuilder,
-    TypeDatabase, assignment,
+    BasicBackend, BasicExprBuilder, BasicPlaceValue, BasicSymPlaceHandler, BasicValue,
+    BasicValueExprBuilder, TypeDatabase,
+    assignment::{self, AssignmentServices},
     expr::prelude::{
-        ConcreteValue, ConcreteValueRef, ConstValue, SymValueRef, UnevalValue, Value, ValueRef,
+        ConcatExpr, ConcreteValue, ConcreteValueRef, ConstValue, SymValueRef, UnevalValue, Value,
+        ValueRef,
     },
     implication::{Implied, Precondition, PreconditionConstruct},
     state::SymPlaceSymEntity,
@@ -58,6 +57,13 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
         self.place_from_ptr_inner(ptr, conc_ptr, ptr_type_id, usage)
     }
 
+    /* NOTE: These are naive implementations.
+     * Currently, we prefer code reuse and simplicity over performance.
+     * This operation can be optimized in various phases, including but not
+     * limited to the reads, writes, symbolic place handling, etc.
+     * Until a considerable performance issue is observed, we will keep it simple.
+     */
+
     fn copy(
         mut self,
         assignment_id: AssignmentId,
@@ -72,18 +78,9 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
         self.check_count(&count, conc_count);
         let count = count.map_value(|_| conc_count);
 
-        /* NOTE: This is a naive implementation.
-         * Currently, we prefer code reuse and simplicity over performance.
-         * This operation can be optimized in various phases, including but not
-         * limited to the reads, writes, and the antecedents.
-         * Until a considerable performance issue is observed, we will keep it simple.
-         */
+        let size = self.pointee_size(ptr_type_id);
 
         // Read everything first, so that overlapping writes do not cause issues.
-
-        let size =
-            NonZero::new(self.type_manager().get_pointee_size(&ptr_type_id).unwrap()).unwrap();
-
         let values = self
             .ptr_at_offsets(&src_ptr, conc_src_ptr, count.clone(), size)
             .map(|(src_at_i, conc_src_at_i)| {
@@ -116,7 +113,7 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
     }
 
     fn set(
-        self,
+        mut self,
         assignment_id: AssignmentId,
         ptr: Self::Operand,
         conc_ptr: RawAddress,
@@ -125,11 +122,55 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
         conc_count: usize,
         ptr_type_id: TypeId,
     ) {
-        todo!()
+        self.check_count(&count, conc_count);
+        let count = count.map_value(|_| conc_count);
+
+        /* Note: This one of two possible ways to handle the `set` operation.
+         * 1. Cast the pointer to *mut u8 and write the value.
+         * 2. Make an array-like value with `value` repeated as size of the pointee.
+         * We are choosing the second as currently, we have all pieces available for the implementation.
+         */
+
+        let pointee_ty = self
+            .type_manager()
+            .get_type(&ptr_type_id)
+            .pointee_ty
+            .unwrap();
+
+        let size = self.type_manager().get_size(&pointee_ty).unwrap();
+
+        let value = if value.is_symbolic() {
+            value.map_value(|v| match size {
+                0 => UnevalValue::Some.to_value_ref(),
+                1 => v,
+                1.. => ConcatExpr::new(
+                    core::iter::repeat_n(v, size as usize).collect(),
+                    pointee_ty.into(),
+                )
+                .to_value_ref()
+                .into(),
+            })
+        } else {
+            value.map_value(|_| UnevalValue::Some.to_value_ref())
+        };
+
+        // Write
+        for (dst_at_i, conc_dst_at_i) in self.ptr_at_offsets(&ptr, conc_ptr, count, size) {
+            let place_at_i =
+                self.place_from_ptr_inner(dst_at_i, conc_dst_at_i, ptr_type_id, PlaceUsage::Write);
+            {
+                AssignmentHandlerImpl::with_services(
+                    assignment_id,
+                    place_at_i,
+                    (&mut self.services).into(),
+                )
+                .use_of(value.clone())
+            };
+        }
     }
 
     fn swap(
-        self,
+        mut self,
         assignment_id: AssignmentId,
         first_ptr: Self::Operand,
         conc_first_ptr: RawAddress,
@@ -137,7 +178,40 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
         conc_second_ptr: RawAddress,
         ptr_type_id: TypeId,
     ) {
-        todo!()
+        macro_rules! place_from_first {
+            ($usage:expr) => {
+                self.place_from_ptr_inner(first_ptr.clone(), conc_first_ptr, ptr_type_id, $usage)
+            };
+        }
+        macro_rules! place_from_second {
+            ($usage:expr) => {
+                self.place_from_ptr_inner(second_ptr.clone(), conc_second_ptr, ptr_type_id, $usage)
+            };
+        }
+
+        let first_value = self
+            .services
+            .vars_state
+            .copy_place(&place_from_first!(PlaceUsage::Read));
+
+        let second_value = self
+            .services
+            .vars_state
+            .copy_place(&place_from_second!(PlaceUsage::Read));
+
+        macro_rules! assign {
+            ($place:expr, $value:expr) => {
+                AssignmentHandlerImpl::with_services(
+                    assignment_id,
+                    $place,
+                    (&mut self.services).into(),
+                )
+                .use_of($value);
+            };
+        }
+
+        assign!(place_from_first!(PlaceUsage::Write), second_value);
+        assign!(place_from_second!(PlaceUsage::Write), first_value);
     }
 }
 
@@ -156,6 +230,12 @@ impl<'a, EB> BasicRawMemoryHandler<'a, EB> {
 
     fn type_manager(&self) -> &'a dyn TypeDatabase {
         self.services.type_manager
+    }
+
+    fn pointee_size(&self, ptr_type_id: TypeId) -> TypeSize {
+        self.type_manager()
+            .get_pointee_size(&ptr_type_id)
+            .unwrap_or_else(|| panic!("Pointer to unsized type is not expected: {}", ptr_type_id))
     }
 
     fn check_count(&mut self, count: &BasicValue, conc_count: usize) {
@@ -180,7 +260,7 @@ impl<'a, EB: BasicValueExprBuilder + 'static> BasicRawMemoryHandler<'a, EB> {
         ptr: &BasicValue,
         conc_ptr: RawAddress,
         count: Implied<usize>,
-        size: NonZero<TypeSize>,
+        size: TypeSize,
     ) -> impl Iterator<Item = (BasicValue, RawAddress)> {
         let precondition = Precondition::merge([ptr.by.clone(), count.by.clone()]);
 
@@ -208,7 +288,7 @@ impl<'a, EB: BasicValueExprBuilder + 'static> BasicRawMemoryHandler<'a, EB> {
                     conc_ptr
                 };
 
-                let size = size.get() as usize;
+                let size = size as usize;
                 Box::new((0..count.value).map(move |i| {
                     ConstValue::Addr(ptr.wrapping_byte_add(i as usize * size)).to_value_ref()
                 }))
@@ -218,10 +298,10 @@ impl<'a, EB: BasicValueExprBuilder + 'static> BasicRawMemoryHandler<'a, EB> {
                 let expr_builder = self.services.expr_builder.clone();
                 let ptr = ptr.value.clone();
                 Box::new((0..count.value).map(move |i| {
-                    expr_builder.borrow_mut().inner().offset(
-                        (ptr.clone(), ConstValue::from(i).to_value_ref()),
-                        size.get(),
-                    )
+                    expr_builder
+                        .borrow_mut()
+                        .inner()
+                        .offset((ptr.clone(), ConstValue::from(i).to_value_ref()), size)
                 }))
             }
         };
@@ -231,6 +311,6 @@ impl<'a, EB: BasicValueExprBuilder + 'static> BasicRawMemoryHandler<'a, EB> {
                 by: precondition.clone(),
                 value: v,
             })
-            .zip((0..count.value).map(move |i| conc_ptr.wrapping_byte_add(i * size.get() as usize)))
+            .zip((0..count.value).map(move |i| conc_ptr.wrapping_byte_add(i * size as usize)))
     }
 }
