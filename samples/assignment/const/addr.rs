@@ -1,10 +1,12 @@
-unsafe extern "Rust" {
-    static X: u8;
-}
+#![feature(core_intrinsics)]
+
+use core::intrinsics;
+
+static X: u8 = 10;
+static mut Y: u8 = 20;
 
 fn main() {
-    core::hint::black_box(foo(unsafe { &X }));
+    unsafe {
+        intrinsics::copy_nonoverlapping(&raw const X, &raw mut Y, 1);
+    }
 }
-
-#[inline(never)]
-fn foo<T>(ptr: *const T) {}

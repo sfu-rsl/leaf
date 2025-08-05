@@ -1023,6 +1023,8 @@ mod implementation {
             let tcx = self.tcx();
             if ty.is_primitive() {
                 self.internal_reference_const_primitive(constant)
+            } else if ty.is_unsafe_ptr() {
+                self.internal_reference_const_ptr(constant)
             } else if cfg!(feature = "abs_concrete") {
                 self.internal_reference_const_some()
             }
@@ -1086,6 +1088,42 @@ mod implementation {
             } else {
                 unreachable!()
             }
+        }
+
+        fn internal_reference_const_ptr(
+            &mut self,
+            constant: &Box<ConstOperand<'tcx>>,
+        ) -> BlocksAndResult<'tcx> {
+            let ty = constant.ty();
+            debug_assert!(
+                ty.is_unsafe_ptr(),
+                "Expected raw pointer type, found {:?}",
+                ty
+            );
+
+            let TyKind::RawPtr(pointee_ty, _) = ty.kind() else {
+                unreachable!()
+            };
+
+            let tcx = self.tcx();
+
+            if !pointee_ty.is_sized(tcx, self.current_typing_env()) {
+                log_warn!("Unexpected constant fat pointer: {:?}", constant);
+                return self.internal_reference_const_some().into();
+            }
+
+            let raw_ptr_ty = Ty::new_imm_ptr(tcx, tcx.types.unit);
+            let local: Local = self.add_local(raw_ptr_ty);
+            let assignment = assignment::create(
+                Place::from(local),
+                rvalue::cast_ptr_to_ptr(operand::const_from_existing(constant), raw_ptr_ty),
+            );
+            let (mut block, result) = self
+                .make_bb_for_operand_ref_call(sym::ref_operand_const_addr, vec![
+                    operand::move_for_local(local),
+                ]);
+            block.statements.push(assignment);
+            (block, result).into()
         }
 
         fn internal_reference_const_some(&mut self) -> BlocksAndResult<'tcx> {
@@ -2444,7 +2482,7 @@ mod implementation {
             let local = self.add_local(raw_addr_ty);
             let assignment = assignment::create(
                 Place::from(local),
-                mir::Rvalue::Cast(CastKind::PtrToPtr, ptr_value, raw_addr_ty),
+                rvalue::cast_ptr_to_ptr(ptr_value, raw_addr_ty),
             );
 
             (assignment, local)
@@ -2855,6 +2893,13 @@ mod implementation {
                         operand,
                         Ty::new_fn_ptr(tcx, ty::fn_ptr_sig(tcx, operand_ty)),
                     )
+                }
+
+                pub fn cast_ptr_to_ptr<'tcx>(
+                    operand: Operand<'tcx>,
+                    to_ty: Ty<'tcx>,
+                ) -> Rvalue<'tcx> {
+                    Rvalue::Cast(CastKind::PtrToPtr, operand, to_ty)
                 }
 
                 pub fn array<'tcx>(ty: Ty<'tcx>, items: Vec<Operand<'tcx>>) -> Rvalue<'tcx> {
