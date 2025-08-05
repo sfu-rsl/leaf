@@ -217,9 +217,12 @@ pub trait TypeDatabase<'t> {
         self.get_type(key).size()
     }
 
+    fn get_pointee_ty(&self, key: &TypeId) -> Option<TypeId> {
+        self.get_type(key).pointee_ty
+    }
+
     fn get_pointee_size(&self, key: &TypeId) -> Option<TypeSize> {
-        self.get_type(key)
-            .pointee_ty
+        self.get_pointee_ty(key)
             .and_then(|pointee| self.get_size(&pointee))
     }
 
@@ -324,6 +327,7 @@ pub mod rw {
         use rkyv::{
             Archive,
             hash::FxHasher64,
+            option::ArchivedOption,
             rancor::{Error, OptionExt},
         };
 
@@ -371,6 +375,13 @@ pub mod rw {
             fn access(&self) -> &ArchivedTypesData {
                 unsafe { rkyv::access_unchecked(&self.raw) }
             }
+
+            fn expect_type(&self, key: &TypeId) -> &ArchivedTypeInfo {
+                self.access()
+                    .all_types
+                    .get(&key.into())
+                    .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
+            }
         }
 
         impl ArchivedTypeInfo {
@@ -403,11 +414,14 @@ pub mod rw {
             }
 
             fn get_size(&self, key: &TypeId) -> Option<TypeSize> {
-                self.access()
-                    .all_types
-                    .get(&key.into())
-                    .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
-                    .size()
+                self.expect_type(key).size()
+            }
+
+            fn get_pointee_ty(&self, key: &TypeId) -> Option<TypeId> {
+                match self.expect_type(key).pointee_ty {
+                    ArchivedOption::None => None,
+                    ArchivedOption::Some(pointee_ty) => Some(pointee_ty.into()),
+                }
             }
 
             fn core_types(&self) -> &CoreTypes<TypeId> {

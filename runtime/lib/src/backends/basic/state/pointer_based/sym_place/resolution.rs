@@ -149,8 +149,7 @@ mod implementation {
         fn resolve_deref_of_sym(&self, host: &DerefSymHostPlace) -> Select {
             let pointee_type_id = self
                 .type_manager
-                .get_type(&host.host_type_id)
-                .pointee_ty
+                .get_pointee_ty(&host.host_type_id)
                 .expect("Host type must be a pointer type.");
 
             self.deref_symbolic(host.host.as_ref(), pointee_type_id)

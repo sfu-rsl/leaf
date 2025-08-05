@@ -126,11 +126,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             );
         }
 
-        let pointee_ty = self
-            .type_manager
-            .get_type(&ptr_type_id)
-            .pointee_ty
-            .unwrap();
+        let pointee_ty = self.type_manager.get_pointee_ty(&ptr_type_id).unwrap();
 
         if ptr_val.is_symbolic() {
             Self::deref_sym_val(SymValueRef::new(ptr_val), ptr_type_id, || pointee_ty.into()).into()

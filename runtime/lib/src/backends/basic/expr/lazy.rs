@@ -841,8 +841,7 @@ mod proj {
             retriever: &dyn RawPointerRetriever,
         ) -> RawConcreteValue {
             let addr = self.address.expect_addr(type_manager, retriever);
-            let ty = type_manager.get_type(&self.ty);
-            let pointee_ty = type_manager.get_type(&ty.pointee_ty.unwrap());
+            let pointee_ty = type_manager.get_type(&type_manager.get_pointee_ty(&self.ty).unwrap());
             let value = if pointee_ty.is_slice() {
                 // Simulate an array.
                 let len = self

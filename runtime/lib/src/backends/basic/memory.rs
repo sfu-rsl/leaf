@@ -131,11 +131,7 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
          * We are choosing the second as currently, we have all pieces available for the implementation.
          */
 
-        let pointee_ty = self
-            .type_manager()
-            .get_type(&ptr_type_id)
-            .pointee_ty
-            .unwrap();
+        let pointee_ty = self.type_manager().get_pointee_ty(&ptr_type_id).unwrap();
 
         let size = self.type_manager().get_size(&pointee_ty).unwrap();
 

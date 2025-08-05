@@ -585,7 +585,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 self.to_sym_values(
                     values,
                     base_offset + *offset,
-                    self.get_type(*type_id).size().unwrap(),
+                    self.type_manager.get_size(type_id).unwrap(),
                     sym_value.clone_to(),
                     *type_id,
                 );
