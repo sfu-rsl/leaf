@@ -1367,6 +1367,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
 
 [[package]]
+name = "leafsolver"
+version = "0.2.0"
+dependencies = [
+ "clap",
+ "common",
+ "delegate",
+ "derive_more",
+ "serde",
+ "serde_json",
+ "z3",
+ "z3-sys",
+]
+
+[[package]]
 name = "libafl"
 version = "0.15.2"
 source = "git+https://github.com/sfu-rsl/LibAFL?tag=0.15.2#c68b30ae2a15c770135fbd918093ff4521334299"
