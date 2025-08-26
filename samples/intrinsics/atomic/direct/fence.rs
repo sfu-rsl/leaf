@@ -2,25 +2,27 @@
 
 use core::intrinsics::*;
 
-use leaf::annotations::Symbolizable;
-
 fn main() {
     macro_rules! call_all_and_test {
-        ($($op:expr),*$(,)?) => {
+        ($($op:ident),*$(,)?) => {
             $(
-                unsafe { $op(); }
+                call_all_and_test!(
+                    $op,
+                    {
+                        AtomicOrdering::AcqRel,
+                        AtomicOrdering::Acquire,
+                        AtomicOrdering::Release,
+                        AtomicOrdering::SeqCst,
+                    },
+                );
+            )*
+        };
+        ($op:ident, { $($ordering:expr),* $(,)? } $(,)?) => {
+            $(
+                unsafe { $op::<{ $ordering }>(); }
             )*
         };
     }
 
-    call_all_and_test!(
-        atomic_fence_acqrel,
-        atomic_fence_acquire,
-        atomic_fence_release,
-        atomic_fence_seqcst,
-        atomic_singlethreadfence_acqrel,
-        atomic_singlethreadfence_acquire,
-        atomic_singlethreadfence_release,
-        atomic_singlethreadfence_seqcst,
-    );
+    call_all_and_test!(atomic_fence, atomic_singlethreadfence,);
 }

@@ -6,13 +6,27 @@ use leaf::annotations::Symbolizable;
 
 fn main() {
     macro_rules! call_all_and_test {
-        ($($op:expr),*$(,)?) => {
+        ($($op:ident),*$(,)?) => {
+            $(
+                call_all_and_test!(
+                    $op,
+                    {
+                        AtomicOrdering::AcqRel,
+                        AtomicOrdering::Acquire,
+                        AtomicOrdering::Relaxed,
+                        AtomicOrdering::Release,
+                        AtomicOrdering::SeqCst,
+                    },
+                );
+            )*
+        };
+        ($op:ident, { $($ordering:expr),* $(,)? } $(,)?) => {
             $(
                 let mut a = 20u16.mark_symbolic();
                 let original = a;
                 let ptr = &mut a as *mut u16;
                 let val = 30u16;
-                let previous = unsafe { $op(ptr, val) };
+                let previous = unsafe { $op::<_, { $ordering }>(ptr, val) };
                 let current = unsafe { *ptr };
 
                 // Concrete condition
@@ -27,7 +41,7 @@ fn main() {
                 }
 
                 let new_val = 40u16.mark_symbolic();
-                let previous = unsafe { $op(ptr, new_val) };
+                let previous = unsafe { $op::<_, { $ordering }>(ptr, new_val) };
                 let current = unsafe { *ptr };
 
                 // Symbolic condition
@@ -45,11 +59,5 @@ fn main() {
         };
     }
 
-    call_all_and_test!(
-        atomic_xchg_acqrel,
-        atomic_xchg_acquire,
-        atomic_xchg_relaxed,
-        atomic_xchg_release,
-        atomic_xchg_seqcst,
-    );
+    call_all_and_test!(atomic_xchg);
 }

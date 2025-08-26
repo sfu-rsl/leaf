@@ -10,10 +10,9 @@ use rustc_middle::{
         MirSource, Operand, Place, Rvalue, SourceInfo, Statement, TerminatorKind, UnwindAction,
         visit::Visitor,
     },
-    ty::{IntrinsicDef, TyCtxt},
+    ty::{self as mir_ty, IntrinsicDef, Ty, TyCtxt},
 };
 use rustc_span::{Span, def_id::DefId, source_map::Spanned};
-use rustc_target::abi::{FieldIdx, VariantIdx};
 
 use std::{
     borrow::Cow,
@@ -28,27 +27,27 @@ use common::{log_debug, log_info, log_warn, pri::AssignmentId};
 use crate::{
     config::InstrumentationRules,
     mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
-    passes::{
-        StorageExt,
-        instr::call::context::{PointerPackage, PriItems},
-    },
+    passes::StorageExt,
     utils::mir::{BodyExt, TyCtxtExt},
     visit::*,
 };
 
 use super::{CompilationPass, OverrideFlags, Storage};
 
-use call::{
-    AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
-    CastAssigner, EntryFunctionHandler, FunctionHandler,
-    InsertionLocation::*,
-    IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceRef,
-    PlaceReferencer, RuntimeCallAdder, StorageMarker,
-    context::{
-        AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, BodyProvider,
-        PriItemsProvider, SourceInfoProvider, TyContextProvider,
+use self::{
+    call::{
+        AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
+        CastAssigner, EntryFunctionHandler, FunctionHandler,
+        InsertionLocation::*,
+        IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceRef,
+        PlaceReferencer, RuntimeCallAdder, StorageMarker,
+        context::{
+            AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, BodyProvider,
+            PointerPackage, PriItems, PriItemsProvider, SourceInfoProvider, TyContextProvider,
+        },
+        ctxtreqs,
     },
-    ctxtreqs,
+    decision::AtomicIntrinsicKind,
 };
 
 const TAG_INSTRUMENTATION: &str = "instrumentation";
@@ -612,17 +611,16 @@ where
         fn_span: Span,
     ) {
         let tcx = self.call_adder.tcx();
-        let opt_def_id = if let rustc_middle::ty::TyKind::FnDef(def_id, ..) =
-            func.ty(&self.call_adder, tcx).kind()
-        {
-            assert!(
-                !self.call_adder.all_pri_items().contains(def_id),
-                "Instrumenting our own instrumentation."
-            );
-            Some(*def_id)
-        } else {
-            None
-        };
+        let opt_def_id =
+            if let mir_ty::TyKind::FnDef(def_id, ..) = func.ty(&self.call_adder, tcx).kind() {
+                assert!(
+                    !self.call_adder.all_pri_items().contains(def_id),
+                    "Instrumenting our own instrumentation."
+                );
+                Some(*def_id)
+            } else {
+                None
+            };
 
         let params = CallParams {
             func,
@@ -727,8 +725,35 @@ where
                     .assign(self.assignment_id.unwrap(), dest_ref, dest_ty)
                     .intrinsic_one_to_one_by(def_id, func_name, args.into_iter());
             }
-            Atomic(ordering, kind) => {
-                self.instrument_atomic_intrinsic_call(&params, ordering, kind);
+            Atomic(kind) => {
+                // Source: rustc_codegen_llvm/builder/struct.GenericBuilder.html#method.codegen_intrinsic_call
+                let parse_ordering = |at| {
+                    params
+                        .func
+                        .const_fn_def()
+                        .unwrap()
+                        .1
+                        .const_at(at)
+                        .to_value()
+                        .valtree
+                        .unwrap_branch()[0]
+                        .unwrap_leaf()
+                        .to_atomic_ordering()
+                };
+                use AtomicIntrinsicKind::*;
+                self.instrument_atomic_intrinsic_call(
+                    &params,
+                    parse_ordering(match kind {
+                        Load | Store | Exchange | CompareExchange { .. } => 1,
+                        BinOp(..) => 2,
+                        Fence { .. } => 0,
+                    }),
+                    match kind {
+                        CompareExchange { .. } => Some(parse_ordering(2)),
+                        _ => None,
+                    },
+                    kind,
+                );
             }
             Memory { kind, is_volatile } => {
                 self.instrument_memory_intrinsic_call(
@@ -801,14 +826,24 @@ where
     fn instrument_atomic_intrinsic_call(
         &mut self,
         params: &CallParams<'_, 'tcx>,
-        ordering: common::pri::AtomicOrdering,
-        kind: decision::AtomicIntrinsicKind,
+        ordering: mir_ty::AtomicOrdering,
+        failure_ordering: Option<mir_ty::AtomicOrdering>,
+        kind: AtomicIntrinsicKind,
     ) {
         let mut call_adder = self.call_adder.before();
         let ptr_arg = params.args.get(0);
         let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
+        let convert_ordering = |ord: mir_ty::AtomicOrdering| match ordering {
+            mir_ty::AtomicOrdering::Relaxed => common::pri::AtomicOrdering::RELAXED,
+            mir_ty::AtomicOrdering::Release => common::pri::AtomicOrdering::RELEASE,
+            mir_ty::AtomicOrdering::Acquire => common::pri::AtomicOrdering::ACQUIRE,
+            mir_ty::AtomicOrdering::AcqRel => common::pri::AtomicOrdering::ACQ_REL,
+            mir_ty::AtomicOrdering::SeqCst => common::pri::AtomicOrdering::SEQ_CST,
+        };
+        let ordering = convert_ordering(ordering);
+        let failure_ordering = failure_ordering.map(convert_ordering);
         let mut call_adder = call_adder.perform_atomic_op(ordering, ptr);
-        use decision::AtomicIntrinsicKind::*;
+        use AtomicIntrinsicKind::*;
         match kind {
             Load | Store | Exchange | CompareExchange { .. } | BinOp(..) => {
                 let dest_ref = call_adder.reference_place(params.destination);
@@ -829,13 +864,10 @@ where
                         let src = call_adder.reference_operand_spanned(&params.args[1]);
                         call_adder.exchange(src)
                     }
-                    CompareExchange {
-                        fail_ordering,
-                        weak,
-                    } => {
+                    CompareExchange { weak } => {
                         let old = call_adder.reference_operand_spanned(&params.args[1]);
                         let src = call_adder.reference_operand_spanned(&params.args[2]);
-                        call_adder.compare_exchange(fail_ordering, weak, old, src)
+                        call_adder.compare_exchange(failure_ordering.unwrap(), weak, old, src)
                     }
                     _ => unreachable!(),
                 }

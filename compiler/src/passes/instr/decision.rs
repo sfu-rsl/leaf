@@ -250,7 +250,7 @@ mod intrinsics {
 
     pub(crate) enum IntrinsicDecision {
         OneToOneAssign(LeafIntrinsicSymbol),
-        Atomic(AtomicOrdering, AtomicIntrinsicKind),
+        Atomic(AtomicIntrinsicKind),
         Memory {
             kind: MemoryIntrinsicKind,
             is_volatile: bool,
@@ -268,14 +268,9 @@ mod intrinsics {
         Load,
         Store,
         Exchange,
-        CompareExchange {
-            fail_ordering: AtomicOrdering,
-            weak: bool,
-        },
+        CompareExchange { weak: bool },
         BinOp(AtomicBinaryOp),
-        Fence {
-            single_thread: bool,
-        },
+        Fence { single_thread: bool },
     }
 
     pub(crate) enum MemoryIntrinsicKind {
@@ -483,144 +478,48 @@ mod intrinsics {
 
     macro_rules! of_atomic_load_funcs {
         ($macro:ident) => {
-            $macro!(
-                atomic_load_acquire,
-                atomic_load_relaxed,
-                atomic_load_seqcst,
-                atomic_load_unordered,
-            )
+            $macro!(atomic_load,)
         };
     }
 
     macro_rules! of_atomic_store_funcs {
         ($macro:ident) => {
-            $macro!(
-                atomic_store_relaxed,
-                atomic_store_release,
-                atomic_store_seqcst,
-                atomic_store_unordered,
-            )
+            $macro!(atomic_store,)
         };
     }
 
     macro_rules! of_atomic_xchg_funcs {
         ($macro:ident) => {
-            $macro!(
-                atomic_xchg_acqrel,
-                atomic_xchg_acquire,
-                atomic_xchg_relaxed,
-                atomic_xchg_release,
-                atomic_xchg_seqcst,
-            )
+            $macro!(atomic_xchg,)
         };
     }
 
     macro_rules! of_atomic_cxchg_funcs {
         ($macro:ident) => {
-            $macro!(
-                atomic_cxchg_acqrel_acquire,
-                atomic_cxchg_acqrel_relaxed,
-                atomic_cxchg_acqrel_seqcst,
-                atomic_cxchg_acquire_acquire,
-                atomic_cxchg_acquire_relaxed,
-                atomic_cxchg_acquire_seqcst,
-                atomic_cxchg_relaxed_acquire,
-                atomic_cxchg_relaxed_relaxed,
-                atomic_cxchg_relaxed_seqcst,
-                atomic_cxchg_release_acquire,
-                atomic_cxchg_release_relaxed,
-                atomic_cxchg_release_seqcst,
-                atomic_cxchg_seqcst_acquire,
-                atomic_cxchg_seqcst_relaxed,
-                atomic_cxchg_seqcst_seqcst,
-                atomic_cxchgweak_acqrel_acquire,
-                atomic_cxchgweak_acqrel_relaxed,
-                atomic_cxchgweak_acqrel_seqcst,
-                atomic_cxchgweak_acquire_acquire,
-                atomic_cxchgweak_acquire_relaxed,
-                atomic_cxchgweak_acquire_seqcst,
-                atomic_cxchgweak_relaxed_acquire,
-                atomic_cxchgweak_relaxed_relaxed,
-                atomic_cxchgweak_relaxed_seqcst,
-                atomic_cxchgweak_release_acquire,
-                atomic_cxchgweak_release_relaxed,
-                atomic_cxchgweak_release_seqcst,
-                atomic_cxchgweak_seqcst_acquire,
-                atomic_cxchgweak_seqcst_relaxed,
-                atomic_cxchgweak_seqcst_seqcst,
-            )
+            $macro!(atomic_cxchg, atomic_cxchgweak,)
         };
     }
 
     macro_rules! of_atomic_binop_funcs {
         ($macro:ident) => {
             $macro!(
-                atomic_and_acqrel,
-                atomic_and_acquire,
-                atomic_and_relaxed,
-                atomic_and_release,
-                atomic_and_seqcst,
-                atomic_max_acqrel,
-                atomic_max_acquire,
-                atomic_max_relaxed,
-                atomic_max_release,
-                atomic_max_seqcst,
-                atomic_min_acqrel,
-                atomic_min_acquire,
-                atomic_min_relaxed,
-                atomic_min_release,
-                atomic_min_seqcst,
-                atomic_nand_acqrel,
-                atomic_nand_acquire,
-                atomic_nand_relaxed,
-                atomic_nand_release,
-                atomic_nand_seqcst,
-                atomic_or_acqrel,
-                atomic_or_acquire,
-                atomic_or_relaxed,
-                atomic_or_release,
-                atomic_or_seqcst,
-                atomic_umax_acqrel,
-                atomic_umax_acquire,
-                atomic_umax_relaxed,
-                atomic_umax_release,
-                atomic_umax_seqcst,
-                atomic_umin_acqrel,
-                atomic_umin_acquire,
-                atomic_umin_relaxed,
-                atomic_umin_release,
-                atomic_umin_seqcst,
-                atomic_xadd_acqrel,
-                atomic_xadd_acquire,
-                atomic_xadd_relaxed,
-                atomic_xadd_release,
-                atomic_xadd_seqcst,
-                atomic_xor_acqrel,
-                atomic_xor_acquire,
-                atomic_xor_relaxed,
-                atomic_xor_release,
-                atomic_xor_seqcst,
-                atomic_xsub_acqrel,
-                atomic_xsub_acquire,
-                atomic_xsub_relaxed,
-                atomic_xsub_release,
-                atomic_xsub_seqcst,
+                atomic_and,
+                atomic_max,
+                atomic_min,
+                atomic_nand,
+                atomic_or,
+                atomic_umax,
+                atomic_umin,
+                atomic_xadd,
+                atomic_xor,
+                atomic_xsub,
             )
         };
     }
 
     macro_rules! of_atomic_fence_funcs {
         ($macro:ident) => {
-            $macro!(
-                atomic_fence_acqrel,
-                atomic_fence_acquire,
-                atomic_fence_release,
-                atomic_fence_seqcst,
-                atomic_singlethreadfence_acqrel,
-                atomic_singlethreadfence_acquire,
-                atomic_singlethreadfence_release,
-                atomic_singlethreadfence_seqcst,
-            )
+            $macro!(atomic_fence, atomic_singlethreadfence,)
         };
     }
 
@@ -922,13 +821,11 @@ mod intrinsics {
         let name = intrinsic.name.as_str();
         let parts = name.split('_').skip(1).collect::<Vec<_>>();
         let operation = parts[0];
-        let ordering = atomic_ordering_from_str(parts[1]);
         let kind = match name {
             of_atomic_load_funcs!(str_any_of) => AtomicIntrinsicKind::Load,
             of_atomic_store_funcs!(str_any_of) => AtomicIntrinsicKind::Store,
             of_atomic_xchg_funcs!(str_any_of) => AtomicIntrinsicKind::Exchange,
             of_atomic_cxchg_funcs!(str_any_of) => AtomicIntrinsicKind::CompareExchange {
-                fail_ordering: atomic_ordering_from_str(parts[2]),
                 weak: operation.contains("weak"),
             },
             of_atomic_binop_funcs!(str_any_of) => {
@@ -939,19 +836,7 @@ mod intrinsics {
             },
             _ => unreachable!(),
         };
-        IntrinsicDecision::Atomic(ordering, kind)
-    }
-
-    fn atomic_ordering_from_str(ordering: &str) -> AtomicOrdering {
-        match ordering {
-            "acqrel" => AtomicOrdering::ACQ_REL,
-            "acquire" => AtomicOrdering::ACQUIRE,
-            "relaxed" => AtomicOrdering::RELAXED,
-            "release" => AtomicOrdering::RELEASE,
-            "seqcst" => AtomicOrdering::SEQ_CST,
-            "unordered" => AtomicOrdering::UNORDERED,
-            _ => unreachable!(),
-        }
+        IntrinsicDecision::Atomic(kind)
     }
 
     fn atomic_binop_from_str(binop: &str) -> AtomicBinaryOp {
