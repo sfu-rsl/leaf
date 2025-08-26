@@ -403,8 +403,9 @@ fn find_pri_marker(tcx: TyCtxt, crate_num: CrateNum) -> DefId {
     } else {
         use rustc_middle::middle::exported_symbols::ExportedSymbol;
         Box::new(
-            tcx.exported_symbols(crate_num)
+            tcx.exported_generic_symbols(crate_num)
                 .iter()
+                .chain(tcx.exported_non_generic_symbols(crate_num).iter())
                 .filter_map(|(s, _)| match s {
                     ExportedSymbol::NonGeneric(def_id) | ExportedSymbol::Generic(def_id, _) => {
                         Some(*def_id)
