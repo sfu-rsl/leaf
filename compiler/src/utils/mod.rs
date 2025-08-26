@@ -196,38 +196,44 @@ pub(crate) mod mir {
 
     impl<'tcx> InstanceKindExt<'tcx> for InstanceKind<'tcx> {
         fn discriminant(&self) -> InstanceKindDiscr {
+            use InstanceKind::*;
             match self {
-                InstanceKind::Item(..) => 0,
-                InstanceKind::Intrinsic(..) => 1,
-                InstanceKind::VTableShim(..) => 2,
-                InstanceKind::ReifyShim(..) => 3,
-                InstanceKind::FnPtrShim(..) => 4,
-                InstanceKind::Virtual(..) => 5,
-                InstanceKind::ClosureOnceShim { .. } => 6,
-                InstanceKind::ConstructCoroutineInClosureShim { .. } => 7,
-                InstanceKind::ThreadLocalShim(..) => 8,
-                InstanceKind::DropGlue(..) => 9,
-                InstanceKind::CloneShim(..) => 10,
-                InstanceKind::FnPtrAddrShim(..) => 11,
-                InstanceKind::AsyncDropGlueCtorShim(..) => 12,
+                Item(..) => 0,
+                Intrinsic(..) => 1,
+                VTableShim(..) => 2,
+                ReifyShim(..) => 3,
+                FnPtrShim(..) => 4,
+                Virtual(..) => 5,
+                ClosureOnceShim { .. } => 6,
+                ConstructCoroutineInClosureShim { .. } => 7,
+                ThreadLocalShim(..) => 8,
+                FutureDropPollShim(..) => 9,
+                DropGlue(..) => 10,
+                CloneShim(..) => 11,
+                FnPtrAddrShim(..) => 12,
+                AsyncDropGlueCtorShim(..) => 13,
+                AsyncDropGlue(..) => 14,
             }
         }
 
         fn has_identical_polymorphic_body(&self) -> bool {
+            use InstanceKind::*;
             match self {
-                InstanceKind::Item(..) => true,
-                InstanceKind::Intrinsic(..) => false, // Should not even have a body
-                InstanceKind::VTableShim(..) => false, // Opaque for MIR
-                InstanceKind::ReifyShim(..) => false, // Opaque for MIR
-                InstanceKind::FnPtrShim(..) => false, // Different for different signatures
-                InstanceKind::Virtual(..) => false,   // Opaque for MIR
-                InstanceKind::ClosureOnceShim { .. } => true, // Always <Self as FnMut>::call_mut
-                InstanceKind::ConstructCoroutineInClosureShim { .. } => false,
-                InstanceKind::ThreadLocalShim(..) => true, // Should not even have generic parameters (not sure)
-                InstanceKind::DropGlue(..) => false,       // Different for different types
-                InstanceKind::CloneShim(..) => false,      // Different for different types
-                InstanceKind::FnPtrAddrShim(..) => false,  // Different for different types
-                InstanceKind::AsyncDropGlueCtorShim(..) => false, // Different for different types
+                Item(..) => true,
+                Intrinsic(..) => false,         // Should not even have a body
+                VTableShim(..) => false,        // Opaque for MIR
+                ReifyShim(..) => false,         // Opaque for MIR
+                FnPtrShim(..) => false,         // Different for different signatures
+                Virtual(..) => false,           // Opaque for MIR
+                ClosureOnceShim { .. } => true, // Always <Self as FnMut>::call_mut
+                ConstructCoroutineInClosureShim { .. } => false,
+                ThreadLocalShim(..) => true, // Should not even have generic parameters (not sure)
+                FutureDropPollShim(..) => false, // Different for different types (not sure)
+                DropGlue(..) => false,       // Different for different types
+                CloneShim(..) => false,      // Different for different types
+                FnPtrAddrShim(..) => false,  // Different for different types
+                AsyncDropGlueCtorShim(..) => false, // Different for different types
+                AsyncDropGlue(..) => false,  // Different for different types
             }
         }
 

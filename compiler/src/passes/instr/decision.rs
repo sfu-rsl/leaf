@@ -72,8 +72,10 @@ fn decide_instance_kind(kind: &InstanceKind) -> bool {
         | Virtual(..)
         | ConstructCoroutineInClosureShim { .. }
         | ThreadLocalShim(..)
+        | FutureDropPollShim(..)
         | DropGlue(..)
         | FnPtrAddrShim(..)
+        | AsyncDropGlue(..)
         | AsyncDropGlueCtorShim(..) => false,
     }
 }
