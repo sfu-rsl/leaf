@@ -1023,7 +1023,7 @@ mod implementation {
             let tcx = self.tcx();
             if ty.is_primitive() {
                 self.internal_reference_const_primitive(constant)
-            } else if ty.is_unsafe_ptr() {
+            } else if ty.is_raw_ptr() {
                 self.internal_reference_const_ptr(constant)
             } else if cfg!(feature = "abs_concrete") {
                 self.internal_reference_const_some()
@@ -1096,7 +1096,7 @@ mod implementation {
         ) -> BlocksAndResult<'tcx> {
             let ty = constant.ty();
             debug_assert!(
-                ty.is_unsafe_ptr(),
+                ty.is_raw_ptr(),
                 "Expected raw pointer type, found {:?}",
                 ty
             );
