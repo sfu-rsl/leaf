@@ -439,9 +439,7 @@ mod driver_callbacks {
             rustc_config: &mut rustc_interface::Config,
             leafc_config: &LeafCompilerConfig,
         ) {
-            let current_sysroot = rustc_session::filesearch::materialize_sysroot(
-                rustc_config.opts.maybe_sysroot.clone(),
-            );
+            let current_sysroot = rustc_config.opts.sysroot.path();
             if is_sysroot_compatible(&current_sysroot, None) {
                 return;
             }
@@ -463,7 +461,7 @@ mod driver_callbacks {
                 "Overriding the sysroot with the one found at: {}",
                 sysroot.display()
             );
-            rustc_config.opts.maybe_sysroot.replace(sysroot);
+            rustc_config.opts.sysroot = rustc_session::config::Sysroot::new(Some(sysroot));
         }
 
         fn build_toolchain(

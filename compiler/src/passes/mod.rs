@@ -763,12 +763,14 @@ mod implementation {
             Box::new(|opts| {
                 // This is the default implementation taken from `interface::run_compiler`.
                 let early_dcx = rustc_session::EarlyDiagCtxt::new(opts.error_format);
-                let sysroot =
-                    rustc_session::filesearch::materialize_sysroot(opts.maybe_sysroot.clone());
-                let target = config::build_target_config(&early_dcx, &opts.target_triple, &sysroot);
+                let target = config::build_target_config(
+                    &early_dcx,
+                    &opts.target_triple,
+                    opts.sysroot.path(),
+                );
                 let backend = rustc_interface::util::get_codegen_backend(
                     &early_dcx,
-                    &sysroot,
+                    &opts.sysroot,
                     opts.unstable_opts.codegen_backend.as_deref(),
                     &target,
                 );
