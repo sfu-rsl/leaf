@@ -695,7 +695,6 @@ mod implementation {
             Session,
             config::{self, OutputFilenames, PrintRequest},
         };
-        use rustc_span::Symbol;
 
         use delegate::delegate;
 
@@ -711,7 +710,8 @@ mod implementation {
 
                     fn init(&self, sess: &Session);
                     fn print(&self, req: &PrintRequest, out: &mut String, sess: &Session);
-                    fn target_features_cfg(&self, sess: &Session, allow_unstable: bool) -> Vec<Symbol>;
+                    fn target_config(&self, sess: &Session) -> rustc_codegen_ssa::TargetConfig;
+
                     fn print_passes(&self);
                     fn print_version(&self);
 
@@ -730,24 +730,17 @@ mod implementation {
                         &self,
                         sess: &Session,
                         codegen_results: CodegenResults,
+                        metadata: EncodedMetadata,
                         outputs: &OutputFilenames,
                     );
-
-                    fn supports_parallel(&self) -> bool;
                 }
             }
 
-            fn codegen_crate<'tcx>(
-                &self,
-                tcx: TyCtxt<'tcx>,
-                metadata: EncodedMetadata,
-                need_metadata_module: bool,
-            ) -> Box<dyn Any> {
+            fn codegen_crate<'tcx>(&self, tcx: TyCtxt<'tcx>) -> Box<dyn Any> {
                 let result = {
                     let mut pass = self.pass.acquire();
                     pass.visit_tcx_at_codegen_before(tcx, &mut global::get_storage());
-                    self.backend
-                        .codegen_crate(tcx, metadata, need_metadata_module)
+                    self.backend.codegen_crate(tcx)
                 };
                 {
                     let mut pass = self.pass.acquire();
