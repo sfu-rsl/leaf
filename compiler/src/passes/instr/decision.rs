@@ -303,6 +303,7 @@ mod intrinsics {
                 mul_with_overflow,
                 three_way_compare,
                 size_of,
+                slice_get_unchecked,
                 unchecked_add,
                 unchecked_div,
                 unchecked_mul,
