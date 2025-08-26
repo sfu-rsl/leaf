@@ -233,7 +233,7 @@ fn is_drop_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
             .lang_items()
             .drop_trait()
             .zip(
-                tcx.impl_of_method(def_id)
+                tcx.impl_of_assoc(def_id)
                     .and_then(|id| tcx.trait_id_of_impl(id)),
             )
             .is_some_and(|(t1, t2)| t1 == t2)

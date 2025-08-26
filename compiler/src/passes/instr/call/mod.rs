@@ -3390,7 +3390,7 @@ mod implementation {
                 def_id: DefId,
             ) -> Option<(TraitRef<'tcx>, AssocItem)> {
                 let trait_ref = tcx
-                    .impl_of_method(def_id)
+                    .impl_of_assoc(def_id)
                     .and_then(|impl_id| tcx.impl_trait_ref(impl_id))
                     .map(|trait_ref| trait_ref.instantiate_identity())
                     .filter(|trait_ref| tcx.is_dyn_compatible(trait_ref.def_id))
@@ -3522,7 +3522,7 @@ mod implementation {
                 tcx: TyCtxt<'tcx>,
                 def_id: DefId,
             ) -> Option<AssocItem> {
-                let trait_id = tcx.trait_of_item(def_id)?;
+                let trait_id = tcx.trait_of_assoc(def_id)?;
                 let item = to_trait_associated_item(tcx, def_id);
                 is_vtable_safe_method(tcx, trait_id, item).then_some(item)
             }
@@ -3886,7 +3886,7 @@ mod implementation {
             let TyKind::FnDef(def_id, ..) = func_ty.kind() else {
                 return false;
             };
-            tcx.trait_of_item(*def_id)
+            tcx.trait_of_assoc(*def_id)
                 .is_some_and(|id| tcx.is_fn_trait(id))
         }
 
