@@ -803,40 +803,49 @@ mod implementation {
 
             let (func_name, additional_args) = match proj {
                 ProjectionElem::Deref => (sym::ref_place_deref, vec![]),
-                ProjectionElem::Field(index, _) => {
-                    (sym::ref_place_field, vec![operand::const_from_uint(
+                ProjectionElem::Field(index, _) => (
+                    sym::ref_place_field,
+                    vec![operand::const_from_uint(
                         self.context.tcx(),
                         u32::from(index),
-                    )])
-                }
+                    )],
+                ),
                 ProjectionElem::Index(index) => {
                     let BlocksAndResult(additional_blocks, index_ref) =
                         self.internal_reference_place(&Place::from(index));
                     new_blocks.extend(additional_blocks);
-                    (sym::ref_place_index, vec![operand::copy_for_local(
-                        index_ref,
-                    )])
+                    (
+                        sym::ref_place_index,
+                        vec![operand::copy_for_local(index_ref)],
+                    )
                 }
                 ProjectionElem::ConstantIndex {
                     offset,
                     min_length,
                     from_end,
-                } => (sym::ref_place_constant_index, vec![
+                } => (
+                    sym::ref_place_constant_index,
+                    vec![
                     operand::const_from_uint(self.context.tcx(), offset),
                     operand::const_from_uint(self.context.tcx(), min_length),
                     operand::const_from_bool(self.context.tcx(), from_end),
-                ]),
-                ProjectionElem::Subslice { from, to, from_end } => (sym::ref_place_subslice, vec![
+                    ],
+                ),
+                ProjectionElem::Subslice { from, to, from_end } => (
+                    sym::ref_place_subslice,
+                    vec![
                     operand::const_from_uint(self.context.tcx(), from),
                     operand::const_from_uint(self.context.tcx(), to),
                     operand::const_from_bool(self.context.tcx(), from_end),
-                ]),
-                ProjectionElem::Downcast(_, index) => {
-                    (sym::ref_place_downcast, vec![operand::const_from_uint(
+                    ],
+                ),
+                ProjectionElem::Downcast(_, index) => (
+                    sym::ref_place_downcast,
+                    vec![operand::const_from_uint(
                         self.context.tcx(),
                         u32::from(index),
-                    )])
-                }
+                    )],
+                ),
                 ProjectionElem::OpaqueCast(_) => (sym::ref_place_opaque_cast, vec![]),
                 ProjectionElem::Subtype(_) => (sym::ref_place_subtype, vec![]),
             };
@@ -898,10 +907,13 @@ mod implementation {
                 None,
             );
 
-            let set_call_block = self.make_bb_for_call(sym::set_place_size, vec![
+            let set_call_block = self.make_bb_for_call(
+                sym::set_place_size,
+                vec![
                 operand::copy_for_local(place_ref),
                 operand::move_for_local(size_local),
-            ]);
+                ],
+            );
 
             vec![get_call_block, set_call_block]
         }
@@ -916,16 +928,22 @@ mod implementation {
             } else if ty.is_char() {
                 Some((sym::set_place_type_char, vec![]))
             } else if ty.is_integral() {
-                Some((sym::set_place_type_int, vec![
+                Some((
+                    sym::set_place_type_int,
+                    vec![
                     operand::const_from_uint(tcx, ty.primitive_size(tcx).bits()),
                     operand::const_from_bool(tcx, ty.is_signed()),
-                ]))
+                    ],
+                ))
             } else if ty.is_floating_point() {
                 let (e_bits, s_bits) = ty::ebit_sbit_size(ty);
-                Some((sym::set_place_type_float, vec![
+                Some((
+                    sym::set_place_type_float,
+                    vec![
                     operand::const_from_uint(tcx, e_bits),
                     operand::const_from_uint(tcx, s_bits),
-                ]))
+                    ],
+                ))
             } else {
                 None
             } {
@@ -941,10 +959,13 @@ mod implementation {
                 id_local
             };
 
-            blocks.push(self.make_bb_for_call(sym::set_place_type_id, vec![
+            blocks.push(self.make_bb_for_call(
+                sym::set_place_type_id,
+                vec![
                 operand::copy_for_local(place_ref),
                 operand::move_for_local(id_local),
-            ]));
+                ],
+            ));
 
             blocks
         }
@@ -1002,9 +1023,10 @@ mod implementation {
             };
 
             BlocksAndResult::from(
-                self.make_bb_for_operand_ref_call(func_name, vec![operand::copy_for_local(
-                    place_ref,
-                )]),
+                self.make_bb_for_operand_ref_call(
+                    func_name,
+                    vec![operand::copy_for_local(place_ref)],
+                ),
             )
             .prepend(additional_blocks)
         }
@@ -1095,11 +1117,7 @@ mod implementation {
             constant: &Box<ConstOperand<'tcx>>,
         ) -> BlocksAndResult<'tcx> {
             let ty = constant.ty();
-            debug_assert!(
-                ty.is_raw_ptr(),
-                "Expected raw pointer type, found {:?}",
-                ty
-            );
+            debug_assert!(ty.is_raw_ptr(), "Expected raw pointer type, found {:?}", ty);
 
             let TyKind::RawPtr(pointee_ty, _) = ty.kind() else {
                 unreachable!()
@@ -1118,10 +1136,10 @@ mod implementation {
                 Place::from(local),
                 rvalue::cast_ptr_to_ptr(operand::const_from_existing(constant), raw_ptr_ty),
             );
-            let (mut block, result) = self
-                .make_bb_for_operand_ref_call(sym::ref_operand_const_addr, vec![
-                    operand::move_for_local(local),
-                ]);
+            let (mut block, result) = self.make_bb_for_operand_ref_call(
+                sym::ref_operand_const_addr,
+                vec![operand::move_for_local(local)],
+            );
             block.statements.push(assignment);
             (block, result).into()
         }
@@ -1135,9 +1153,10 @@ mod implementation {
             func_name: LeafSymbol,
             constant: &Box<ConstOperand<'tcx>>,
         ) -> BlocksAndResult<'tcx> {
-            self.make_bb_for_operand_ref_call(func_name, vec![operand::const_from_existing(
-                constant,
-            )])
+            self.make_bb_for_operand_ref_call(
+                func_name,
+                vec![operand::const_from_existing(constant)],
+            )
             .into()
         }
 
@@ -1151,12 +1170,14 @@ mod implementation {
             let tcx = self.tcx();
             let (bit_rep_local, additional_stmts) =
                 utils::cast_int_to_bit_rep(tcx, &mut self.context, constant);
-            let (mut block, result) =
-                self.make_bb_for_operand_ref_call(sym::ref_operand_const_int, vec![
+            let (mut block, result) = self.make_bb_for_operand_ref_call(
+                sym::ref_operand_const_int,
+                vec![
                     operand::move_for_local(bit_rep_local),
                     operand::const_from_uint(tcx, ty.primitive_size(tcx).bits()),
                     operand::const_from_bool(tcx, ty.is_signed()),
-                ]);
+                ],
+            );
             block.statements.extend(additional_stmts);
             (block, result).into()
         }
@@ -1172,11 +1193,14 @@ mod implementation {
             let (bit_rep_local, conversion_block) =
                 utils::cast_float_to_bit_rep(tcx, &mut self.context, constant);
             let (e_bits, s_bits) = ty::ebit_sbit_size(ty);
-            let block_pair = self.make_bb_for_operand_ref_call(sym::ref_operand_const_float, vec![
+            let block_pair = self.make_bb_for_operand_ref_call(
+                sym::ref_operand_const_float,
+                vec![
                 operand::move_for_local(bit_rep_local),
                 operand::const_from_uint(tcx, e_bits),
                 operand::const_from_uint(tcx, s_bits),
-            ]);
+                ],
+            );
             BlocksAndResult::from(block_pair).prepend([conversion_block])
         }
 
@@ -1194,10 +1218,10 @@ mod implementation {
                 operand::const_from_existing(constant),
                 None,
             );
-            let mut block_pair = self
-                .make_bb_for_operand_ref_call(sym::ref_operand_const_byte_str, vec![
-                    operand::move_for_local(slice_local),
-                ]);
+            let mut block_pair = self.make_bb_for_operand_ref_call(
+                sym::ref_operand_const_byte_str,
+                vec![operand::move_for_local(slice_local)],
+            );
             block_pair.0.statements.insert(0, slice_assignment);
             BlocksAndResult::from(block_pair)
         }
@@ -1282,24 +1306,31 @@ mod implementation {
             CastAssignmentContext<'b, C>: ForCasting<'tcx> + 'b;
 
         fn by_use(&mut self, operand: OperandRef) {
-            self.add_bb_for_assign_call(sym::assign_use, vec![operand::copy_for_local(
-                operand.into(),
-            )])
+            self.add_bb_for_assign_call(
+                sym::assign_use,
+                vec![operand::copy_for_local(operand.into())],
+            )
         }
 
         fn by_repeat(&mut self, operand: OperandRef, count: &Const<'tcx>) {
-            self.add_bb_for_assign_call(sym::assign_repeat, vec![
+            self.add_bb_for_assign_call(
+                sym::assign_repeat,
+                vec![
                 operand::copy_for_local(operand.into()),
                 #[allow(clippy::clone_on_copy)]
                 operand::const_from_existing_ty_const(self.tcx().types.usize, count.clone()),
-            ])
+                ],
+            )
         }
 
         fn by_ref(&mut self, place: PlaceRef, is_mutable: bool) {
-            self.add_bb_for_assign_call(sym::assign_ref, vec![
+            self.add_bb_for_assign_call(
+                sym::assign_ref,
+                vec![
                 operand::copy_for_local(place.into()),
                 operand::const_from_bool(self.context.tcx(), is_mutable),
-            ])
+                ],
+            )
         }
 
         fn by_thread_local_ref(&mut self, _def_id: &DefId) {
@@ -1311,16 +1342,20 @@ mod implementation {
         }
 
         fn by_raw_ptr(&mut self, place: PlaceRef, is_mutable: bool) {
-            self.add_bb_for_assign_call(sym::assign_raw_ptr_of, vec![
+            self.add_bb_for_assign_call(
+                sym::assign_raw_ptr_of,
+                vec![
                 operand::copy_for_local(place.into()),
                 operand::const_from_bool(self.context.tcx(), is_mutable),
-            ])
+                ],
+            )
         }
 
         fn by_len(&mut self, place: PlaceRef) {
-            self.add_bb_for_assign_call(sym::assign_len, vec![operand::copy_for_local(
-                place.into(),
-            )])
+            self.add_bb_for_assign_call(
+                sym::assign_len,
+                vec![operand::copy_for_local(place.into())],
+            )
         }
 
         fn by_cast(&mut self, operand: OperandRef) -> Self::Cast<'_> {
@@ -1346,11 +1381,14 @@ mod implementation {
                 local
             };
 
-            self.add_bb_for_assign_call(sym::assign_binary_op, vec![
+            self.add_bb_for_assign_call(
+                sym::assign_binary_op,
+                vec![
                 operand::move_for_local(operator_local),
                 operand::copy_for_local(first.into()),
                 operand::copy_for_local(second.into()),
-            ])
+                ],
+            )
         }
 
         fn by_unary_op(&mut self, operator: &UnOp, operand: OperandRef) {
@@ -1367,10 +1405,13 @@ mod implementation {
                 local
             };
 
-            self.add_bb_for_assign_call(sym::assign_unary_op, vec![
+            self.add_bb_for_assign_call(
+                sym::assign_unary_op,
+                vec![
                 operand::move_for_local(operator_local),
                 operand::copy_for_local(operand.into()),
-            ])
+                ],
+            )
         }
 
         fn by_nullary_op(&mut self) {
@@ -1382,9 +1423,10 @@ mod implementation {
         }
 
         fn by_discriminant(&mut self, place: PlaceRef) {
-            self.add_bb_for_assign_call(sym::assign_discriminant, vec![operand::copy_for_local(
-                place.into(),
-            )])
+            self.add_bb_for_assign_call(
+                sym::assign_discriminant,
+                vec![operand::copy_for_local(place.into())],
+            )
         }
 
         fn by_aggregate_array(&mut self, items: &[OperandRef]) {
@@ -1400,9 +1442,14 @@ mod implementation {
         }
 
         fn by_aggregate_enum(&mut self, fields: &[OperandRef], variant: VariantIdx) {
-            self.add_bb_for_adt_assign_call(sym::assign_aggregate_enum, fields, vec![
-                operand::const_from_uint(self.context.tcx(), variant.as_u32()),
-            ])
+            self.add_bb_for_adt_assign_call(
+                sym::assign_aggregate_enum,
+                fields,
+                vec![operand::const_from_uint(
+                    self.context.tcx(),
+                    variant.as_u32(),
+                )],
+            )
         }
 
         fn by_aggregate_union(&mut self, active_field: FieldIdx, value: OperandRef) {
@@ -1455,17 +1502,23 @@ mod implementation {
                 self.insert_blocks([block]);
                 id_local
             };
-            self.add_bb_for_assign_call(sym::assign_shallow_init_box, vec![
+            self.add_bb_for_assign_call(
+                sym::assign_shallow_init_box,
+                vec![
                 operand::copy_for_local(operand.into()),
                 operand::move_for_local(id_local),
-            ]);
+                ],
+            );
         }
 
         fn its_discriminant_to(&mut self, variant_index: &VariantIdx) {
-            self.add_bb_for_assign_call(sym::set_discriminant, vec![operand::const_from_uint(
+            self.add_bb_for_assign_call(
+                sym::set_discriminant,
+                vec![operand::const_from_uint(
                 self.context.tcx(),
                 variant_index.as_u32(),
-            )])
+                )],
+            )
         }
     }
 
@@ -1589,19 +1642,25 @@ mod implementation {
                 let is_signed = ty.is_signed();
                 let bits = ty.primitive_size(tcx).bits();
 
-                self.add_bb_for_cast_assign_call_with_args(sym::assign_cast_integer, vec![
+                self.add_bb_for_cast_assign_call_with_args(
+                    sym::assign_cast_integer,
+                    vec![
                     operand::const_from_uint(tcx, bits),
                     operand::const_from_bool(tcx, is_signed),
-                ])
+                    ],
+                )
             }
         }
 
         fn to_float(&mut self, ty: Ty<'tcx>) {
             let (e_bits, s_bits) = ty::ebit_sbit_size(ty);
-            self.add_bb_for_cast_assign_call_with_args(sym::assign_cast_float, vec![
+            self.add_bb_for_cast_assign_call_with_args(
+                sym::assign_cast_float,
+                vec![
                 operand::const_from_uint(self.context.tcx(), e_bits),
                 operand::const_from_uint(self.context.tcx(), s_bits),
-            ])
+                ],
+            )
         }
 
         fn through_unsizing(&mut self) {
@@ -1648,9 +1707,10 @@ mod implementation {
                 self.insert_blocks([block]);
                 id_local
             };
-            self.add_bb_for_cast_assign_call_with_args(sym::assign_cast_transmute, vec![
-                operand::move_for_local(id_local),
-            ])
+            self.add_bb_for_cast_assign_call_with_args(
+                sym::assign_cast_transmute,
+                vec![operand::move_for_local(id_local)],
+            )
         }
     }
 
@@ -1684,9 +1744,10 @@ mod implementation {
                 self.insert_blocks([block]);
                 id_local
             };
-            self.add_bb_for_cast_assign_call_with_args(func_name, vec![operand::move_for_local(
-                id_local,
-            )]);
+            self.add_bb_for_cast_assign_call_with_args(
+                func_name,
+                vec![operand::move_for_local(id_local)],
+            );
         }
     }
 
@@ -1701,10 +1762,10 @@ mod implementation {
                 Before(..),
                 "Marking storage as dead after it takes place is not expected."
             );
-            let block =
-                self.make_bb_for_call(sym::mark_storage_dead, vec![operand::move_for_local(
-                    place.into(),
-                )]);
+            let block = self.make_bb_for_call(
+                sym::mark_storage_dead,
+                vec![operand::move_for_local(place.into())],
+            );
             self.insert_blocks([block]);
         }
     }
@@ -1777,16 +1838,22 @@ mod implementation {
                 }
             } else if discr_ty.is_integral() {
                 // NOTE: Discriminants are integers.
-                (sym::take_branch_int, vec![
+                (
+                    sym::take_branch_int,
+                    vec![
                     operand::const_from_uint(tcx, value),
                     operand::const_from_uint(tcx, discr_ty.primitive_size(tcx).bits()),
                     operand::const_from_bool(tcx, discr_ty.is_signed()),
-                ])
+                    ],
+                )
             } else if discr_ty.is_char() {
-                (sym::take_branch_char, vec![operand::const_from_char(
+                (
+                    sym::take_branch_char,
+                    vec![operand::const_from_char(
                     tcx,
                     char::from_u32(value.try_into().unwrap()).unwrap(),
-                )])
+                    )],
+                )
             } else {
                 unreachable!(
                     "Branching node discriminant is supposed to be either bool, int, char, or enum discriminant."
@@ -1947,13 +2014,16 @@ mod implementation {
                 self.current_typing_env(),
             );
 
-            let mut block = self.make_bb_for_call(sym::before_call_func, vec![
+            let mut block = self.make_bb_for_call(
+                sym::before_call_func,
+                vec![
                 operand::move_for_local(def_local),
                 self.original_bb_index_as_arg(),
                 operand::move_for_local(func_ref.into()),
                 operand::move_for_local(arguments_local),
                 operand::const_from_bool(tcx, are_args_tupled),
-            ]);
+                ],
+            );
             block.statements.extend(additional_stmts);
             blocks.push(block);
 
@@ -2039,10 +2109,13 @@ mod implementation {
         where
             Self: AssignmentInfoProvider<'tcx>,
         {
-            let block = self.make_bb_for_call(sym::after_call_func, vec![
+            let block = self.make_bb_for_call(
+                sym::after_call_func,
+                vec![
                 operand::const_from_uint(self.tcx(), self.assignment_id()),
                 operand::copy_for_local(self.dest_ref().into()),
-            ]);
+                ],
+            );
             debug_assert_matches!(
                 self.context.insertion_loc(),
                 After(..),
@@ -2070,10 +2143,13 @@ mod implementation {
                 id_local
             };
 
-            (blocks, [
+            (
+                blocks,
+                [
                 operand::const_from_uint(self.tcx(), 2 as common::types::LocalIndex),
                 operand::move_for_local(tuple_id_local),
-            ])
+                ],
+            )
         }
     }
 
@@ -2466,11 +2542,15 @@ mod implementation {
             let (ptr_type_id_block, ptr_type_id_local) =
                 self.make_type_id_of_bb(self.context.ptr_ty());
 
-            (ptr_type_id_block, conc_ptr_assignment, [
+            (
+                ptr_type_id_block,
+                conc_ptr_assignment,
+                [
                 operand::move_for_local(self.context.ptr_operand_ref().into()),
                 operand::move_for_local(conc_ptr_local),
                 operand::move_for_local(ptr_type_id_local),
-            ])
+                ],
+            )
         }
 
         fn make_conc_ptr_assignment(
@@ -2563,10 +2643,13 @@ mod implementation {
                 AssertKind::BoundsCheck { len, index } => {
                     let len_ref = self.reference_operand(len);
                     let index_ref = self.reference_operand(index);
-                    Some((sym::assert_bounds_check, vec![
+                    Some((
+                        sym::assert_bounds_check,
+                        vec![
                         operand::copy_for_local(len_ref.into()),
                         operand::copy_for_local(index_ref.into()),
-                    ]))
+                        ],
+                    ))
                 }
                 AssertKind::Overflow(operator, op1, op2) => {
                     let tcx = self.tcx();
@@ -2585,30 +2668,36 @@ mod implementation {
 
                     let op1_ref = self.reference_operand(op1);
                     let op2_ref = self.reference_operand(op2);
-                    Some((sym::assert_overflow, vec![
+                    Some((
+                        sym::assert_overflow,
+                        vec![
                         // TODO: double check that moves and copies here are correct
                         operand::move_for_local(operator_local),
                         operand::copy_for_local(op1_ref.into()),
                         operand::copy_for_local(op2_ref.into()),
-                    ]))
+                        ],
+                    ))
                 }
                 AssertKind::OverflowNeg(op) => {
                     let op_ref = self.reference_operand(op);
-                    Some((sym::assert_overflow_neg, vec![operand::copy_for_local(
-                        op_ref.into(),
-                    )]))
+                    Some((
+                        sym::assert_overflow_neg,
+                        vec![operand::copy_for_local(op_ref.into())],
+                    ))
                 }
                 AssertKind::DivisionByZero(op) => {
                     let op_ref = self.reference_operand(op);
-                    Some((sym::assert_div_by_zero, vec![operand::copy_for_local(
-                        op_ref.into(),
-                    )]))
+                    Some((
+                        sym::assert_div_by_zero,
+                        vec![operand::copy_for_local(op_ref.into())],
+                    ))
                 }
                 AssertKind::RemainderByZero(op) => {
                     let op_ref = self.reference_operand(op);
-                    Some((sym::assert_rem_by_zero, vec![operand::copy_for_local(
-                        op_ref.into(),
-                    )]))
+                    Some((
+                        sym::assert_rem_by_zero,
+                        vec![operand::copy_for_local(op_ref.into())],
+                    ))
                 }
                 AssertKind::ResumedAfterReturn(..) | AssertKind::ResumedAfterPanic(..) => {
                     /* NOTE: These two assertions look to be used to make sure
@@ -2621,10 +2710,14 @@ mod implementation {
                 AssertKind::MisalignedPointerDereference { required, found } => {
                     let required_ref = self.reference_operand(required);
                     let found_ref = self.reference_operand(found);
-                    Some((sym::assert_misaligned_ptr_deref, vec![
+                    Some((
+                        sym::assert_misaligned_ptr_deref,
+                        vec![
                         operand::copy_for_local(required_ref.into()),
                         operand::copy_for_local(found_ref.into()),
-                    ]))
+                        ],
+                    ))
+                }
                 }
             }
         }
@@ -2680,10 +2773,13 @@ mod implementation {
             }
 
             let serialized = ron::to_string(info).unwrap();
-            let block = self.make_bb_for_call(sym::debug_info, vec![operand::const_from_byte_str(
+            let block = self.make_bb_for_call(
+                sym::debug_info,
+                vec![operand::const_from_byte_str(
                 self.context.tcx(),
                 serialized.as_bytes(),
-            )]);
+                )],
+            );
             self.insert_blocks([block]);
         }
     }
