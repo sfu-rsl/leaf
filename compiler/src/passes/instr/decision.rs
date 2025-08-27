@@ -324,6 +324,7 @@ mod intrinsics {
                 variant_count,
                 type_name,
                 type_id,
+                type_id_eq,
                 ptr_guaranteed_cmp,
                 needs_drop,
                 align_of_val,
@@ -333,19 +334,23 @@ mod intrinsics {
                 forget,
                 const_allocate,
                 const_eval_select,
+                const_make_global,
                 const_deallocate,
                 caller_location,
                 assert_zero_valid,
                 assert_mem_uninitialized_valid,
                 assume,
-                // contract_checks,
             )
         };
     }
 
     macro_rules! of_contract_funcs {
         ($macro:ident) => {
-            $macro!(contract_check_requires, contract_check_ensures,)
+            $macro!(
+                contract_check_requires,
+                contract_check_ensures,
+                contract_checks
+            )
         };
     }
 
@@ -358,7 +363,6 @@ mod intrinsics {
                 prefetch_read_instruction,
                 prefetch_write_data,
                 prefetch_read_data,
-                // const_deallocate,
                 breakpoint,
                 assert_inhabited,
                 cold_path,
@@ -635,11 +639,14 @@ mod intrinsics {
                 compare_bytes,
                 catch_unwind,
                 abort,
-                drop_in_place,
                 size_of_val,
                 is_val_statically_known,
                 arith_offset,
                 carrying_mul_add,
+                autodiff,
+                va_arg,
+                va_copy,
+                va_end,
             )
         };
     }
@@ -685,10 +692,11 @@ mod intrinsics {
             N
         }
 
-        const TOTAL_COUNT: usize = count_all!(
+        const LISTED_COUNT: usize = count_all!(
             of_mir_translated_funcs,
             of_const_evaluated_funcs,
             of_noop_funcs,
+            of_contract_funcs,
             of_float_arith_funcs,
             of_atomic_load_funcs,
             of_atomic_store_funcs,
@@ -705,7 +713,8 @@ mod intrinsics {
         /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
          * Do not change the count unless some intrinsics are added or removed to Rust.
          */
-        const _ALL_INTRINSICS: [u8; 360] = [0; TOTAL_COUNT];
+        const EXPECTED_COUNT: usize = 293;
+        const _ALL_INTRINSICS: [(); EXPECTED_COUNT] = [(); LISTED_COUNT];
     }
 
     use crate::pri_utils::sym::intrinsics as psym;
@@ -721,7 +730,7 @@ mod intrinsics {
         match intrinsic.name {
             of_one_to_one_funcs!(any_of) => decide_one_to_one_intrinsic_call(intrinsic),
             of_noop_funcs!(any_of) => IntrinsicDecision::NoOp,
-            // of_contract_funcs!(any_of) => IntrinsicDecision::Contract,
+            of_contract_funcs!(any_of) => IntrinsicDecision::Contract,
             of_const_evaluated_funcs!(any_of) => IntrinsicDecision::ConstEvaluated,
             of_to_be_supported_funcs!(any_of) => IntrinsicDecision::ToDo,
             of_float_arith_funcs!(any_of) => IntrinsicDecision::NotPlanned,
