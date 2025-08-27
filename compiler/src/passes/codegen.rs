@@ -1,9 +1,7 @@
-use std::ops::Deref;
-
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::{
     middle::codegen_fn_attrs::CodegenFnAttrFlags,
-    mir::mono::{CodegenUnit, Linkage, MonoItem},
+    mir::mono::{CodegenUnit, MonoItem},
     ty::TyCtxt,
 };
 
@@ -65,7 +63,7 @@ impl CompilationPass for MonoItemInternalizer {
         for unit in units {
             unit.items_mut().iter_mut().for_each(|(item, data)| {
                 if should_be_internalized(tcx, item, |name| rules.accept(name)) {
-                    data.linkage = Linkage::Internal;
+                    data.linkage = rustc_hir::attrs::Linkage::Internal;
                 } else {
                     log_debug!("Not internalizing item: {:?}", item.def_id());
                 }
@@ -84,7 +82,7 @@ fn should_be_internalized<'tcx>(
     if matches!(tcx.def_kind(def_id), DefKind::Fn)
         && matches!(
             tcx.fn_sig(def_id).instantiate_identity().abi(),
-            rustc_target::spec::abi::Abi::C { .. }
+            rustc_abi::ExternAbi::C { .. }
         )
         && tcx.visibility(def_id).is_public()
     {

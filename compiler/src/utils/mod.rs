@@ -30,7 +30,7 @@ pub(crate) use chain;
 pub(crate) mod mir {
     use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
     use rustc_middle::{
-        mir::{Body, Location, Statement, Terminator},
+        mir::{Body, Local, Location, Statement, Terminator},
         ty::{InstanceKind, TyCtxt, TypingEnv, TypingMode},
     };
     use rustc_span::def_id::{DefId, LocalDefId};
@@ -48,7 +48,7 @@ pub(crate) mod mir {
     impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
         fn is_llvm_intrinsic(self, def_id: DefId) -> bool {
             // Grabbed from `is_call_from_compiler_builtins_to_upstream_monomorphization`#5aea140.
-            if let Some(name) = self.codegen_fn_attrs(def_id).link_name {
+            if let Some(name) = self.codegen_fn_attrs(def_id).symbol_name {
                 name.as_str().starts_with("llvm.")
             } else {
                 false
@@ -88,7 +88,7 @@ pub(crate) mod mir {
                 | DefKind::AnonConst
                 | DefKind::Closure
                 | DefKind::InlineConst => {
-                    if self.hir().maybe_body_owned_by(item).is_some() {
+                    if self.hir_maybe_body_owned_by(item).is_some() {
                         TypingMode::analysis_in_body(self, item)
                     } else {
                         TypingMode::non_body_analysis()
@@ -145,6 +145,8 @@ pub(crate) mod mir {
         ) -> Vec<(Location, T)>
         where
             'tcx: 'a;
+
+        fn args_iter_x(&self) -> impl Iterator<Item = Local> + ExactSizeIterator + 'static;
     }
 
     impl<'tcx> BodyExt<'tcx> for Body<'tcx> {
@@ -182,6 +184,11 @@ pub(crate) mod mir {
                         )
                 })
                 .collect()
+        }
+
+        // Mitigates imprecise lifetime capturing in the compiler's library
+        fn args_iter_x(&self) -> impl Iterator<Item = Local> + ExactSizeIterator + 'static {
+            (1..self.arg_count + 1).map(Local::from_usize)
         }
     }
 

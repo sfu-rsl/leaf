@@ -3,6 +3,7 @@ mod decision;
 
 use const_format::concatcp;
 
+use rustc_abi::{FieldIdx, VariantIdx};
 use rustc_index::IndexVec;
 use rustc_middle::{
     mir::{
@@ -613,14 +614,14 @@ where
         let tcx = self.call_adder.tcx();
         let opt_def_id =
             if let mir_ty::TyKind::FnDef(def_id, ..) = func.ty(&self.call_adder, tcx).kind() {
-                assert!(
-                    !self.call_adder.all_pri_items().contains(def_id),
-                    "Instrumenting our own instrumentation."
-                );
-                Some(*def_id)
-            } else {
-                None
-            };
+            assert!(
+                !self.call_adder.all_pri_items().contains(def_id),
+                "Instrumenting our own instrumentation."
+            );
+            Some(*def_id)
+        } else {
+            None
+        };
 
         let params = CallParams {
             func,
@@ -948,14 +949,14 @@ where
         self.call_adder.by_use(operand_ref)
     }
 
-    fn visit_repeat(&mut self, operand: &Operand<'tcx>, count: &rustc_middle::ty::Const<'tcx>) {
+    fn visit_repeat(&mut self, operand: &Operand<'tcx>, count: &mir_ty::Const<'tcx>) {
         let operand_ref = self.call_adder.reference_operand(operand);
         self.call_adder.by_repeat(operand_ref, count)
     }
 
     fn visit_ref(
         &mut self,
-        _region: &rustc_middle::ty::Region,
+        _region: &mir_ty::Region,
         borrow_kind: &BorrowKind,
         place: &Place<'tcx>,
     ) {
@@ -977,12 +978,7 @@ where
         self.call_adder.by_len(place_ref)
     }
 
-    fn visit_cast(
-        &mut self,
-        kind: &CastKind,
-        operand: &Operand<'tcx>,
-        ty: &rustc_middle::ty::Ty<'tcx>,
-    ) {
+    fn visit_cast(&mut self, kind: &CastKind, operand: &Operand<'tcx>, ty: &Ty<'tcx>) {
         let operand_ref = self.call_adder.reference_operand(operand);
         let call_adder = &mut self.call_adder.by_cast(operand_ref);
         use CastKind::*;
@@ -990,7 +986,7 @@ where
             IntToInt | FloatToInt => call_adder.to_int(*ty),
             IntToFloat | FloatToFloat => call_adder.to_float(*ty),
             PointerCoercion(coercion, _source) => {
-                use rustc_middle::ty::adjustment::PointerCoercion::*;
+                use mir_ty::adjustment::PointerCoercion::*;
                 match coercion {
                     Unsize => call_adder.through_unsizing(),
                     ReifyFnPointer | UnsafeFnPointer | ClosureFnPointer(_) => {
@@ -1020,11 +1016,7 @@ where
         self.visit_binary_op_general(op, operands)
     }
 
-    fn visit_nullary_op(
-        &mut self,
-        _op: &rustc_middle::mir::NullOp,
-        _ty: &rustc_middle::ty::Ty<'tcx>,
-    ) {
+    fn visit_nullary_op(&mut self, _op: &rustc_middle::mir::NullOp, _ty: &Ty<'tcx>) {
         self.call_adder.by_nullary_op();
     }
 
@@ -1096,7 +1088,7 @@ where
         add_call(operands.as_slice())
     }
 
-    fn visit_shallow_init_box(&mut self, operand: &Operand<'tcx>, ty: &rustc_middle::ty::Ty<'tcx>) {
+    fn visit_shallow_init_box(&mut self, operand: &Operand<'tcx>, ty: &Ty<'tcx>) {
         let operand_ref = self.call_adder.reference_operand(operand);
         self.call_adder.by_shallow_init_box(operand_ref, ty);
     }

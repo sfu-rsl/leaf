@@ -439,44 +439,46 @@ impl<'tcx> BodyInstrumentationUnit<'tcx> {
                 .unwrap()
                 .terminator_mut();
             let unwind = terminator.unwind().cloned();
-            let mut successors = terminator.successors_mut();
-
-            let target: &mut BasicBlock = successors.next().unwrap();
-            let original_block_target = *target;
-            *target = NEXT_BLOCK;
-
-            // More than one successor?
-            if let Some(other_target) = successors.next() {
-                if let Some(UnwindAction::Cleanup(block)) = unwind
-                    && *other_target == block
-                {
-                    // TODO: #206
+            
+            let mut original_block_target = None;
+            terminator.successors_mut(|t| {
+                if !original_block_target.is_none() {
+                    original_block_target = Some(*t);
+                    *t = NEXT_BLOCK;
                 } else {
-                    drop(successors);
-                    panic!(
+                    let other_target = t;
+                    if let Some(UnwindAction::Cleanup(block)) = unwind
+                        && *other_target == block
+                    {
+                    } else {
+                                panic!(
                         concat!(
                             "Insertion after a block with unexpected with multiple successors. ",
-                            "Basic Block: {:?}, Terminator: {:#?}",
+                            "Basic Block: {:?}",
                         ),
-                        original_block_index, terminator,
+                        original_block_index, 
                     );
+                    }
                 }
-            }
+            });
 
-            original_block_target
+            original_block_target.unwrap()
         };
 
         let chunk_len = chunk.len();
         blocks.extend_reserve(chunk_len);
         for (i, mut bb) in chunk.drain(..).enumerate() {
             if i == chunk_len - 1 {
-                let mut successors = bb.data.terminator.as_mut().unwrap().successors_mut();
-                *successors.next().unwrap() = original_block_target;
-
+                let mut updated = false;
+                 bb.data.terminator.as_mut().unwrap().successors_mut(|t| {
+                    
                 assert!(
-                    successors.next().is_none(),
+                    !updated,
                     "Expected block with single successor"
                 );
+                *t = original_block_target;
+                updated = true;
+                });
             }
 
             Self::push_with_index_mapping(index_mapping, blocks, bb.data, bb.pseudo_index, None);

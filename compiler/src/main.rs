@@ -101,10 +101,7 @@ pub fn run_compiler(args: impl IntoIterator<Item = String>) -> i32 {
         &driver_args::ArgsExt::parse_crate_options(&args),
     );
 
-    rustc_driver::catch_with_exit_code(|| {
-        rustc_driver::run_compiler(&args, callbacks.as_mut());
-        Ok(())
-    })
+    rustc_driver::catch_with_exit_code(|| rustc_driver::run_compiler(&args, callbacks.as_mut()))
 }
 
 /// Returns `true` if the crate is ineffective for symbolic execution of the target.
@@ -281,7 +278,7 @@ mod driver_callbacks {
     mod shim_dep {
         use rustc_session::{
             config::{ExternEntry, ExternLocation, Externs},
-            search_paths::{PathKind, SearchPath, SearchPathFile},
+            search_paths::{PathKind, SearchPath},
             utils::CanonicalizedPath,
         };
 
@@ -351,7 +348,7 @@ mod driver_callbacks {
 
                     rustc_config.opts.search_paths.push(search_path);
                     ExternLocation::ExactPaths(
-                        core::iter::once(CanonicalizedPath::new(&rlib_path)).collect(),
+                        core::iter::once(CanonicalizedPath::new(rlib_path)).collect(),
                     )
                 }
             };

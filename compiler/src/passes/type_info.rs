@@ -1,11 +1,12 @@
-use rustc_abi::{FieldsShape, LayoutData, Scalar, TagEncoding, Variants};
+use rustc_abi::{
+    FieldIdx, FieldsShape, Layout, LayoutData, Scalar, TagEncoding, VariantIdx, Variants,
+};
 use rustc_middle::mir::{self, visit::Visitor};
 use rustc_middle::ty::{
     EarlyBinder, GenericArgsRef, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
     TypeVisitableExt, TypeVisitor, TypingEnv,
     layout::{HasTyCtxt, HasTypingEnv, LayoutCx, TyAndLayout},
 };
-use rustc_target::abi::{FieldIdx, Layout, VariantIdx};
 use rustc_type_ir::inherent::AdtDef;
 
 use std::collections::HashMap;
@@ -185,7 +186,7 @@ impl<'tcx, 's, 'b> Visitor<'tcx> for TyVisitor<'tcx, 's, 'b> {
         self.super_place(place, context, location);
         // Process intermediate types as well
         place.iter_projections().fold(
-            mir::tcx::PlaceTy::from_ty(self.local_decls[place.local].ty),
+            mir::PlaceTy::from_ty(self.local_decls[place.local].ty),
             |p_ty, x| {
                 let p_ty = p_ty.projection_ty(self.tcx, x.1);
                 p_ty.visit_with(self);
@@ -324,7 +325,7 @@ where
     }
 }
 
-impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, TagInfo> for (&Scalar, &TagEncoding<VariantIdx>, &usize)
+impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, TagInfo> for (&Scalar, &TagEncoding<VariantIdx>, &FieldIdx)
 where
     Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
@@ -337,7 +338,7 @@ where
         let (tag, encoding, field) = self;
         log_debug!(target: TAG_TYPE_EXPORT, "Tag info: {:?}, {:?}, {:?} ", tag, encoding, field);
         TagInfo::Regular {
-            as_field: to_field_info(ty_layout, cx, FieldIdx::from_usize(*field)),
+            as_field: to_field_info(ty_layout, cx, *field),
             encoding: encoding.to_runtime(cx, ()),
         }
     }
@@ -428,7 +429,7 @@ where
      * use the source to implement it.
      * The sources are checked manually and match for what we want.
      */
-    use rustc_target::abi::TyAbiInterface;
+    use rustc_abi::TyAbiInterface;
     let result = Ty::ty_and_layout_field(ty_layout, cx, index.as_usize()).ty;
 
     if matches!(ty_layout.ty.kind(), TyKind::Ref(..) | TyKind::RawPtr(..)) && index.as_usize() == 0

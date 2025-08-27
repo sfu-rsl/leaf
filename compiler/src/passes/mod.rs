@@ -282,7 +282,7 @@ mod implementation {
              for<'tcx> fn(TyCtxt<'tcx>, mir_ty::InstanceKind<'tcx>) -> mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_SHOULD_CODEGEN: Cell<
-             for<'tcx> fn(TyCtxtAt<'tcx>, mir_ty::Instance<'tcx>) -> bool
+             for<'tcx> fn(TyCtxt<'tcx>, mir_ty::Instance<'tcx>) -> bool
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_COLLECT_PARTITION: Cell<
              for<'tcx> fn(TyCtxt<'tcx>, ()) -> MonoItemPartitions<'tcx>

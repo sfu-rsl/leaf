@@ -1,4 +1,4 @@
-use rustc_ast::{DUMMY_NODE_ID, Item, ItemKind, Visibility, VisibilityKind, ptr::P};
+use rustc_ast::{DUMMY_NODE_ID, Item, ItemKind, Visibility, VisibilityKind};
 use rustc_session::Session;
 use rustc_span::{
     DUMMY_SP,
@@ -53,11 +53,13 @@ impl CompilationPass for RuntimeExternCrateAdder {
                 span: DUMMY_SP,
                 tokens: None,
             },
-            ident: Ident::with_dummy_span(Symbol::intern(crate_name)),
-            kind: ItemKind::ExternCrate(Some(Symbol::intern(*RUNTIME_LIB_CRATE))),
+            kind: ItemKind::ExternCrate(
+                Some(Symbol::intern(*RUNTIME_LIB_CRATE)),
+                Ident::with_dummy_span(Symbol::intern(crate_name)),
+            ),
             tokens: None,
         };
-        krate.items.insert(0, P(item));
+        krate.items.insert(0, Box::new(item));
 
         log_info!(
             "Added extern crate statement for the runtime library: extern crate {} as {};",

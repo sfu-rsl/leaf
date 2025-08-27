@@ -3,6 +3,7 @@
 pub(super) mod context;
 
 use context::AssignmentInfoProvider;
+use rustc_abi::{FieldIdx, VariantIdx};
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CastKind, ConstOperand, Local, Operand, Place, ProjectionElem,
@@ -11,7 +12,6 @@ use rustc_middle::{
     ty::{Const, GenericArg, Ty, TyCtxt},
 };
 use rustc_span::{def_id::DefId, source_map::Spanned};
-use rustc_target::abi::{FieldIdx, VariantIdx};
 
 use common::{
     log_debug, log_warn,
@@ -307,7 +307,7 @@ mod implementation {
         FunctionInfo,
         sym::{self, LeafSymbol},
     };
-    use crate::utils::mir::TyCtxtExt;
+    use crate::utils::mir::{BodyExt, TyCtxtExt};
 
     use self::ctxtreqs::*;
     use self::utils::ty::TyExt;
@@ -1981,7 +1981,7 @@ mod implementation {
             let (argument_places_local, additional_stmts) = {
                 let arg_places_refs = self
                     .body()
-                    .args_iter()
+                    .args_iter_x()
                     .map(|a| self.reference_place_local(a))
                     .map(|BlocksAndResult(ref_blocks, place_ref)| {
                         blocks.extend(ref_blocks);
@@ -2798,7 +2798,10 @@ mod implementation {
                     span: DUMMY_SP,
                     user_ty: None,
                     const_: Const::from_value(
-                        tcx.valtree_to_const_val((ty, mir_ty::ValTree::from_raw_bytes(tcx, value))),
+                        tcx.valtree_to_const_val(mir_ty::Value {
+                            ty,
+                            valtree: mir_ty::ValTree::from_raw_bytes(tcx, value),
+                        }),
                         ty,
                     ),
                 }))
@@ -2911,13 +2914,13 @@ mod implementation {
             }
 
             pub fn create<'tcx>(destination: Place<'tcx>, value: Rvalue<'tcx>) -> Statement<'tcx> {
-                Statement {
+                Statement::new(
                     /* NOTE: The source info can be propagated here too.
                      * However, as these statements end with a function call which has source info,
                      * we avoid the expense passing it around. */
-                    source_info: SourceInfo::outermost(DUMMY_SP),
-                    kind: StatementKind::Assign(Box::new((destination, value))),
-                }
+                     SourceInfo::outermost(DUMMY_SP),
+                     StatementKind::Assign(Box::new((destination, value))),
+                )
             }
         }
 
@@ -3102,7 +3105,7 @@ mod implementation {
                 let mut funcs = tcx
                     .associated_items(trait_id)
                     .in_definition_order()
-                    .filter(|x| matches!(x.kind, rustc_middle::ty::AssocKind::Fn));
+                    .filter(|x| matches!(x.kind, rustc_middle::ty::AssocKind::Fn { .. }));
                 let func = funcs.next().expect("No function found in the trait.");
                 assert!(
                     funcs.next().is_none(),
@@ -3343,7 +3346,7 @@ mod implementation {
                     typing_env,
                     call_adder
                         .body()
-                        .args_iter()
+                        .args_iter_x()
                         .next()
                         .expect("An object safe trait method is expected to have a receiver")
                         .into(),
