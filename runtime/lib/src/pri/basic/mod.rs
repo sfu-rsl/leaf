@@ -591,10 +591,15 @@ impl ProgramRuntimeInterface for BasicPri {
         tupled_arg_index: LocalIndex,
         tupled_arg_type_id: TypeId,
     ) {
-        Self::enter_func_with_tupling(def, arg_places, ret_val_place, ArgsTupling::Untupled {
-            tupled_arg_index: Local::Argument(tupled_arg_index),
-            tuple_type: tupled_arg_type_id,
-        })
+        Self::enter_func_with_tupling(
+            def,
+            arg_places,
+            ret_val_place,
+            ArgsTupling::Untupled {
+                tupled_arg_index: Local::Argument(tupled_arg_index),
+                tuple_type: tupled_arg_type_id,
+            },
+        )
     }
     fn enter_func_tupled_args(def: FuncDef, arg_places: &[PlaceRef], ret_val_place: PlaceRef) {
         Self::enter_func_with_tupling(def, arg_places, ret_val_place, ArgsTupling::Tupled)
@@ -654,6 +659,16 @@ impl ProgramRuntimeInterface for BasicPri {
         second: OperandRef,
     ) {
         Self::assign_binary_op(id, dest, Self::BinaryOp::SubSaturating, first, second)
+    }
+
+    fn intrinsic_assign_disjoint_bitor(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+    ) {
+        // Currently no distinction, but may be an interesting case for unsafe checks.
+        Self::assign_binary_op(id, dest, Self::BinaryOp::BitOr, first, second);
     }
 
     fn intrinsic_assign_exact_div(

@@ -287,6 +287,7 @@ pub mod macros {
           { fn intrinsic_assign_rotate_right(id: AssignmentId, dest: PlaceRef, x: OperandRef, shift: OperandRef) }
           { fn intrinsic_assign_saturating_add(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
           { fn intrinsic_assign_saturating_sub(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
+          { fn intrinsic_assign_disjoint_bitor(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
           { fn intrinsic_assign_exact_div(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
           { fn intrinsic_assign_bitreverse(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_cttz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
@@ -713,6 +714,8 @@ pub mod macros {
                 fn intrinsic_assign_saturating_add(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
             }$modifier!{
                 fn intrinsic_assign_saturating_sub(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
+            }$modifier!{
+                fn intrinsic_assign_disjoint_bitor(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
             }$modifier!{
                 fn intrinsic_assign_exact_div(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
             }$modifier!{

@@ -658,6 +658,7 @@ mod intrinsics {
                 rotate_right,
                 saturating_sub,
                 saturating_add,
+                disjoint_bitor,
                 exact_div,
                 bitreverse,
                 cttz_nonzero,
@@ -666,7 +667,6 @@ mod intrinsics {
                 ctlz_nonzero,
                 ctlz,
                 bswap,
-                // disjoint_bitor,
                 black_box,
             )
         };
@@ -750,6 +750,7 @@ mod intrinsics {
             rsym::rotate_right => psym::intrinsic_assign_rotate_right,
             rsym::saturating_add => psym::intrinsic_assign_saturating_add,
             rsym::saturating_sub => psym::intrinsic_assign_saturating_sub,
+            rsym::disjoint_bitor => psym::intrinsic_assign_disjoint_bitor,
             rsym::exact_div => psym::intrinsic_assign_exact_div,
             rsym::bitreverse => psym::intrinsic_assign_bitreverse,
             rsym::cttz_nonzero => psym::intrinsic_assign_cttz_nonzero,
