@@ -1,16 +1,12 @@
 #![feature(rustc_private)]
-#![feature(let_chains)]
 #![feature(extend_one)]
 #![feature(box_patterns)]
-#![feature(extract_if)]
 #![deny(rustc::internal)]
 #![feature(iter_order_by)]
 #![feature(macro_metavar_expr)]
 #![feature(box_into_inner)]
 #![feature(assert_matches)]
 #![feature(core_intrinsics)]
-#![feature(const_option)]
-#![feature(trait_upcasting)]
 #![feature(if_let_guard)]
 
 mod config;

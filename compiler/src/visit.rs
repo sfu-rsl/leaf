@@ -1,4 +1,5 @@
-use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece, Mutability};
+use rustc_abi::{FieldIdx, VariantIdx};
+use rustc_ast::{InlineAsmOptions, InlineAsmTemplatePiece};
 use rustc_index::IndexVec;
 use rustc_middle::{
     mir::{
@@ -11,8 +12,6 @@ use rustc_middle::{
     ty::{Const, Region, Ty, Variance},
 };
 use rustc_span::{Span, source_map::Spanned};
-use rustc_target::abi::FieldIdx;
-use rustc_target::abi::VariantIdx;
 
 macro_rules! make_statement_kind_visitor {
     ($visitor_trait_name:ident, $($mutability:ident)?) => {
@@ -254,25 +253,28 @@ macro_rules! make_terminator_kind_visitor {
             }
 
             fn super_terminator_kind(&mut self, kind: & $($mutability)? TerminatorKind<'tcx>) -> T {
+                use TerminatorKind::*;
                 match kind {
-                    TerminatorKind::Goto { ref $($mutability)? target } => self.visit_goto(target),
-                    TerminatorKind::SwitchInt {
-                        discr,
+                    & $($mutability)? Goto { ref $($mutability)? target } => self.visit_goto(target),
+                    & $($mutability)? SwitchInt {
+                        ref $($mutability)? discr,
                         ref $($mutability)? targets,
                     } => self.visit_switch_int(discr, targets),
-                    TerminatorKind::UnwindResume => self.visit_unwind_resume(),
-                    TerminatorKind::UnwindTerminate(ref $($mutability)? reason) => self.visit_unwind_terminate(reason),
-                    TerminatorKind::Return => self.visit_return(),
-                    TerminatorKind::Unreachable => self.visit_unreachable(),
-                    TerminatorKind::Drop {
+                    & $($mutability)? UnwindResume => self.visit_unwind_resume(),
+                    & $($mutability)? UnwindTerminate(ref $($mutability)? reason) => self.visit_unwind_terminate(reason),
+                    & $($mutability)? Return => self.visit_return(),
+                    & $($mutability)? Unreachable => self.visit_unreachable(),
+                    & $($mutability)? Drop {
                         ref $($mutability)? place,
                         ref $($mutability)? target,
                         ref $($mutability)? unwind,
                         ref $($mutability)? replace,
+                        ref $($mutability)? drop,
+                        ref $($mutability)? async_fut,
                     } => self.visit_drop(place, target, unwind, replace),
-                    TerminatorKind::Call {
-                        func,
-                        args,
+                    & $($mutability)? Call {
+                        ref $($mutability)? func,
+                        ref $($mutability)? args,
                         ref $($mutability)? destination,
                         ref $($mutability)? target,
                         ref $($mutability)? unwind,
@@ -285,36 +287,36 @@ macro_rules! make_terminator_kind_visitor {
                         target,
                         unwind,
                         call_source,
-                        *fn_span,
-                    ),
-                    TerminatorKind::TailCall {
-                        func,
-                        args,
                         fn_span,
-                    } => self.visit_tail_call(func, args, *fn_span),
-                    TerminatorKind::Assert {
+                    ),
+                    & $($mutability)? TailCall {
+                        ref $($mutability)? func,
+                        ref $($mutability)? args,
+                        fn_span,
+                    } => self.visit_tail_call(func, args, fn_span),
+                    & $($mutability)? Assert {
                         ref $($mutability)? cond,
                         ref $($mutability)? expected,
                         ref $($mutability)? msg,
                         ref $($mutability)? target,
                         ref $($mutability)? unwind,
                     } => self.visit_assert(cond, expected, msg, target, unwind),
-                    TerminatorKind::Yield {
+                    & $($mutability)? Yield {
                         ref $($mutability)? value,
                         ref $($mutability)? resume,
                         ref $($mutability)? resume_arg,
                         ref $($mutability)? drop,
                     } => self.visit_yield(value, resume, resume_arg, drop),
-                    TerminatorKind::CoroutineDrop => self.visit_coroutine_drop(),
-                    TerminatorKind::FalseEdge {
+                    & $($mutability)? CoroutineDrop => self.visit_coroutine_drop(),
+                    & $($mutability)? FalseEdge {
                         ref $($mutability)? real_target,
                         ref $($mutability)? imaginary_target,
                     } => self.visit_false_edge(real_target, imaginary_target),
-                    TerminatorKind::FalseUnwind {
+                    & $($mutability)? FalseUnwind {
                         ref $($mutability)? real_target,
                         ref $($mutability)? unwind,
                     } => self.visit_false_unwind(real_target, unwind),
-                    TerminatorKind::InlineAsm {
+                    & $($mutability)? InlineAsm {
                         ref $($mutability)? asm_macro,
                         ref template,
                         ref $($mutability)? operands,
