@@ -152,7 +152,7 @@ fn find_inheritable_first_filtered<'tcx>(
 /// If the attribute is not found, or the argument passed to the attribute is invalid
 /// returns `None`.
 fn opt_instrument_attr<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<bool> {
-    use rustc_hir::{AttrArgs, AttrKind};
+    use rustc_hir::{AttrArgs, Attribute};
     // Avoid possibly problematic const items.
     // See https://github.com/rust-lang/rust/issues/128145
     if matches!(
@@ -162,13 +162,13 @@ fn opt_instrument_attr<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> Option<bool> {
         return None;
     }
 
-    tcx.get_attrs_by_path(def_id, &[
-        Symbol::intern(TOOL_NAME),
-        Symbol::intern(ATTR_NAME),
-    ])
+    tcx.get_attrs_by_path(
+        def_id,
+        &[Symbol::intern(TOOL_NAME), Symbol::intern(ATTR_NAME)],
+    )
     .next()
-    .and_then(|attr| match &attr.kind {
-        AttrKind::Normal(attr) => Some(attr),
+    .and_then(|attr| match attr {
+        Attribute::Unparsed(attr) => Some(attr),
         _ => None,
     })
     .and_then(|attr| match &attr.args {
