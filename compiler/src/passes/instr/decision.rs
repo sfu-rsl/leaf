@@ -214,21 +214,9 @@ fn is_lang_start_item(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
 fn is_drop_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     let mut drop_fn_ids = {
         use rustc_hir::LanguageItems as Items;
-        [
-            Items::drop_in_place_fn,
-            Items::async_drop_in_place_fn,
-            Items::surface_async_drop_in_place_fn,
-            Items::async_drop_surface_drop_in_place_fn,
-            Items::async_drop_slice_fn,
-            Items::async_drop_chain_fn,
-            Items::async_drop_noop_fn,
-            Items::async_drop_deferred_drop_in_place_fn,
-            Items::async_drop_fuse_fn,
-            Items::async_drop_defer_fn,
-            Items::async_drop_either_fn,
-        ]
-        .iter()
-        .filter_map(|item| item(tcx.lang_items()))
+        [Items::drop_in_place_fn, Items::async_drop_in_place_fn]
+            .iter()
+            .filter_map(|item| item(tcx.lang_items()))
     };
     drop_fn_ids.any(|id| id == def_id)
         || tcx
