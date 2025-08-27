@@ -1,4 +1,4 @@
-#![cfg_attr(not(core_build), feature(concat_idents))]
+#![cfg_attr(not(core_build), feature(macro_metavar_expr_concat))]
 #![cfg_attr(not(core_build), feature(const_eval_select))]
 #![cfg_attr(not(core_build), feature(core_intrinsics))]
 #![cfg_attr(not(core_build), feature(fn_ptr_trait))]

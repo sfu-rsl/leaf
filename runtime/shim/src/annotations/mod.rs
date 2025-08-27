@@ -13,7 +13,6 @@ pub trait Symbolizable: Sized {
 
 #[leaf_attr::instrument(false)]
 mod implementation {
-    use core::concat_idents;
     use core::mem::size_of;
 
     use super::super::pri::{
@@ -28,7 +27,7 @@ mod implementation {
                 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
                 impl Symbolizable for $ty {
                     fn symbolize(&self) {
-                        let operand_ref = concat_idents!(new_sym_value_, $ty)(*self);
+                        let operand_ref = ${concat(new_sym_value_, $ty)}(*self);
                         override_return_value(operand_ref);
                     }
                 }
@@ -65,7 +64,7 @@ mod implementation {
                 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
                 impl Symbolizable for $ty {
                     fn symbolize(&self) {
-                        let bit_rep = concat_idents!($ty, _to_bits)(*self);
+                        let bit_rep = ${concat($ty, _to_bits)}(*self);
                         let sbits = <$ty>::MANTISSA_DIGITS as u64;
                         let ebits = (<$ty>::MAX_EXP - <$ty>::MIN_EXP + 1) as u64;
                         let operand_ref = new_sym_value_float(bit_rep, ebits, sbits);
