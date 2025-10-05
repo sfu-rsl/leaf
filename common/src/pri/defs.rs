@@ -169,7 +169,6 @@ pub mod macros {
           { fn assign_cast_to_another_ptr(id: AssignmentId, dest: PlaceRef, operand: OperandRef, dst_type_id: ($type_id_ty)) }
 
           { fn assign_cast_unsize(id: AssignmentId, dest: PlaceRef, operand: OperandRef) }
-          { fn assign_cast_sized_dyn(id: AssignmentId, dest: PlaceRef, operand: OperandRef) }
           #[allow(unused_parens)]
           { fn assign_cast_transmute(id: AssignmentId, dest: PlaceRef, operand: OperandRef, dst_type_id: ($type_id_ty)) }
 
@@ -632,8 +631,6 @@ pub mod macros {
                 #[allow(unused_parens)]fn assign_cast_to_another_ptr(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
             }$modifier!{
                 fn assign_cast_unsize(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
-            }$modifier!{
-                fn assign_cast_sized_dyn(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
             }$modifier!{
                 #[allow(unused_parens)]fn assign_cast_transmute(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
             }$modifier!{

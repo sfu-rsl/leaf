@@ -335,11 +335,6 @@ impl ProgramRuntimeInterface for BasicPri {
             h.cast_of(take_back_operand(operand), CastKind::PointerUnsize)
         })
     }
-    fn assign_cast_sized_dyn(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
-        assign_to(id, dest, |h| {
-            h.cast_of(take_back_operand(operand), CastKind::SizedDynamize)
-        })
-    }
     fn assign_cast_transmute(
         id: AssignmentId,
         dest: PlaceRef,

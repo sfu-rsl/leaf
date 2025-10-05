@@ -161,6 +161,6 @@ where
     impl_cast_expr_method!(to_int + ty: Self::IntType);
     impl_cast_expr_method!(to_float + ty: Self::FloatType);
     impl_cast_expr_method!(to_ptr + ty: Self::PtrType);
-    impl_cast_expr_method!(ptr_unsize expose_prov sized_dyn);
+    impl_cast_expr_method!(ptr_unsize expose_prov);
     impl_cast_expr_method!(transmute + ty: Self::GenericType);
 }

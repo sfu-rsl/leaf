@@ -218,16 +218,15 @@ macro_rules! impl_general_cast_through_singulars {
             >,
             metadata: Self::Metadata<'a>,
         ) -> Self::Expr<'a> {
-            use $crate::abs::CastKind::*;
+            use $crate::abs::CastKind;
             match target {
-                ToChar => self.to_char(operand, metadata),
-                ToInt(ty) => self.to_int(operand, ty, metadata),
-                ToFloat(ty) => self.to_float(operand, ty, metadata),
-                ToPointer(ty) => self.to_ptr(operand, ty, metadata),
-                PointerUnsize => self.ptr_unsize(operand, metadata),
-                ExposeProvenance => self.expose_prov(operand, metadata),
-                SizedDynamize => self.sized_dyn(operand, metadata),
-                Transmute(ty) => self.transmute(operand, ty, metadata),
+                CastKind::ToChar => self.to_char(operand, metadata),
+                CastKind::ToInt(ty) => self.to_int(operand, ty, metadata),
+                CastKind::ToFloat(ty) => self.to_float(operand, ty, metadata),
+                CastKind::ToPointer(ty) => self.to_ptr(operand, ty, metadata),
+                CastKind::PointerUnsize => self.ptr_unsize(operand, metadata),
+                CastKind::ExposeProvenance => self.expose_prov(operand, metadata),
+                CastKind::Transmute(ty) => self.transmute(operand, ty, metadata),
             }
         }
     };
@@ -256,7 +255,6 @@ macro_rules! impl_singular_casts_through_general {
             (to_ptr + ty: Self::PtrType = $crate::abs::CastKind::ToPointer(ty))
             (ptr_unsize = $crate::abs::CastKind::PointerUnsize)
             (expose_prov = $crate::abs::CastKind::ExposeProvenance)
-            (sized_dyn = $crate::abs::CastKind::SizedDynamize)
             (transmute + ty: Self::GenericType = $crate::abs::CastKind::Transmute(ty))
         );
     };

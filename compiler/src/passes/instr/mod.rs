@@ -1002,7 +1002,6 @@ where
                         ));
                         call_adder.to_another_ptr(*ty, *kind)
                     }
-                    DynStar => call_adder.through_sized_dynamization(*ty),
                 }
             }
             PointerExposeProvenance => call_adder.expose_prov(),

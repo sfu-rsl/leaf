@@ -254,7 +254,6 @@ pub(crate) enum CastKind<I = IntType, F = FloatType, P = TypeId, T = TypeId> {
     ToPointer(P),
     PointerUnsize,
     ExposeProvenance,
-    SizedDynamize, // dyn*
     Transmute(T),
 }
 

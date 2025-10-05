@@ -203,6 +203,6 @@ where
     delegate_singular_cast_op!(to_int + ty: Self::IntType);
     delegate_singular_cast_op!(to_float + ty: Self::FloatType);
     delegate_singular_cast_op!(to_ptr + ty: Self::PtrType);
-    delegate_singular_cast_op!(ptr_unsize expose_prov sized_dyn);
+    delegate_singular_cast_op!(ptr_unsize expose_prov);
     delegate_singular_cast_op!(transmute + ty: Self::GenericType);
 }

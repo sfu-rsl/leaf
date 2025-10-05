@@ -221,7 +221,7 @@ pub(crate) trait CastExprBuilder {
     cast_fn_signature!(to_int + ty: Self::IntType);
     cast_fn_signature!(to_float + ty: Self::FloatType);
     cast_fn_signature!(to_ptr + ty: Self::PtrType);
-    cast_fn_signature!(ptr_unsize expose_prov sized_dyn);
+    cast_fn_signature!(ptr_unsize expose_prov);
     cast_fn_signature!(transmute + ty: Self::GenericType);
 }
 

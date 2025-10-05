@@ -141,8 +141,6 @@ pub(crate) trait CastAssigner<'tcx> {
 
     fn through_fn_ptr_coercion(&mut self);
 
-    fn through_sized_dynamization(&mut self, ty: Ty<'tcx>);
-
     fn expose_prov(&mut self);
 
     fn with_exposed_prov(&mut self, ty: Ty<'tcx>);
@@ -1674,10 +1672,6 @@ mod implementation {
             } else {
                 unimplemented!("Function pointer coercion is not supported in this configuration.")
             }
-        }
-
-        fn through_sized_dynamization(&mut self, _ty: Ty<'tcx>) {
-            self.add_bb_for_cast_assign_call(sym::assign_cast_sized_dyn);
         }
 
         fn expose_prov(&mut self) {

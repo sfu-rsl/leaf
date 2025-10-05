@@ -183,7 +183,6 @@ where
             CastKind::ToPointer(ty) => write!(f, "as {}", ty),
             CastKind::PointerUnsize => write!(f, "unsize"),
             CastKind::ExposeProvenance => write!(f, "expose_prov"),
-            CastKind::SizedDynamize => write!(f, "as dyn*"),
             CastKind::Transmute(ty) => write!(f, "as {}", ty),
         }
     }

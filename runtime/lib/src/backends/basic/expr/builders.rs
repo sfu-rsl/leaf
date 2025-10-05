@@ -1277,14 +1277,6 @@ mod core {
             todo!("#331: Add support for casting symbolic pointers")
         }
 
-        fn sized_dyn<'a, 'b>(
-            &mut self,
-            _operand: Self::ExprRef<'a>,
-            _metadata: Self::Metadata<'b>,
-        ) -> Self::Expr<'a> {
-            todo!("#331: Add support for casting symbolic pointers")
-        }
-
         fn transmute<'a, 'b>(
             &mut self,
             operand: Self::ExprRef<'a>,
