@@ -129,6 +129,11 @@ pub(crate) trait PlaceProjectionBuilder: Sized {
     }
 
     #[inline]
+    fn unwrap_unsafe_binder(self) -> Self::Result {
+        self.by(Projection::UnwrapUnsafeBinder)
+    }
+
+    #[inline]
     fn subtype(self) -> Self::Result {
         self.by(Projection::Subtype)
     }
@@ -202,6 +207,8 @@ pub(crate) trait AssignmentHandler: Sized {
     fn variant_index(self, variant_index: VariantIndex);
 
     fn shallow_init_box_from(self, value: Self::Operand);
+
+    fn wrap_in_unsafe_binder(self, value: Self::Operand);
 
     fn use_if_eq(self, current: Self::Operand, expected: Self::Operand, then: Self::Operand);
 

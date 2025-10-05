@@ -286,6 +286,11 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
         self.cast_of(value, CastKind::Transmute(dst_ty_id));
     }
 
+    fn wrap_in_unsafe_binder(self, value: Self::Operand) {
+        let dst_ty_id = self.dest.type_id();
+        self.cast_of(value, CastKind::Transmute(dst_ty_id));
+    }
+
     fn use_if_eq(mut self, val: Self::Operand, current: Self::Operand, expected: Self::Operand) {
         let are_eq = self.expr_builder().eq((current.clone(), expected.clone()));
         let are_eq = if !are_eq.is_symbolic() {

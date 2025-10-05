@@ -97,7 +97,9 @@ pub(crate) enum Projection<I = Local> {
         from_end: bool,
     },
     Downcast(VariantIndex),
+    // These may be removed as they are not expected to have effects/appear at runtime.
     OpaqueCast,
+    UnwrapUnsafeBinder,
     Subtype,
 }
 
@@ -120,6 +122,7 @@ impl<I> Projection<I> {
             Subslice { from, to, from_end } => Subslice { from, to, from_end },
             Downcast(index) => Downcast(index),
             OpaqueCast => OpaqueCast,
+            UnwrapUnsafeBinder => UnwrapUnsafeBinder,
             Subtype => Subtype,
         }
     }

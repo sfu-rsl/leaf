@@ -113,6 +113,7 @@ pub mod macros {
           { fn ref_place_subslice(place: PlaceRef, from: u64, to: u64, from_end: bool) }
           { fn ref_place_downcast(place: PlaceRef, variant_index: u32 /*, type */) }
           { fn ref_place_opaque_cast(place: PlaceRef /*, type */) }
+          { fn ref_place_unwrap_unsafe_binder(place: PlaceRef /*, type */) }
           { fn ref_place_subtype(place: PlaceRef /*, type */) }
 
           { fn set_place_address(place: PlaceRef, raw_ptr: RawAddress) }
@@ -208,6 +209,8 @@ pub mod macros {
 
           #[allow(unused_parens)]
           { fn assign_shallow_init_box(id: AssignmentId, dest: PlaceRef, operand: OperandRef, boxed_type_id: ($type_id_ty)) }
+          #[allow(unused_parens)]
+          { fn assign_wrap_unsafe_binder(id: AssignmentId, dest: PlaceRef, operand: OperandRef, binder_type_id: ($type_id_ty)) }
 
           // ----- Memory -----
           { fn mark_storage_dead(place: PlaceRef) }
@@ -560,6 +563,8 @@ pub mod macros {
             }$modifier!{
                 fn ref_place_opaque_cast(place:PlaceRef);
             }$modifier!{
+                fn ref_place_unwrap_unsafe_binder(place:PlaceRef);
+            }$modifier!{
                 fn ref_place_subtype(place:PlaceRef);
             }$modifier!{
                 fn set_place_address(place:PlaceRef,raw_ptr:RawAddress);
@@ -661,6 +666,8 @@ pub mod macros {
                 fn assign_aggregate_raw_ptr(id:AssignmentId,dest:PlaceRef,data_ptr:OperandRef,metadata:OperandRef,is_mutable:bool);
             }$modifier!{
                 #[allow(unused_parens)]fn assign_shallow_init_box(id:AssignmentId,dest:PlaceRef,operand:OperandRef,boxed_type_id:($type_id_ty));
+            }$modifier!{
+                #[allow(unused_parens)]fn assign_wrap_unsafe_binder(id:AssignmentId,dest:PlaceRef,operand:OperandRef,binder_type_id:($type_id_ty));
             }$modifier!{
                 fn mark_storage_dead(place:PlaceRef);
             }$modifier!{

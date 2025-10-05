@@ -110,6 +110,10 @@ impl ProgramRuntimeInterface for BasicPri {
         mut_place_info(place, |p, place| p.project_on(place).opaque_cast())
     }
     #[tracing::instrument(target = "pri::place", level = "debug", ret)]
+    fn ref_place_unwrap_unsafe_binder(place: PlaceRef /*, type */) {
+        mut_place_info(place, |p, place| p.project_on(place).unwrap_unsafe_binder())
+    }
+    #[tracing::instrument(target = "pri::place", level = "debug", ret)]
     fn ref_place_subtype(place: PlaceRef /*, type */) {
         mut_place_info(place, |p, place| p.project_on(place).subtype())
     }
@@ -460,6 +464,17 @@ impl ProgramRuntimeInterface for BasicPri {
         dest: PlaceRef,
         operand: OperandRef,
         _boxed_type_id: Self::TypeId,
+    ) {
+        assign_to(id, dest, |h| {
+            h.shallow_init_box_from(take_back_operand(operand))
+        })
+    }
+
+    fn assign_wrap_unsafe_binder(
+        id: AssignmentId,
+        dest: PlaceRef,
+        operand: OperandRef,
+        _binder_type_id: Self::TypeId,
     ) {
         assign_to(id, dest, |h| {
             h.shallow_init_box_from(take_back_operand(operand))

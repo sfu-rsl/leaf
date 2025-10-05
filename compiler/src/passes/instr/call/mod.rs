@@ -128,6 +128,8 @@ pub(crate) trait Assigner<'tcx>: AssignmentInfoProvider<'tcx> {
 
     fn by_shallow_init_box(&mut self, operand: OperandRef, ty: &Ty<'tcx>);
 
+    fn by_wrap_unsafe_binder(&mut self, operand: OperandRef, ty: &Ty<'tcx>);
+
     // Special case for SetDiscriminant StatementType since it is similar to a regular assignment
     fn its_discriminant_to(&mut self, variant_index: &VariantIdx);
 }
@@ -845,6 +847,9 @@ mod implementation {
                     )],
                 ),
                 ProjectionElem::OpaqueCast(_) => (sym::ref_place_opaque_cast, vec![]),
+                ProjectionElem::UnwrapUnsafeBinder(..) => {
+                    (sym::ref_place_unwrap_unsafe_binder, vec![])
+                }
                 ProjectionElem::Subtype(_) => (sym::ref_place_subtype, vec![]),
             };
 
@@ -1505,6 +1510,21 @@ mod implementation {
                 vec![
                 operand::copy_for_local(operand.into()),
                 operand::move_for_local(id_local),
+                ],
+            );
+        }
+
+        fn by_wrap_unsafe_binder(&mut self, operand: OperandRef, ty: &Ty<'tcx>) {
+            let id_local = {
+                let (block, id_local) = self.make_type_id_of_bb(*ty);
+                self.insert_blocks([block]);
+                id_local
+            };
+            self.add_bb_for_assign_call(
+                sym::assign_wrap_unsafe_binder,
+                vec![
+                    operand::copy_for_local(operand.into()),
+                    operand::move_for_local(id_local),
                 ],
             );
         }

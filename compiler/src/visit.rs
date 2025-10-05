@@ -435,6 +435,14 @@ macro_rules! make_rvalue_visitor {
                 Default::default()
             }
 
+            fn visit_wrap_unsafe_binder(
+                &mut self,
+                operand: & $($mutability)? Operand<'tcx>,
+                ty: & $($mutability)? Ty<'tcx>
+            ) -> T {
+                Default::default()
+            }
+
             fn super_rvalue(&mut self, rvalue: & $($mutability)? Rvalue<'tcx>) -> T {
                 match rvalue {
                     Rvalue::Use(operand) => self.visit_use(operand),
@@ -453,6 +461,7 @@ macro_rules! make_rvalue_visitor {
                     Rvalue::Aggregate(kind, operands) => self.visit_aggregate(kind, operands),
                     Rvalue::ShallowInitBox(operand, ty) => self.visit_shallow_init_box(operand, ty),
                     Rvalue::CopyForDeref(place) => self.visit_copy_for_deref(place),
+                    Rvalue::WrapUnsafeBinder(operand, ty) => self.visit_wrap_unsafe_binder(operand, ty),
                 }
             }
         }

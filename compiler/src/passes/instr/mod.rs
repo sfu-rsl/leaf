@@ -1096,6 +1096,11 @@ where
         let operand = Operand::Copy(*place);
         self.visit_use(&operand)
     }
+
+    fn visit_wrap_unsafe_binder(&mut self, operand: &Operand<'tcx>, ty: &Ty<'tcx>) -> () {
+        let operand_ref = self.call_adder.reference_operand(operand);
+        self.call_adder.by_wrap_unsafe_binder(operand_ref, ty);
+    }
 }
 
 impl<'tcx, C> LeafAssignmentVisitor<C>
