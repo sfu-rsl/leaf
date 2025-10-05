@@ -256,6 +256,8 @@ pub mod macros {
               required: OperandRef,
               found: OperandRef,
           ) }
+          { fn assert_null_ptr_deref(info: AssertionInfo) }
+          { fn assert_invalid_enum_ctn(info: AssertionInfo, discr: OperandRef) }
 
           // ----- Calling -----
           #[allow(unused_parens)]
@@ -694,6 +696,10 @@ pub mod macros {
                 fn assert_rem_by_zero(info:AssertionInfo,operand:OperandRef);
             }$modifier!{
                 fn assert_misaligned_ptr_deref(info:AssertionInfo,required:OperandRef,found:OperandRef,);
+            }$modifier!{
+                fn assert_null_ptr_deref(info:AssertionInfo);
+            }$modifier!{
+                fn assert_invalid_enum_ctn(info:AssertionInfo,discr:OperandRef);
             }$modifier!{
                 #[allow(unused_parens)]fn before_call_func(def:CalleeDef,call_site:BasicBlockIndex,func:OperandRef,args:($slice_ty!(OperandRef)),are_args_tupled:bool);
             }$modifier!{

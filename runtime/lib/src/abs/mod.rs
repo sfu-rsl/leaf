@@ -144,6 +144,8 @@ pub enum AssertKind<Operand> {
     ResumedAfterReturn(Operand), // NOTE: TODO: check if these exist in HIR only
     ResumedAfterPanic(Operand),  // NOTE: TODO: check if these exist in HIR only
     MisalignedPointerDereference { required: Operand, found: Operand },
+    NullPointerDereference,
+    InvalidEnumConstruction(Operand),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, derive_more::From)]

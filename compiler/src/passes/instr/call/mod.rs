@@ -2713,7 +2713,9 @@ mod implementation {
                         vec![operand::copy_for_local(op_ref.into())],
                     ))
                 }
-                AssertKind::ResumedAfterReturn(..) | AssertKind::ResumedAfterPanic(..) => {
+                AssertKind::ResumedAfterReturn(..)
+                | AssertKind::ResumedAfterPanic(..)
+                | AssertKind::ResumedAfterDrop(..) => {
                     /* NOTE: These two assertions look to be used to make sure
                      * that the state machine is correctly generated.
                      * When they are reached, an illegal has happened in the state machine.
@@ -2732,6 +2734,13 @@ mod implementation {
                         ],
                     ))
                 }
+                AssertKind::NullPointerDereference => Some((sym::assert_null_ptr_deref, vec![])),
+                AssertKind::InvalidEnumConstruction(discr) => {
+                    let discr_ref = self.reference_operand(discr);
+                    Some((
+                        sym::assert_invalid_enum_ctn,
+                        vec![operand::copy_for_local(discr_ref.into())],
+                    ))
                 }
             }
         }

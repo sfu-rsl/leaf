@@ -570,6 +570,14 @@ impl ProgramRuntimeInterface for BasicPri {
         };
         Self::assert(info, assert_kind)
     }
+    fn assert_null_ptr_deref(info: AssertionInfo) {
+        let assert_kind = AssertKind::NullPointerDereference;
+        Self::assert(info, assert_kind)
+    }
+    fn assert_invalid_enum_ctn(info: AssertionInfo, discr: OperandRef) {
+        let assert_kind = AssertKind::InvalidEnumConstruction(take_back_operand(discr));
+        Self::assert(info, assert_kind)
+    }
 
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn before_call_func(
