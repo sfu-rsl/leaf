@@ -442,7 +442,7 @@ impl<'tcx> BodyInstrumentationUnit<'tcx> {
             
             let mut original_block_target = None;
             terminator.successors_mut(|t| {
-                if !original_block_target.is_none() {
+                if original_block_target.is_none() {
                     original_block_target = Some(*t);
                     *t = NEXT_BLOCK;
                 } else {
@@ -451,7 +451,7 @@ impl<'tcx> BodyInstrumentationUnit<'tcx> {
                         && *other_target == block
                     {
                     } else {
-                                panic!(
+                        panic!(
                         concat!(
                             "Insertion after a block with unexpected with multiple successors. ",
                             "Basic Block: {:?}",

@@ -13,7 +13,12 @@ pub(crate) use identity;
 
 #[inline(always)]
 pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
-    TypeId::new(core::intrinsics::type_id::<T>()).unwrap()
+    unsafe {
+        TypeId::new(core::intrinsics::transmute(
+            const { core::any::TypeId::of::<T>() },
+        ))
+        .unwrap_unchecked()
+    }
 }
 
 #[cfg(feature = "std")]
