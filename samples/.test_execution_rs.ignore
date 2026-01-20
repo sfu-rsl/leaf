@@ -1,4 +1,5 @@
 branching/assert/misaligned.rs
+branching/assert/null_ptr_deref.rs
 casting/dyn_star/symbolic.rs
 casting/dyn_star/symbolic_inner.rs
 casting/pointer/expose/sym_ptr_to_usize.rs
