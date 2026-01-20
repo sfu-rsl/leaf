@@ -12,6 +12,8 @@ use crate::backends::basic as backend;
 use backend::{PlaceValueRef, expr::place::DeterPlaceValueRef};
 
 mod data_types {
+    use common::log_error;
+
     use super::*;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,7 +39,10 @@ mod data_types {
     impl PlaceMetadata {
         #[inline]
         pub(crate) fn address(&self) -> RawAddress {
-            self.address.unwrap().as_ptr()
+            self.address.unwrap_or_else(||{
+                log_error!("Presumably an unchecked null pointer dereference is happening in the program. Runtime will terminate the execution.");
+                panic!("Address of place is not available.")
+            }).as_ptr()
         }
 
         #[inline]
