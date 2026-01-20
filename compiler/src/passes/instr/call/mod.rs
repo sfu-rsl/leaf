@@ -3171,9 +3171,7 @@ mod implementation {
                 // Finding `resume` method in `Coroutine` trait.
                 let future_trait_fn_id = tcx.lang_items().future_poll_fn().unwrap();
 
-                // NOTE: Currently, either zero or one parameters are supported for coroutines.
-                let inputs = args.sig().resume_ty;
-                Ty::new_fn_def(tcx, future_trait_fn_id, [ty, inputs])
+                Ty::new_fn_def(tcx, future_trait_fn_id, [ty])
             }
 
             /// Returns the corresponding FnDef type of calling a function through Fn* traits.
