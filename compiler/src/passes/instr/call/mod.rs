@@ -7,7 +7,7 @@ use rustc_abi::{FieldIdx, VariantIdx};
 use rustc_middle::{
     mir::{
         BasicBlock, BinOp, Body, CastKind, ConstOperand, Local, Operand, Place, ProjectionElem,
-        Statement, UnOp,
+        RuntimeChecks, Statement, UnOp,
     },
     ty::{Const, GenericArg, Ty, TyCtxt},
 };
@@ -98,8 +98,6 @@ pub(crate) trait Assigner<'tcx>: AssignmentInfoProvider<'tcx> {
     fn by_binary_op(&mut self, operator: &BinOp, first: OperandRef, second: OperandRef);
 
     fn by_unary_op(&mut self, operator: &UnOp, operand: OperandRef);
-
-    fn by_nullary_op(&mut self);
 
     fn by_discriminant(&mut self, place: PlaceRef);
 
@@ -1000,6 +998,7 @@ mod implementation {
                 Operand::Copy(place) => self.internal_reference_place_operand(place, true),
                 Operand::Move(place) => self.internal_reference_place_operand(place, false),
                 Operand::Constant(constant) => self.internal_reference_const_operand(constant),
+                Operand::RuntimeChecks(checks) => self.internal_reference_runtime_checks(checks),
             }
         }
 
@@ -1088,6 +1087,18 @@ mod implementation {
                     ty
                 )
             }
+        }
+
+        fn internal_reference_runtime_checks(
+            &mut self,
+            checks: &RuntimeChecks,
+        ) -> BlocksAndResult<'tcx> {
+            let value = checks.value(self.tcx().sess);
+            self.make_bb_for_operand_ref_call(
+                sym::ref_operand_const_bool,
+                vec![operand::const_from_bool(self.tcx(), value)],
+            )
+            .into()
         }
 
         fn internal_reference_const_primitive(
@@ -1416,14 +1427,6 @@ mod implementation {
                     operand::copy_for_local(operand.into()),
                 ],
             )
-        }
-
-        fn by_nullary_op(&mut self) {
-            if cfg!(feature = "abs_concrete") {
-                self.to_some_concrete()
-            } else {
-                unimplemented!()
-            }
         }
 
         fn by_discriminant(&mut self, place: PlaceRef) {
@@ -3686,6 +3689,9 @@ mod implementation {
                         );
                         block.statements.push(receiver_assignment);
                         (block, local)
+                    }
+                    Operand::RuntimeChecks(..) => {
+                        unreachable!("Unexpected runtime checks operand as receiver.")
                     }
                 };
 

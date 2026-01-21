@@ -5,8 +5,8 @@ use rustc_middle::{
     mir::{
         AggregateKind, AssertMessage, BackwardIncompatibleDropReason, BasicBlock, BinOp,
         BorrowKind, CallSource, CastKind, FakeReadCause, InlineAsmMacro, InlineAsmOperand, Local,
-        NonDivergingIntrinsic, NullOp, Operand, Place, RawPtrKind, RetagKind, Rvalue,
-        StatementKind, SwitchTargets, TerminatorKind, UnOp, UnwindAction, UnwindTerminateReason,
+        NonDivergingIntrinsic, Operand, Place, RawPtrKind, RetagKind, Rvalue, StatementKind,
+        SwitchTargets, TerminatorKind, UnOp, UnwindAction, UnwindTerminateReason,
         UserTypeProjection, coverage::CoverageKind,
     },
     ty::{Const, Region, Ty, Variance},
@@ -403,10 +403,6 @@ macro_rules! make_rvalue_visitor {
                 Default::default()
             }
 
-            fn visit_nullary_op(&mut self, op: & $($mutability)? NullOp, ty: & $($mutability)? Ty<'tcx>) -> T {
-                Default::default()
-            }
-
             fn visit_unary_op(&mut self, op: & $($mutability)? UnOp, operand: & $($mutability)? Operand<'tcx>) -> T {
                 Default::default()
             }
@@ -455,7 +451,6 @@ macro_rules! make_rvalue_visitor {
                     Rvalue::Len(place) => self.visit_len(place),
                     Rvalue::Cast(kind, operand, ty) => self.visit_cast(kind, operand, ty),
                     Rvalue::BinaryOp(op, operands) => self.visit_binary_op(op, operands),
-                    Rvalue::NullaryOp(op, ty) => self.visit_nullary_op(op, ty),
                     Rvalue::UnaryOp(op, operand) => self.visit_unary_op(op, operand),
                     Rvalue::Discriminant(place) => self.visit_discriminant(place),
                     Rvalue::Aggregate(kind, operands) => self.visit_aggregate(kind, operands),

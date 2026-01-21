@@ -1016,10 +1016,6 @@ where
         self.visit_binary_op_general(op, operands)
     }
 
-    fn visit_nullary_op(&mut self, _op: &rustc_middle::mir::NullOp, _ty: &Ty<'tcx>) {
-        self.call_adder.by_nullary_op();
-    }
-
     fn visit_unary_op(&mut self, op: &rustc_middle::mir::UnOp, operand: &Operand<'tcx>) {
         let operand_ref = self.call_adder.reference_operand(operand);
         self.call_adder.by_unary_op(op, operand_ref)
