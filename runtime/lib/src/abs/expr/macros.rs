@@ -227,6 +227,7 @@ macro_rules! impl_general_cast_through_singulars {
                 CastKind::PointerUnsize => self.ptr_unsize(operand, metadata),
                 CastKind::ExposeProvenance => self.expose_prov(operand, metadata),
                 CastKind::Transmute(ty) => self.transmute(operand, ty, metadata),
+                CastKind::Subtype(ty) => self.subtype(operand, ty, metadata),
             }
         }
     };
@@ -256,6 +257,7 @@ macro_rules! impl_singular_casts_through_general {
             (ptr_unsize = $crate::abs::CastKind::PointerUnsize)
             (expose_prov = $crate::abs::CastKind::ExposeProvenance)
             (transmute + ty: Self::GenericType = $crate::abs::CastKind::Transmute(ty))
+            (subtype + ty: Self::GenericType = $crate::abs::CastKind::Subtype(ty))
         );
     };
 }

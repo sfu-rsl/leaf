@@ -100,7 +100,6 @@ pub(crate) enum Projection<I = Local> {
     // These may be removed as they are not expected to have effects/appear at runtime.
     OpaqueCast,
     UnwrapUnsafeBinder,
-    Subtype,
 }
 
 impl<I> Projection<I> {
@@ -123,7 +122,6 @@ impl<I> Projection<I> {
             Downcast(index) => Downcast(index),
             OpaqueCast => OpaqueCast,
             UnwrapUnsafeBinder => UnwrapUnsafeBinder,
-            Subtype => Subtype,
         }
     }
 }

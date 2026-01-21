@@ -1008,6 +1008,7 @@ where
             PointerWithExposedProvenance => call_adder.with_exposed_prov(*ty),
             PtrToPtr | FnPtrToPtr => call_adder.to_another_ptr(*ty, *kind),
             Transmute => call_adder.transmuted(*ty),
+            Subtype => call_adder.subtyped(*ty),
         }
     }
 

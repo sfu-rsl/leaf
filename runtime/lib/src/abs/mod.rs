@@ -257,6 +257,7 @@ pub(crate) enum CastKind<I = IntType, F = FloatType, P = TypeId, T = TypeId> {
     PointerUnsize,
     ExposeProvenance,
     Transmute(T),
+    Subtype(T),
 }
 
 impl TryFrom<CastKind> for ValueType {

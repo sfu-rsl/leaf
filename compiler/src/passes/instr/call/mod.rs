@@ -150,6 +150,8 @@ pub(crate) trait CastAssigner<'tcx> {
     fn to_another_ptr(&mut self, ty: Ty<'tcx>, kind: CastKind);
 
     fn transmuted(&mut self, ty: Ty<'tcx>);
+
+    fn subtyped(&mut self, ty: Ty<'tcx>);
 }
 
 pub(crate) trait StorageMarker {
@@ -850,7 +852,6 @@ mod implementation {
                 ProjectionElem::UnwrapUnsafeBinder(..) => {
                     (sym::ref_place_unwrap_unsafe_binder, vec![])
                 }
-                ProjectionElem::Subtype(_) => (sym::ref_place_subtype, vec![]),
             };
 
             new_blocks.push(
@@ -1723,6 +1724,18 @@ mod implementation {
             };
             self.add_bb_for_cast_assign_call_with_args(
                 sym::assign_cast_transmute,
+                vec![operand::move_for_local(id_local)],
+            )
+        }
+
+        fn subtyped(&mut self, ty: Ty<'tcx>) {
+            let id_local = {
+                let (block, id_local) = self.make_type_id_of_bb(ty);
+                self.insert_blocks([block]);
+                id_local
+            };
+            self.add_bb_for_cast_assign_call_with_args(
+                sym::assign_cast_subtype,
                 vec![operand::move_for_local(id_local)],
             )
         }

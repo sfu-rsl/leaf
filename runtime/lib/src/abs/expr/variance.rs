@@ -205,4 +205,5 @@ where
     delegate_singular_cast_op!(to_ptr + ty: Self::PtrType);
     delegate_singular_cast_op!(ptr_unsize expose_prov);
     delegate_singular_cast_op!(transmute + ty: Self::GenericType);
+    delegate_singular_cast_op!(subtype + ty: Self::GenericType);
 }

@@ -114,7 +114,6 @@ pub mod macros {
           { fn ref_place_downcast(place: PlaceRef, variant_index: u32 /*, type */) }
           { fn ref_place_opaque_cast(place: PlaceRef /*, type */) }
           { fn ref_place_unwrap_unsafe_binder(place: PlaceRef /*, type */) }
-          { fn ref_place_subtype(place: PlaceRef /*, type */) }
 
           { fn set_place_address(place: PlaceRef, raw_ptr: RawAddress) }
           #[allow(unused_parens)]
@@ -172,6 +171,8 @@ pub mod macros {
           { fn assign_cast_unsize(id: AssignmentId, dest: PlaceRef, operand: OperandRef) }
           #[allow(unused_parens)]
           { fn assign_cast_transmute(id: AssignmentId, dest: PlaceRef, operand: OperandRef, dst_type_id: ($type_id_ty)) }
+          #[allow(unused_parens)]
+          { fn assign_cast_subtype(id: AssignmentId, dest: PlaceRef, operand: OperandRef, dst_type_id: ($type_id_ty)) }
 
           #[allow(unused_parens)]
           { fn assign_binary_op(id: AssignmentId,
@@ -567,8 +568,6 @@ pub mod macros {
             }$modifier!{
                 fn ref_place_unwrap_unsafe_binder(place:PlaceRef);
             }$modifier!{
-                fn ref_place_subtype(place:PlaceRef);
-            }$modifier!{
                 fn set_place_address(place:PlaceRef,raw_ptr:RawAddress);
             }$modifier!{
                 #[allow(unused_parens)]fn set_place_type_id(place:PlaceRef,type_id:($type_id_ty));
@@ -640,6 +639,8 @@ pub mod macros {
                 fn assign_cast_unsize(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
             }$modifier!{
                 #[allow(unused_parens)]fn assign_cast_transmute(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
+            }$modifier!{
+                #[allow(unused_parens)]fn assign_cast_subtype(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
             }$modifier!{
                 #[allow(unused_parens)]fn assign_binary_op(id:AssignmentId,dest:PlaceRef,operator:($binary_op_ty),first:OperandRef,second:OperandRef,);
             }$modifier!{

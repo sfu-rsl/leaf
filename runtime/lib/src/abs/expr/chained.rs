@@ -219,4 +219,5 @@ where
     impl_cast_expr_method!(to_ptr + ty: Self::PtrType);
     impl_cast_expr_method!(ptr_unsize expose_prov);
     impl_cast_expr_method!(transmute + ty: Self::GenericType);
+    impl_cast_expr_method!(subtype + ty: Self::GenericType);
 }

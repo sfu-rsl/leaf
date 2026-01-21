@@ -1285,6 +1285,15 @@ mod core {
         ) -> Self::Expr<'a> {
             self.trans(operand, metadata)
         }
+
+        fn subtype<'a, 'b>(
+            &mut self,
+            operand: Self::ExprRef<'a>,
+            ty: Self::GenericType,
+            metadata: Self::Metadata<'b>,
+        ) -> Self::Expr<'a> {
+            self.transmute(operand, ty, metadata)
+        }
     }
 
     impl CoreBuilder {

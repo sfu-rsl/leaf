@@ -132,11 +132,6 @@ pub(crate) trait PlaceProjectionBuilder: Sized {
     fn unwrap_unsafe_binder(self) -> Self::Result {
         self.by(Projection::UnwrapUnsafeBinder)
     }
-
-    #[inline]
-    fn subtype(self) -> Self::Result {
-        self.by(Projection::Subtype)
-    }
 }
 
 pub(crate) trait OperandHandler {

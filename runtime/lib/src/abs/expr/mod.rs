@@ -223,6 +223,7 @@ pub(crate) trait CastExprBuilder {
     cast_fn_signature!(to_ptr + ty: Self::PtrType);
     cast_fn_signature!(ptr_unsize expose_prov);
     cast_fn_signature!(transmute + ty: Self::GenericType);
+    cast_fn_signature!(subtype + ty: Self::GenericType);
 }
 
 pub(crate) use {
