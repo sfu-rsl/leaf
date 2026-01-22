@@ -191,9 +191,9 @@ fn visit_body<'tcx>(
                     | Coroutine(def_id, generic_args)
                     | CoroutineClosure(def_id, generic_args) => {
                         let dbg = CallDebugInfo {
-                            location: tcx.sess.source_map().span_to_string(
+                            location: tcx.sess.source_map().span_to_short_string(
                                 *fn_span,
-                                rustc_span::FileNameDisplayPreference::Short,
+                                rustc_span::RemapPathScopeComponents::DEBUGINFO,
                             ),
                         };
                         insert_to_calls(*def_id, generic_args, dbg);

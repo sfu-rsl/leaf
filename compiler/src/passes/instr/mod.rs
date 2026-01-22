@@ -733,8 +733,8 @@ where
                         .const_at(at)
                         .to_value()
                         .valtree
-                        .unwrap_branch()[0]
-                        .unwrap_leaf()
+                        .to_branch()[0]
+                        .to_leaf()
                         .to_atomic_ordering()
                 };
                 use AtomicIntrinsicKind::*;
@@ -830,7 +830,7 @@ where
         let mut call_adder = self.call_adder.before();
         let ptr_arg = params.args.get(0);
         let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
-        let convert_ordering = |ord: mir_ty::AtomicOrdering| match ordering {
+        let convert_ordering = |ord: mir_ty::AtomicOrdering| match ord {
             mir_ty::AtomicOrdering::Relaxed => common::pri::AtomicOrdering::RELAXED,
             mir_ty::AtomicOrdering::Release => common::pri::AtomicOrdering::RELEASE,
             mir_ty::AtomicOrdering::Acquire => common::pri::AtomicOrdering::ACQUIRE,
@@ -980,7 +980,7 @@ where
                 use mir_ty::adjustment::PointerCoercion::*;
                 match coercion {
                     Unsize => call_adder.through_unsizing(),
-                    ReifyFnPointer | UnsafeFnPointer | ClosureFnPointer(_) => {
+                    ReifyFnPointer(_) | UnsafeFnPointer | ClosureFnPointer(_) => {
                         call_adder.through_fn_ptr_coercion()
                     }
                     MutToConstPointer => call_adder.to_another_ptr(*ty, *kind),
@@ -1180,7 +1180,7 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
             call_adder.store(val_ref, is_ptr_aligned)
         }
         Copy { is_overlapping } => {
-            let dest = if is_volatile { &args[0] } else { &args[1] };
+            let dest: &Spanned<Operand<'tcx>> = if is_volatile { &args[0] } else { &args[1] };
             let dst_ref = call_adder.reference_operand_spanned(dest);
             let count_ref = call_adder.reference_operand_spanned(&args[2]);
             call_adder.copy(
@@ -1197,8 +1197,8 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
             call_adder.set(val_ref, count_ref, &args[2].node);
         }
         Swap => {
-            let second = &args[1];
-            let second_ref = call_adder.reference_operand_spanned(&second);
+            let second: &Spanned<Operand<'tcx>> = &args[1];
+            let second_ref = call_adder.reference_operand_spanned(second);
             call_adder.swap(second_ref, &second.node);
         }
     }

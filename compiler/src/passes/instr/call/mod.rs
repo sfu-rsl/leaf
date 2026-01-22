@@ -2780,7 +2780,7 @@ mod implementation {
              * in the calculation of type id. However, as the types are used for runtime information
              * (like layout) and also in type exportation, we perform erasing, we erase the regions
              * to make sure the same type is used although over-approximated. */
-            let ty = self.context.tcx().erase_regions(ty);
+            let ty = self.context.tcx().erase_and_anonymize_regions(ty);
 
             self.make_bb_for_helper_call_with_all(
                 self.context.pri_helper_funcs().type_id_of,
@@ -3018,7 +3018,7 @@ mod implementation {
                     operand_ty: Ty<'tcx>,
                 ) -> Rvalue<'tcx> {
                     cast_to_coerced_as(
-                        PointerCoercion::ReifyFnPointer,
+                        PointerCoercion::ReifyFnPointer(rustc_hir::Safety::Safe),
                         operand,
                         Ty::new_fn_ptr(tcx, ty::fn_ptr_sig(tcx, operand_ty)),
                     )
@@ -3455,7 +3455,7 @@ mod implementation {
             ) -> Option<(TraitRef<'tcx>, AssocItem)> {
                 let trait_ref = tcx
                     .impl_of_assoc(def_id)
-                    .and_then(|impl_id| tcx.impl_trait_ref(impl_id))
+                    .and_then(|impl_id| tcx.impl_opt_trait_ref(impl_id))
                     .map(|trait_ref| trait_ref.instantiate_identity())
                     .filter(|trait_ref| tcx.is_dyn_compatible(trait_ref.def_id))
                     .filter(|trait_ref| {
@@ -3579,7 +3579,6 @@ mod implementation {
                         )
                     },
                     tcx.lifetimes.re_erased,
-                    mir_ty::DynKind::Dyn,
                 )
             }
 
@@ -3828,7 +3827,7 @@ mod implementation {
             /// Returns the corresponding trait item of a trait method or an implementation of it.
             fn to_trait_associated_item<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> AssocItem {
                 let item = tcx.associated_item(def_id);
-                if let Some(id) = item.trait_item_def_id
+                if let Some(id) = item.trait_item_def_id()
                     && id != def_id
                 {
                     to_trait_associated_item(tcx, id)

@@ -358,16 +358,16 @@ mod implementation {
                     let overrides = global::OVERRIDE_FLAGS.lock().unwrap();
 
                     if overrides.contains(OverrideFlags::OPTIMIZED_MIR) {
-                        ORIGINAL_OPTIMIZED_MIR.set(providers.optimized_mir);
-                        providers.optimized_mir = Self::optimized_mir;
+                        ORIGINAL_OPTIMIZED_MIR.set(providers.queries.optimized_mir);
+                        providers.queries.optimized_mir = Self::optimized_mir;
                     }
                     if overrides.contains(OverrideFlags::EXTERN_OPTIMIZED_MIR) {
                         ORIGINAL_EXTERN_OPTIMIZED_MIR.set(providers.extern_queries.optimized_mir);
                         providers.extern_queries.optimized_mir = Self::extern_optimized_mir;
                     }
                     if overrides.contains(OverrideFlags::MIR_SHIMS) {
-                        ORIGINAL_MIR_SHIMS.set(providers.mir_shims);
-                        providers.mir_shims = Self::mir_shims;
+                        ORIGINAL_MIR_SHIMS.set(providers.queries.mir_shims);
+                        providers.queries.mir_shims = Self::mir_shims;
                     }
                     if overrides.contains(OverrideFlags::SHOULD_CODEGEN) {
                         /* Currently we only do forcing code generation in this override,
@@ -392,14 +392,15 @@ mod implementation {
                     }
 
                     if overrides.contains(OverrideFlags::COLLECT_PARTITION) {
-                        ORIGINAL_COLLECT_PARTITION.set(providers.collect_and_partition_mono_items);
-                        providers.collect_and_partition_mono_items =
+                        ORIGINAL_COLLECT_PARTITION
+                            .set(providers.queries.collect_and_partition_mono_items);
+                        providers.queries.collect_and_partition_mono_items =
                             Self::collect_and_partition_mono_items;
                     }
 
                     {
-                        ORIGINAL_REGISTERED_TOOLS.set(providers.registered_tools);
-                        providers.registered_tools = Self::registered_tools;
+                        ORIGINAL_REGISTERED_TOOLS.set(providers.queries.registered_tools);
+                        providers.queries.registered_tools = Self::registered_tools;
                     }
                 },
             );
@@ -707,6 +708,7 @@ mod implementation {
             delegate! {
                 to self.backend {
                     fn locale_resource(&self) -> &'static str;
+                    fn name(&self) -> &'static str;
 
                     fn init(&self, sess: &Session);
                     fn print(&self, req: &PrintRequest, out: &mut String, sess: &Session);
@@ -752,15 +754,10 @@ mod implementation {
 
         pub(super) fn get_backend_maker<T: CompilationPass + Send + Sync + ?Sized + 'static>(
             pass: PassHolder<T>,
-        ) -> Box<dyn FnOnce(&config::Options) -> Box<dyn CodegenBackend> + Send> {
-            Box::new(|opts| {
+        ) -> Box<dyn FnOnce(&config::Options, &rustc_target::spec::Target) -> Box<dyn CodegenBackend> + Send> {
+            Box::new(|opts, target| {
                 // This is the default implementation taken from `interface::run_compiler`.
                 let early_dcx = rustc_session::EarlyDiagCtxt::new(opts.error_format);
-                let target = config::build_target_config(
-                    &early_dcx,
-                    &opts.target_triple,
-                    opts.sysroot.path(),
-                );
                 let backend = rustc_interface::util::get_codegen_backend(
                     &early_dcx,
                     &opts.sysroot,

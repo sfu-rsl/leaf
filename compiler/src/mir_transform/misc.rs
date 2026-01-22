@@ -72,7 +72,7 @@ pub(crate) fn noop_blocks_with<'tcx>(
     let mut count = 0;
     for block in body.basic_blocks_mut().iter_mut() {
         if predicate(block) {
-            block.statements.iter_mut().for_each(|s| s.make_nop());
+            block.statements.iter_mut().for_each(|s| s.make_nop(true));
 
             let terminator = block.terminator.take().unwrap();
 

@@ -121,18 +121,11 @@ pub(crate) mod mir {
         }
 
         fn pretty_mir(self, body: &Body<'tcx>) -> String {
-            use rustc_middle::mir::pretty::{PrettyPrintMirOptions, write_mir_fn};
+            use rustc_middle::mir::pretty::MirWriter;
             let mut buffer = Vec::new();
-            write_mir_fn(
-                self,
-                body,
-                &mut |_, _| Ok(()),
-                &mut buffer,
-                PrettyPrintMirOptions {
-                    include_extra_comments: false,
-                },
-            )
-            .unwrap();
+            MirWriter::new(self)
+                .write_mir_fn(body, &mut buffer)
+                .unwrap();
             String::from_utf8(buffer).unwrap()
         }
     }

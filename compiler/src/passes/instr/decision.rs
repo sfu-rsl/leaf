@@ -224,7 +224,7 @@ fn is_drop_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
             .drop_trait()
             .zip(
                 tcx.impl_of_assoc(def_id)
-                    .and_then(|id| tcx.trait_id_of_impl(id)),
+                    .and_then(|id| tcx.impl_opt_trait_id(id)),
             )
             .is_some_and(|(t1, t2)| t1 == t2)
 }
