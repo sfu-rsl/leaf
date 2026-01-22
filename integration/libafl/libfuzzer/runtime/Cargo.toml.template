@@ -64,7 +64,8 @@ libafl_targets = { workspace = true, features = [
   "whole_archive",
   "sanitizer_interfaces",
 ] }
-libafl_leaf = { version = "0.1.0" }
+libafl_leaf = { version = "0.2.0" }
+# libafl_leaf = { workspace = true }
 
 ahash = { version = "0.8.11", default-features = false }
 libc = "0.2.159"
@@ -86,7 +87,7 @@ bindgen = "0.71.1"
 cc = { version = "1.1.22", features = ["parallel"] }
 
 [patch.crates-io]
-libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }
-libafl_bolts = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }
-libafl_targets = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.14.1" }
+libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
+libafl_bolts = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
+libafl_targets = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
 libafl_leaf = { path = "../lib" }

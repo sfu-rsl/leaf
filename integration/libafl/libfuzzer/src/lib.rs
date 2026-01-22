@@ -163,7 +163,7 @@ mod tests {
 ///
 /// After replacing [fuzz_target] invocations with [hybrid_fuzz_target], you also
 /// need to disable `no_main` feature when the program is compiled with `leafc`. i.e.:
-/// ```rust
+/// ```ignore
 /// #![cfg_attr(not(leafc), no_main)]
 /// ```
 macro_rules! hybrid_fuzz_target {
