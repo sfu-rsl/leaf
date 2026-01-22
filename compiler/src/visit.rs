@@ -37,10 +37,6 @@ macro_rules! make_statement_kind_visitor {
                 Default::default()
             }
 
-            fn visit_deinit(&mut self, place: & $($mutability)? Place<'tcx>) -> T {
-                Default::default()
-            }
-
             fn visit_storage_live(&mut self, local: & $($mutability)? Local) -> T {
                 Default::default()
             }
@@ -100,7 +96,6 @@ macro_rules! make_statement_kind_visitor {
                         place,
                         variant_index,
                     } => self.visit_set_discriminant(place, variant_index),
-                    StatementKind::Deinit(place) => self.visit_deinit(place),
                     StatementKind::StorageLive(local) => self.visit_storage_live(local),
                     StatementKind::StorageDead(local) => self.visit_storage_dead(local),
                     StatementKind::Retag(kind, place) => self.visit_retag(kind, place),

@@ -507,10 +507,6 @@ where
             .its_discriminant_to(variant_index)
     }
 
-    fn visit_deinit(&mut self, _place: &Place<'tcx>) {
-        Default::default()
-    }
-
     fn visit_intrinsic(&mut self, intrinsic: &mir::NonDivergingIntrinsic<'tcx>) {
         match intrinsic {
             mir::NonDivergingIntrinsic::Assume(_operand) => {
