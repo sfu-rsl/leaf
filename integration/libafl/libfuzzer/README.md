@@ -40,7 +40,7 @@ libfuzzer-sys = { version = "0.11.0", features = ["your", "features", "here"], p
 To use the most up-to-date version (with experimental changes), use:
 
 ```toml
-libfuzzer-sys = { git = "https://github.com/AFLplusplus/LibAFL.git", features = ["your", "features", "here"], package = "libafl_libfuzzer" }
+libfuzzer-sys = { git = "https://github.com/sfu-rsl/leaf", features = ["your", "features", "here"], package = "libafl_libfuzzer" }
 ```
 
 As the repository generally offers the highest performance version of `libafl_libfuzzer`, we recommend the latter.

@@ -82,6 +82,7 @@ use crate::options::{LibfuzzerMode, LibfuzzerOptions};
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
+mod concolic;
 mod corpus;
 mod feedbacks;
 mod fuzz;
@@ -490,8 +491,11 @@ macro_rules! fuzz_with {
             // Setup a tracing stage in which we log comparisons
             let tracing = IfStage::new(|_, _, _, _| Ok(!$options.skip_tracing()), (ShadowTracingStage::new(), ()));
 
+            let concolic = crate::concolic::make_concolic_stage(&$options);
+
             // The order of the stages matter!
             let mut stages = tuple_list!(
+                concolic,
                 calibration,
                 generalization,
                 tracing,
