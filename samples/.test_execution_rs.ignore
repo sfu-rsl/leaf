@@ -12,9 +12,9 @@ sym_place/read/deref_ptr.rs
 sym_place/read/addr_of.rs
 sym_place/read/index_from_end.rs
 sym_place/read/index_on_transmute.rs
-sym_place/read/len_late_use.rs
-sym_place/read/len_on_transmute.rs
-sym_place/read/len_on_agg_raw_ptr.rs
+sym_place/read/ptr_metadata_len_late_use.rs
+sym_place/read/ptr_metadata_len_on_transmute.rs
+sym_place/read/ptr_metadata_len_on_agg_raw_ptr.rs
 sym_place/read/long_chain.rs
 sym_place/read/ptr_metadata_on_transmute.rs
 sym_place/read/transmute_on_index.rs

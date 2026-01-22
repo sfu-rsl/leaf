@@ -367,7 +367,6 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                     value
                 }
                 Expr::Partial(porter) => self.retrieve_porter_value(porter).to_value_ref(),
-                Expr::Len(place) => self.retrieve_len_value(place),
                 Expr::PtrMetadata(host) => self.retrieve_ptr_metadata(host.as_ref()),
                 _ => value,
             },

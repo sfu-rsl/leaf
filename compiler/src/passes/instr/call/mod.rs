@@ -91,8 +91,6 @@ pub(crate) trait Assigner<'tcx>: AssignmentInfoProvider<'tcx> {
 
     fn by_raw_ptr(&mut self, place: PlaceRef, is_mutable: bool);
 
-    fn by_len(&mut self, place: PlaceRef);
-
     fn by_cast(&mut self, operand: OperandRef) -> Self::Cast<'_>;
 
     fn by_binary_op(&mut self, operator: &BinOp, first: OperandRef, second: OperandRef);
@@ -1363,13 +1361,6 @@ mod implementation {
                     operand::copy_for_local(place.into()),
                     operand::const_from_bool(self.context.tcx(), is_mutable),
                 ],
-            )
-        }
-
-        fn by_len(&mut self, place: PlaceRef) {
-            self.add_bb_for_assign_call(
-                sym::assign_len,
-                vec![operand::copy_for_local(place.into())],
             )
         }
 

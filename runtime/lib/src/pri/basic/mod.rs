@@ -266,11 +266,6 @@ impl ProgramRuntimeInterface for BasicPri {
         let place = take_place_info_to_ref(place);
         assign_to(id, dest, |h| h.address_of(place, is_mutable))
     }
-    fn assign_len(id: AssignmentId, dest: PlaceRef, place: PlaceRef) {
-        // To be investigated. Not obvious whether it appears at all in the later stages.
-        let place = take_place_info_to_ref(place);
-        assign_to(id, dest, |h| h.len_of(place))
-    }
 
     fn assign_cast_char(id: AssignmentId, dest: PlaceRef, operand: OperandRef) {
         assign_to(id, dest, |h| {

@@ -165,8 +165,6 @@ pub(crate) trait AssignmentHandler: Sized {
     // FIXME: Rename
     fn address_of(self, place: Self::Place, is_mutable: bool);
 
-    fn len_of(self, place: Self::Place);
-
     fn cast_of(self, operand: Self::Operand, target: CastKind);
 
     fn binary_op_between(self, operator: BinaryOp, first: Self::Operand, second: Self::Operand);

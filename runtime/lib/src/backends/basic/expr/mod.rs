@@ -830,9 +830,6 @@ pub(crate) enum Expr {
     #[from(ignore)]
     Ref(SymIndexPlaceValueRef),
 
-    #[from(ignore)]
-    Len(SymPlaceValueRef),
-
     Partial(PorterValue),
 
     Concat(ConcatExpr),
@@ -1279,7 +1276,6 @@ mod convert {
                         .or_else(|_| ValueType::try_from(else_target.as_ref()))
                         .map_err(|_| value),
                     Expr::Transmutation { dst_ty, .. } => dst_ty.try_into().map_err(|_| value),
-                    Expr::Len(..) => Ok(IntType::USIZE.into()),
                     Expr::Multi(select) => {
                         ValueType::try_from(select.first_leaf().as_ref()).map_err(|_| value)
                     }

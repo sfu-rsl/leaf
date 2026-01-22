@@ -474,11 +474,12 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
              * We rely on the fact that these expressions are stored right after creation.
              * Ideally the creator of these expressions should take care of retrieval or even
              * these expressions should not exist. */
-            Value::Symbolic(SymValue::Expression(Expr::Len(..) | Expr::PtrMetadata(..))) => {
+            Value::Symbolic(SymValue::Expression(Expr::PtrMetadata(..))) => {
                 /* NOTE: Don't we need to resolve (the symbolic place) before retrieval?
                  * The only case that holds an unresolved symbolic place is Ref expression,
                  * which cannot appear as the target value.
-                 * For Len, it is a deref over a slice pointer/ref, which cannot be
+                 * For Len (merged with PtrMetadata after a certain version),
+                 * it is a deref over a slice pointer/ref, which cannot be
                  * a symbolic reference (o.w., it would be possible to have a standalone value
                  * from a slice type which is unsized. ~~Also, ref over deref gets optimized.~~).
                  * For PtrMetadata, the reference is to an unsized type (o.w., it gets optimized),

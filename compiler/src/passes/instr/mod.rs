@@ -969,11 +969,6 @@ where
             .by_raw_ptr(place_ref, kind.to_mutbl_lossy().is_mut());
     }
 
-    fn visit_len(&mut self, place: &Place<'tcx>) {
-        let place_ref = self.call_adder.reference_place(place);
-        self.call_adder.by_len(place_ref)
-    }
-
     fn visit_cast(&mut self, kind: &CastKind, operand: &Operand<'tcx>, ty: &Ty<'tcx>) {
         let operand_ref = self.call_adder.reference_operand(operand);
         let call_adder = &mut self.call_adder.by_cast(operand_ref);

@@ -138,15 +138,6 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
         self.ref_to(place, is_mutable)
     }
 
-    fn len_of(mut self, place: Self::Place) {
-        let value = if place.is_symbolic() {
-            Expr::Len(SymPlaceValueRef::new(place)).into()
-        } else {
-            UnevalValue::Some.into()
-        };
-        self.set_value(Implied::by_unknown(value))
-    }
-
     fn cast_of(mut self, operand: Self::Operand, target: CastKind) {
         let cast_value = self
             .expr_builder()

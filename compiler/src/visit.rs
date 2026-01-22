@@ -443,7 +443,6 @@ macro_rules! make_rvalue_visitor {
                     }
                     Rvalue::ThreadLocalRef(def_id) => self.visit_thread_local_ref(def_id),
                     Rvalue::RawPtr(kind, place) => self.visit_raw_ptr(kind, place),
-                    Rvalue::Len(place) => self.visit_len(place),
                     Rvalue::Cast(kind, operand, ty) => self.visit_cast(kind, operand, ty),
                     Rvalue::BinaryOp(op, operands) => self.visit_binary_op(op, operands),
                     Rvalue::UnaryOp(op, operand) => self.visit_unary_op(op, operand),

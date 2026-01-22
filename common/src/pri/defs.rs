@@ -156,7 +156,6 @@ pub mod macros {
           { fn assign_ref(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) }
           { fn assign_thread_local_ref(id: AssignmentId, dest: PlaceRef) }
           { fn assign_raw_ptr_of(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) }
-          { fn assign_len(id: AssignmentId, dest: PlaceRef, place: PlaceRef) }
 
           // ------- Cast ---
           { fn assign_cast_char(id: AssignmentId, dest: PlaceRef, operand: OperandRef) }
@@ -621,8 +620,6 @@ pub mod macros {
                 fn assign_thread_local_ref(id:AssignmentId,dest:PlaceRef);
             }$modifier!{
                 fn assign_raw_ptr_of(id:AssignmentId,dest:PlaceRef,place:PlaceRef,is_mutable:bool);
-            }$modifier!{
-                fn assign_len(id:AssignmentId,dest:PlaceRef,place:PlaceRef);
             }$modifier!{
                 fn assign_cast_char(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
             }$modifier!{

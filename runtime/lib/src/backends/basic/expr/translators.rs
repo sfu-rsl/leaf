@@ -309,7 +309,7 @@ pub(crate) mod z3 {
                         ).is_signed(),
                     )
                 }
-                Ref(..) | Len(..) | PtrMetadata(..) => {
+                Ref(..) | PtrMetadata(..) => {
                     unreachable!(
                         "Projection expressions should be resolved before translation. Got: {expr}"
                     )

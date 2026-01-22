@@ -172,7 +172,6 @@ mod implementation {
                 | Expr::Binary(..)
                 | Expr::BinaryBoundCheck { .. }
                 | Expr::Ref(_)
-                | Expr::Len(_)
                 | Expr::PtrMetadata(..) => unexpected(),
             }
         }
