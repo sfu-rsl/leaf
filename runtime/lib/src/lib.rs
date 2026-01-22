@@ -3,17 +3,14 @@
 #![feature(assert_matches)]
 #![feature(iterator_try_collect)]
 #![feature(macro_metavar_expr)]
-#![feature(result_flattening)]
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
 #![feature(btree_cursors)]
 #![feature(core_intrinsics)]
 #![feature(iter_map_windows)]
-#![feature(path_add_extension)]
 #![feature(seek_stream_len)]
 #![feature(try_trait_v2)]
 #![feature(cold_path)]
-#![feature(slice_as_array)]
 #![feature(more_qualified_paths)]
 
 pub mod abs;

@@ -98,7 +98,7 @@ pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
 pub const fn size_of<T>() -> TypeSize {
-    intrinsics::size_of::<T>() as TypeSize
+    const { intrinsics::size_of::<T>() as TypeSize }
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
@@ -218,8 +218,10 @@ pub fn receiver_to_raw_ptr<Pointee: ?Sized, Ptr: Deref<Target = Pointee>>(
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
 const fn is_ptr_of_dyn<T: ?Sized>(_ptr: *const T) -> bool {
-    intrinsics::size_of::<<T as core::ptr::Pointee>::Metadata>()
-        == intrinsics::size_of::<DynRawMetadata>()
+    const {
+        intrinsics::size_of::<<T as core::ptr::Pointee>::Metadata>()
+            == intrinsics::size_of::<DynRawMetadata>()
+    }
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
