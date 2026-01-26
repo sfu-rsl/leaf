@@ -6,6 +6,7 @@ casting/pointer/expose/sym_ptr_to_usize.rs
 casting/transmute/sym_partial_mid.rs
 function/async/basic.rs
 function/coroutines/basic.rs
+projection/unwrap_unsafe_binder/main.rs
 sym_place/read/addr_of.rs
 sym_place/read/agg_raw_ptr.rs
 sym_place/read/deref_ptr.rs

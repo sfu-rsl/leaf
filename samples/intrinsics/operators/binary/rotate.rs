@@ -12,7 +12,7 @@ fn main() {
     use_num(l);
     use_num(r);
 
-    let num = 0b11001100;
+    let num = 0b11001100u8;
     let shift_l = 3.mark_symbolic();
     let shift_r = 2.mark_symbolic();
     let l = intrinsics::rotate_left(num, shift_l);
