@@ -7,6 +7,7 @@ mod config;
 mod constraint;
 mod expr;
 mod implication;
+mod instance;
 mod memory;
 mod operand;
 mod outgen;
@@ -29,6 +30,7 @@ use crate::{
         FuncDef, PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex,
         backend::*,
     },
+    backends::basic::place::DiscriminantPossiblePlace,
     utils::{HasIndex, RefView, alias::RRef},
 };
 
@@ -51,7 +53,9 @@ use self::{
 
 type BasicTraceManager = dyn TraceManager;
 
-pub(crate) use self::{config::BasicBackendConfig, place::BasicPlaceBuilder};
+pub(crate) use self::{
+    config::BasicBackendConfig, instance::BasicInstanceManager, place::BasicPlaceBuilder,
+};
 
 pub struct BasicBackend {
     call_stack_manager: BasicCallStackManager,
@@ -197,6 +201,7 @@ impl RuntimeBackend for BasicBackend {
 
     type PlaceInfo = BasicPlaceInfo;
     type Place = PlaceValueRef;
+    type DiscriminablePlace = DiscriminantPossiblePlace;
     type Operand = BasicValue;
 
     fn place(&mut self, usage: PlaceUsage) -> Self::PlaceHandler<'_> {

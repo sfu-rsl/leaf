@@ -12,6 +12,7 @@
 #![feature(try_trait_v2)]
 #![feature(cold_path)]
 #![feature(more_qualified_paths)]
+#![feature(likely_unlikely)]
 
 pub mod abs;
 mod backends;
@@ -27,3 +28,5 @@ fn init() {
     utils::logging::init_logging();
     log_info!("Initializing runtime library");
 }
+
+pub type BasicPri = pri::fluent::FluentPri<backends::basic::BasicInstanceManager>;

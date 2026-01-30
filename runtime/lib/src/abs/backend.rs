@@ -3,19 +3,27 @@ use std::collections::HashMap;
 use super::{
     AssertKind, AssignmentId, BasicBlockIndex, BasicBlockLocation, BinaryOp, CalleeDef, CastKind,
     Constraint, ConstraintKind, FieldIndex, FuncDef, IntType, Local, PlaceUsage, Projection,
-    RawAddress, SymVariable, Tag, TypeId, UnaryOp, ValueType, VariantIndex,
+    RawAddress, SymVariable, Tag, TypeId, TypeSize, UnaryOp, ValueType, VariantIndex,
 };
 
 pub(crate) trait RuntimeBackend: Shutdown {
-    type PlaceHandler<'a>: for<'b> PlaceHandler<PlaceInfo<'b> = Self::PlaceInfo, Place = Self::Place>
+    type PlaceHandler<'a>: for<'b> PlaceHandler<
+            PlaceInfo<'b> = Self::PlaceInfo,
+            Place = Self::Place,
+            DiscriminablePlace = Self::DiscriminablePlace,
+        >
     where
         Self: 'a;
 
-    type OperandHandler<'a>: OperandHandler
+    type OperandHandler<'a>: OperandHandler<Operand = Self::Operand, Place = Self::Place>
     where
         Self: 'a;
 
-    type AssignmentHandler<'a>: AssignmentHandler<Place = Self::Place, Operand = Self::Operand>
+    type AssignmentHandler<'a>: AssignmentHandler<
+            Place = Self::Place,
+            Operand = Self::Operand,
+            DiscriminablePlace = Self::DiscriminablePlace,
+        >
     where
         Self: 'a;
     type MemoryHandler<'a>: MemoryHandler<Place = Self::Place>
@@ -36,6 +44,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
 
     type PlaceInfo;
     type Place;
+    type DiscriminablePlace;
     type Operand;
 
     fn place(&mut self, usage: PlaceUsage) -> Self::PlaceHandler<'_>;
@@ -52,7 +61,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
 
     fn raw_memory<'a>(&'a mut self) -> Self::RawMemoryHandler<'a>;
 
-    fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_>;
+    fn constraint_at<'a>(&'a mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'a>;
 
     fn call_control(&mut self) -> Self::CallHandler<'_>;
 
@@ -73,39 +82,39 @@ pub(crate) trait PlaceHandler {
 
 pub(crate) trait PlaceBuilder {
     type Place;
-    type ProjectionBuilder<'a>;
-    type MetadataHandler<'a>;
+    type Index = Self::Place;
+    type Projector<'a>: PlaceProjector<Index = Self::Index>;
+    type MetadataHandler<'a>: PlaceMetadataHandler;
 
     fn of_local(self, local: Local) -> Self::Place;
 
-    fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionBuilder<'a>;
+    fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::Projector<'a>;
 
     fn metadata<'a>(self, place: &'a mut Self::Place) -> Self::MetadataHandler<'a>;
 }
 
-pub(crate) trait PlaceProjectionBuilder: Sized {
-    type Result = ();
+pub(crate) trait PlaceProjector: Sized {
     type Index;
 
-    fn by(self, projection: Projection<Self::Index>) -> Self::Result;
+    fn by(self, projection: Projection<Self::Index>);
 
     #[inline]
-    fn deref(self) -> Self::Result {
+    fn deref(self) {
         self.by(Projection::Deref)
     }
 
     #[inline]
-    fn for_field(self, field: FieldIndex) -> Self::Result {
+    fn for_field(self, field: FieldIndex) {
         self.by(Projection::Field(field))
     }
 
     #[inline]
-    fn at_index(self, index: Self::Index) -> Self::Result {
+    fn at_index(self, index: Self::Index) {
         self.by(Projection::Index(index))
     }
 
     #[inline]
-    fn at_constant_index(self, offset: u64, min_length: u64, from_end: bool) -> Self::Result {
+    fn at_constant_index(self, offset: u64, min_length: u64, from_end: bool) {
         self.by(Projection::ConstantIndex {
             offset,
             min_length,
@@ -114,36 +123,45 @@ pub(crate) trait PlaceProjectionBuilder: Sized {
     }
 
     #[inline]
-    fn subslice(self, from: u64, to: u64, from_end: bool) -> Self::Result {
+    fn subslice(self, from: u64, to: u64, from_end: bool) {
         self.by(Projection::Subslice { from, to, from_end })
     }
 
     #[inline]
-    fn downcast(self, variant: VariantIndex) -> Self::Result {
+    fn downcast(self, variant: VariantIndex) {
         self.by(Projection::Downcast(variant))
     }
 
     #[inline]
-    fn opaque_cast(self) -> Self::Result {
+    fn opaque_cast(self) {
         self.by(Projection::OpaqueCast)
     }
 
     #[inline]
-    fn unwrap_unsafe_binder(self) -> Self::Result {
+    fn unwrap_unsafe_binder(self) {
         self.by(Projection::UnwrapUnsafeBinder)
     }
+}
+
+pub(crate) trait PlaceMetadataHandler {
+    fn set_address(&mut self, address: RawAddress);
+
+    fn set_type_id(&mut self, type_id: TypeId);
+
+    fn set_primitive_type(&mut self, ty: ValueType);
+
+    fn set_size(self, byte_size: TypeSize);
 }
 
 pub(crate) trait OperandHandler {
     type Operand;
     type Place;
-    type Constant = super::Constant;
 
     fn copy_of(self, place: Self::Place) -> Self::Operand;
 
     fn move_of(self, place: Self::Place) -> Self::Operand;
 
-    fn const_from(self, info: Self::Constant) -> Self::Operand;
+    fn const_from(self, info: super::Constant) -> Self::Operand;
 
     fn new_symbolic(self, var: SymVariable<Self::Operand>) -> Self::Operand;
 }
@@ -152,7 +170,6 @@ pub(crate) trait AssignmentHandler: Sized {
     type Place;
     type DiscriminablePlace = Self::Place;
     type Operand;
-    type Field = Self::Operand;
 
     fn use_of(self, operand: Self::Operand);
 
@@ -175,23 +192,23 @@ pub(crate) trait AssignmentHandler: Sized {
 
     fn array_from(self, items: impl Iterator<Item = Self::Operand>);
 
-    fn tuple_from(self, fields: impl Iterator<Item = Self::Field>) {
+    fn tuple_from(self, fields: impl Iterator<Item = Self::Operand>) {
         self.adt_from(fields, None)
     }
 
-    fn adt_from(self, fields: impl Iterator<Item = Self::Field>, variant: Option<VariantIndex>);
+    fn adt_from(self, fields: impl Iterator<Item = Self::Operand>, variant: Option<VariantIndex>);
 
-    fn union_from(self, active_field: FieldIndex, value: Self::Field);
+    fn union_from(self, active_field: FieldIndex, value: Self::Operand);
 
-    fn closure_from(self, upvars: impl Iterator<Item = Self::Field>) {
+    fn closure_from(self, upvars: impl Iterator<Item = Self::Operand>) {
         self.adt_from(upvars, None)
     }
 
-    fn coroutine_from(self, upvars: impl Iterator<Item = Self::Field>) {
+    fn coroutine_from(self, upvars: impl Iterator<Item = Self::Operand>) {
         self.adt_from(upvars, None)
     }
 
-    fn coroutine_closure_from(self, upvars: impl Iterator<Item = Self::Field>) {
+    fn coroutine_closure_from(self, upvars: impl Iterator<Item = Self::Operand>) {
         self.adt_from(upvars, None)
     }
 
@@ -270,10 +287,8 @@ pub(crate) trait ConstraintHandler {
 }
 
 pub(crate) trait SwitchHandler {
-    type Constant = super::Constant;
-
-    fn take(self, value: Self::Constant);
-    fn take_otherwise(self, non_values: Vec<Self::Constant>);
+    fn take(self, value: super::Constant);
+    fn take_otherwise(self, non_values: Vec<super::Constant>);
 }
 
 pub(crate) enum ArgsTupling {
@@ -288,7 +303,7 @@ pub(crate) enum ArgsTupling {
 pub(crate) trait CallHandler {
     type Place;
     type Operand;
-    type Arg = Self::Operand;
+    type Arg: From<Self::Operand> = Self::Operand;
     type MetadataHandler;
 
     fn before_call(
@@ -448,14 +463,15 @@ pub(crate) mod implementation {
         }
     }
 
-    impl<L, P> PlaceBuilder for DefaultPlaceBuilder<L, P>
+    impl<L, I> PlaceBuilder for DefaultPlaceBuilder<L, Projection<I>>
     where
         L: From<Local>,
         for<'a> L: 'a,
-        for<'a> P: 'a,
+        for<'a> I: 'a,
     {
-        type Place = Place<L, P>;
-        type ProjectionBuilder<'a>
+        type Place = Place<L, Projection<I>>;
+        type Index = I;
+        type Projector<'a>
             = DefaultPlaceProjectionHandler<'a, Self::Place>
         where
             Self::Place: 'a;
@@ -465,7 +481,7 @@ pub(crate) mod implementation {
             Place::new(local.into())
         }
 
-        fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionBuilder<'a> {
+        fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::Projector<'a> {
             DefaultPlaceProjectionHandler { place }
         }
 
@@ -482,11 +498,21 @@ pub(crate) mod implementation {
         }
     }
 
-    impl<L, I> PlaceProjectionBuilder for DefaultPlaceProjectionHandler<'_, Place<L, Projection<I>>> {
+    impl<'a, L, I> PlaceProjector for DefaultPlaceProjectionHandler<'a, Place<L, Projection<I>>> {
         type Index = I;
 
         fn by(self, projection: Projection<Self::Index>) {
             self.place.add_projection(projection.into())
         }
+    }
+
+    impl PlaceMetadataHandler for () {
+        fn set_address(&mut self, _address: RawAddress) {}
+
+        fn set_type_id(&mut self, _type_id: TypeId) {}
+
+        fn set_primitive_type(&mut self, _ty: ValueType) {}
+
+        fn set_size(self, _byte_size: TypeSize) {}
     }
 }

@@ -1,5 +1,5 @@
 use crate::{
-    abs::{SymVariable, backend::OperandHandler},
+    abs::{Constant, SymVariable, backend::OperandHandler},
     utils::alias::RRef,
 };
 
@@ -37,7 +37,7 @@ impl OperandHandler for BasicOperandHandler<'_> {
         self.vars_state.take_place(&place)
     }
 
-    fn const_from(self, info: Self::Constant) -> Self::Operand {
+    fn const_from(self, info: Constant) -> Self::Operand {
         Implied::always(ConcreteValue::from(info).to_value_ref())
     }
 

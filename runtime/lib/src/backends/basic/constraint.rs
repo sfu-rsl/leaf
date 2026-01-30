@@ -90,19 +90,19 @@ pub(crate) struct BasicSwitchHandler<'a, EB> {
 }
 
 impl<'a, EB> SwitchHandler for BasicSwitchHandler<'a, EB> {
-    fn take(mut self, value: Self::Constant) {
+    fn take(mut self, value: abs::Constant) {
         let constraint = self.create_constraint(vec![value]);
         self.parent.notify_constraint(constraint);
     }
 
-    fn take_otherwise(mut self, non_values: Vec<Self::Constant>) {
+    fn take_otherwise(mut self, non_values: Vec<abs::Constant>) {
         let constraint = self.create_constraint(non_values).not();
         self.parent.notify_constraint(constraint);
     }
 }
 
 impl<'a, EB> BasicSwitchHandler<'a, EB> {
-    fn create_constraint(&mut self, values: Vec<<Self as SwitchHandler>::Constant>) -> Constraint {
+    fn create_constraint(&mut self, values: Vec<abs::Constant>) -> Constraint {
         let kind = match values.first().unwrap() {
             abs::Constant::Bool(false) => ConstraintKind::False,
             _ => ConstraintKind::OneOf(

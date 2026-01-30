@@ -144,7 +144,7 @@ pub(crate) use data_types::*;
 
 mod builders {
     use crate::abs::backend::{
-        PlaceBuilder, PlaceProjectionBuilder,
+        PlaceBuilder, PlaceMetadataHandler, PlaceProjector,
         implementation::{DefaultPlaceBuilder, DefaultPlaceProjectionHandler},
     };
 
@@ -155,14 +155,15 @@ mod builders {
 
     impl PlaceBuilder for BasicPlaceBuilder {
         type Place = PlaceWithMetadata;
-        type ProjectionBuilder<'a> = BasicProjectionBuilder<'a>;
+        type Index = PlaceValueRef;
+        type Projector<'a> = BasicProjectionBuilder<'a>;
         type MetadataHandler<'a> = BasicPlaceMetadataHandler<'a>;
 
         fn of_local(self, local: Local) -> Self::Place {
             PlaceWithMetadata::from(DefaultPlaceBuilder::default().of_local(local))
         }
 
-        fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::ProjectionBuilder<'a> {
+        fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::Projector<'a> {
             BasicProjectionBuilder(place)
         }
 
@@ -173,7 +174,7 @@ mod builders {
 
     pub(crate) struct BasicProjectionBuilder<'a>(&'a mut PlaceWithMetadata);
 
-    impl PlaceProjectionBuilder for BasicProjectionBuilder<'_> {
+    impl PlaceProjector for BasicProjectionBuilder<'_> {
         type Index = PlaceValueRef;
 
         fn by(self, proj: crate::abs::Projection<Self::Index>) {
@@ -185,8 +186,8 @@ mod builders {
 
     pub(crate) struct BasicPlaceMetadataHandler<'a>(&'a mut PlaceWithMetadata);
 
-    impl BasicPlaceMetadataHandler<'_> {
-        pub(crate) fn set_address(&mut self, address: RawAddress) {
+    impl PlaceMetadataHandler for BasicPlaceMetadataHandler<'_> {
+        fn set_address(&mut self, address: RawAddress) {
             if self.0.has_projection() {
                 let last = &mut self.0.projs_metadata_mut().last().unwrap();
                 last.set_address(address);
@@ -195,7 +196,7 @@ mod builders {
             }
         }
 
-        pub(crate) fn set_type_id(&mut self, type_id: TypeId) {
+        fn set_type_id(&mut self, type_id: TypeId) {
             if self.0.has_projection() {
                 let last = &mut self.0.projs_metadata_mut().last().unwrap();
                 debug_assert!(last.type_id().is_none());
@@ -205,11 +206,11 @@ mod builders {
             }
         }
 
-        pub(crate) fn set_primitive_type(&mut self, ty: ValueType) {
+        fn set_primitive_type(&mut self, ty: ValueType) {
             self.0.metadata_mut().set_ty(ty);
         }
 
-        pub(crate) fn set_size(self, byte_size: crate::abs::TypeSize) {
+        fn set_size(self, byte_size: crate::abs::TypeSize) {
             self.0.metadata_mut().set_size(byte_size);
         }
     }

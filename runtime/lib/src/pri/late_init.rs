@@ -4,7 +4,6 @@ use crate::abs;
 
 static mut IS_ACTIVE: bool = false;
 
-type MainPri = super::BasicPri;
 type NoOpPri = super::NoOpPri;
 
 #[derive(Default)]
@@ -42,23 +41,43 @@ macro_rules! late_init {
     };
 }
 
-/* NOTE: Making the implementation generic is desired but not currently possible
- * due to some limitations in Rust like higher-order generic types.
- * Providing an implementation per type is easier at the moment.
- */
-impl ProgramRuntimeInterface for LateInitPri<MainPri> {
-    type U128 = u128;
-    type Char = char;
-    type ConstStr = &'static str;
-    type ConstByteStr = &'static [u8];
-    type Slice<'a, T: 'a> = &'a [T];
-    type TypeId = abs::TypeId;
-    type BinaryOp = abs::BinaryOp;
-    type UnaryOp = abs::UnaryOp;
-    type AtomicOrdering = abs::AtomicOrdering;
-    type AtomicBinaryOp = abs::AtomicBinaryOp;
-    type DebugInfo = DebugInfo;
-    type Tag = Tag;
+mod instantiations {
+    use super::*;
+    /* NOTE: Making the implementation generic is desired but not currently possible
+     * due to some limitations in Rust like higher-order generic types.
+     * Particularly, Slice and its generic parameter T cause issues.
+     * Providing an implementation per type is easier at the moment.
+     */
 
-    common::pri::list_func_decls! { modifier: late_init, (from Self) }
+    macro_rules! impl_pri_for_late_init_pri_of {
+        ($t:ident) => {
+            paste::paste! {
+                #[allow(non_snake_case)]
+                mod [<_for_ $t>] {
+                    use super::*;
+                    type MainPri = $t;
+
+                    impl ProgramRuntimeInterface for LateInitPri<MainPri> {
+                        type U128 = u128;
+                        type Char = char;
+                        type ConstStr = &'static str;
+                        type ConstByteStr = &'static [u8];
+                        type Slice<'a, T: 'a> = &'a [T];
+                        type TypeId = abs::TypeId;
+                        type BinaryOp = abs::BinaryOp;
+                        type UnaryOp = abs::UnaryOp;
+                        type AtomicOrdering = abs::AtomicOrdering;
+                        type AtomicBinaryOp = abs::AtomicBinaryOp;
+                        type DebugInfo = DebugInfo;
+                        type Tag = Tag;
+
+                        common::pri::list_func_decls! { modifier: late_init, (from Self) }
+                    }
+                }
+            }
+        };
+    }
+
+    use crate::BasicPri;
+    impl_pri_for_late_init_pri_of!(BasicPri);
 }

@@ -233,7 +233,7 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
 
     fn adt_from(
         mut self,
-        fields: impl Iterator<Item = Self::Field>,
+        fields: impl Iterator<Item = Self::Operand>,
         variant: Option<VariantIndex>,
     ) {
         let kind = match variant {
@@ -243,7 +243,7 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
         self.set_adt_value(kind, fields.map(|f| Some(f)))
     }
 
-    fn union_from(mut self, active_field: FieldIndex, value: Self::Field) {
+    fn union_from(mut self, active_field: FieldIndex, value: Self::Operand) {
         let fields = (0..active_field)
             .map(|_| None)
             .chain(iter::once(Some(value)));
@@ -356,7 +356,7 @@ impl<'s, EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, '_, EB> {
     fn set_adt_value(
         &mut self,
         kind: AdtKind,
-        fields: impl Iterator<Item = Option<<Self as AssignmentHandler>::Field>>,
+        fields: impl Iterator<Item = Option<<Self as AssignmentHandler>::Operand>>,
     ) {
         let (preconditions, values) = fields
             .map(|f| -> (Option<Precondition>, Option<ValueRef>) {
