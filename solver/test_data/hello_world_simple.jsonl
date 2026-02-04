@@ -1,0 +1,1 @@
+{"step":{"value":"0:4:2","index":3},"constraint":{"discr":{"decls":{"1":{"name":"k!1","sort":{"BitVector":{"is_signed":false}},"smtlib_rep":"(declare-fun k!1 () (_ BitVec 8))"}},"sort":"Bool","smtlib_rep":"(not (bvule #x05 k!1))"},"kind":"False"}}
