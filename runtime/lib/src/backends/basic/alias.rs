@@ -150,8 +150,6 @@ pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;
 pub(super) type BasicDecisionTraceRecorder =
     dyn DecisionTraceRecorder<Case = BasicConstraintDecisionCase>;
 
-pub(super) type BasicCallStackManager = super::call::BasicCallStackManager<BasicVariablesState>;
-
 pub(crate) trait TraceManager:
     abs::backend::TraceManager<super::trace::Step, BasicValue, ConstValue> + Shutdown
 {

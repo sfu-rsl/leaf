@@ -16,12 +16,14 @@
 
 pub mod abs;
 mod backends;
+mod call;
 pub(crate) mod outgen;
 pub mod pri;
 pub(crate) mod solvers;
 pub(crate) mod trace;
 pub mod type_info;
 pub(crate) mod utils;
+
 use common::log_info;
 
 fn init() {

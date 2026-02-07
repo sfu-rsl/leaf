@@ -223,7 +223,7 @@ mod handlers {
     use crate::abs::{PlaceUsage, backend::PlaceHandler};
 
     use super::*;
-    use backend::{BasicBackend, BasicPlaceInfo, CallStackInfo, TypeDatabase, VariablesState};
+    use backend::{BasicBackend, BasicPlaceInfo, TypeDatabase, VariablesState};
 
     pub(crate) struct BasicPlaceHandler<'a> {
         vars_state: &'a mut dyn VariablesState,
@@ -234,7 +234,7 @@ mod handlers {
     impl<'a> BasicPlaceHandler<'a> {
         pub fn new(usage: PlaceUsage, backend: &'a mut BasicBackend) -> BasicPlaceHandler<'a> {
             Self {
-                vars_state: backend.call_stack_manager.top(),
+                vars_state: &mut backend.vars_state,
                 usage,
                 type_manager: backend.type_manager.as_ref(),
             }

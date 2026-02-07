@@ -14,10 +14,10 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicValue, BasicValueExprBuilder, CallStackInfo, Implied, PlaceValueRef,
-    Precondition, TypeDatabase, TypeLayoutResolver, ValueRef, VariablesState,
-    alias::BasicExprBuilder, expr::prelude::*, implication::PreconditionConstruct,
-    place::DiscriminantPossiblePlace, type_info::TypeLayoutResolverExt,
+    BasicBackend, BasicValue, BasicValueExprBuilder, Implied, PlaceValueRef, Precondition,
+    TypeDatabase, TypeLayoutResolver, ValueRef, VariablesState, alias::BasicExprBuilder,
+    expr::prelude::*, implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
+    type_info::TypeLayoutResolverExt,
 };
 
 #[cfg(feature = "implicit_flow")]
@@ -36,10 +36,11 @@ pub(super) struct AssignmentServices<'a, EB> {
 // Meant for leveraging field-level borrowing to avoid borrowing issues.
 macro_rules! services_from_backend {
     ($backend:expr) => {{
-        use crate::backends::basic::CallStackInfo;
+        use crate::call::CallFlowManager;
         AssignmentServices {
-            current_func: $backend.call_stack_manager.current_func().body_id,
-            vars_state: $backend.call_stack_manager.top(),
+            #[cfg(feature = "implicit_flow")]
+            current_func: $backend.call_flow_manager.current_func().body_id,
+            vars_state: &mut $backend.vars_state,
             expr_builder: $backend.expr_builder.clone(),
             type_manager: $backend.type_manager.as_ref(),
             #[cfg(feature = "implicit_flow")]

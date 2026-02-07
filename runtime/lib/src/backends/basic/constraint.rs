@@ -10,12 +10,11 @@ use crate::{
 };
 
 use crate::backends::basic as backend;
+use crate::call::CallFlowManager;
 use backend::{
-    BasicBackend, BasicExprBuilder, BasicTraceManager, BasicValueUnaryExprBuilder, CallStackInfo,
+    BasicBackend, BasicExprBuilder, BasicTraceManager, BasicValue, BasicValueUnaryExprBuilder,
     expr::prelude::ConstValue,
 };
-
-use super::BasicValue;
 
 pub(super) type Constraint = crate::abs::Constraint<BasicValue, ConstValue>;
 pub(super) type DecisionCase = ConstValue;
@@ -32,7 +31,7 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
             trace_manager: backend.trace_manager.borrow_mut(),
             expr_builder: backend.expr_builder.clone(),
             location: backend
-                .call_stack_manager
+                .call_flow_manager
                 .current_func()
                 .body_id
                 .at_basic_block(location),

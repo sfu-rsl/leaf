@@ -5,8 +5,8 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicSymVariablesManager, CallStackInfo, Implied, PlaceValueRef,
-    SymVariablesManager, VariablesState, expr::prelude::ConcreteValue,
+    BasicBackend, BasicSymVariablesManager, Implied, PlaceValueRef, SymVariablesManager,
+    VariablesState, expr::prelude::ConcreteValue,
 };
 
 use super::BasicValue;
@@ -19,7 +19,7 @@ pub(crate) struct BasicOperandHandler<'a> {
 impl<'a> BasicOperandHandler<'a> {
     pub fn new(backend: &'a mut BasicBackend) -> Self {
         Self {
-            vars_state: backend.call_stack_manager.top(),
+            vars_state: &mut backend.vars_state,
             sym_values: backend.sym_values.clone(),
         }
     }

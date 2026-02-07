@@ -9,7 +9,7 @@ pub(super) use sym_place::{
 };
 
 use crate::backends::basic as backend;
-use backend::{BasicBackend, BasicPlaceValue, CallStackInfo, VariablesState};
+use backend::{BasicBackend, BasicPlaceValue, VariablesState};
 
 pub(crate) struct BasicMemoryHandler<'s> {
     vars_state: &'s mut dyn VariablesState,
@@ -18,7 +18,7 @@ pub(crate) struct BasicMemoryHandler<'s> {
 impl<'s> BasicMemoryHandler<'s> {
     pub(super) fn new(backend: &'s mut BasicBackend) -> Self {
         Self {
-            vars_state: backend.call_stack_manager.top(),
+            vars_state: &mut backend.vars_state,
         }
     }
 }

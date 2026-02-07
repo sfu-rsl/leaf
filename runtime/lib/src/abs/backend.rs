@@ -291,6 +291,7 @@ pub(crate) trait SwitchHandler {
     fn take_otherwise(self, non_values: Vec<super::Constant>);
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum ArgsTupling {
     Normal,
     Untupled {

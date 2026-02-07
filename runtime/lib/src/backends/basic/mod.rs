@@ -38,7 +38,7 @@ use self::{
     alias::{TraceManager, TypeDatabase, *},
     annotation::BasicAnnotationHandler,
     assignment::BasicAssignmentHandler,
-    call::BasicCallHandler,
+    call::{BasicCallFlowManager, BasicCallHandler},
     concrete::BasicConcretizer,
     constraint::BasicConstraintHandler,
     expr::{SymVarId, prelude::*},
@@ -58,7 +58,9 @@ pub(crate) use self::{
 };
 
 pub struct BasicBackend {
-    call_stack_manager: BasicCallStackManager,
+    vars_state: BasicVariablesState,
+    call_flow_manager: BasicCallFlowManager,
+    vars_state_factory: Box<dyn Fn() -> BasicVariablesState>,
     trace_manager: RRef<BasicTraceManager>,
     trace_recorder: RRef<BasicExeTraceRecorder>,
     expr_builder: RRef<BasicExprBuilder>,
@@ -127,22 +129,21 @@ impl BasicBackend {
         // Writes are more difficult, and the handler is usually more restrictive, so we use the write handler as the general one.
         let sym_place_handler = sym_write_handler_ref.clone();
 
-        Self {
-            call_stack_manager: BasicCallStackManager::new(
-                Box::new(move |_id| {
-                    let vars_state = RawPointerVariableState::new(
-                        type_manager_ref.clone(),
-                        sym_read_handler_ref.clone(),
-                        sym_write_handler_ref.clone(),
-                        Rc::new(RefCell::new(expr::builders::to_sym_expr_builder(
-                            expr_builder_ref.clone(),
-                        ))),
-                    );
+        let variables_state_factory = Box::new(move || {
+            RawPointerVariableState::new(
+                type_manager_ref.clone(),
+                sym_read_handler_ref.clone(),
+                sym_write_handler_ref.clone(),
+                Rc::new(RefCell::new(expr::builders::to_sym_expr_builder(
+                    expr_builder_ref.clone(),
+                ))),
+            )
+        });
 
-                    vars_state
-                }),
-                &config.call,
-            ),
+        Self {
+            call_flow_manager: call::default_flow_manager(config.call),
+            vars_state: variables_state_factory(),
+            vars_state_factory: variables_state_factory,
             trace_manager: trace_manager_ref.clone(),
             trace_recorder: trace_recorder_ref.clone(),
             expr_builder: Rc::new(RefCell::new(expr::builders::to_implied_expr_builder(
@@ -295,14 +296,6 @@ trait GenericVariablesState {
     fn set_place(&mut self, place: &Self::PlaceValue, value: Self::Value);
 
     fn drop_place(&mut self, place: &Self::PlaceValue);
-}
-
-trait CallStackInfo {
-    type VariablesState: GenericVariablesState;
-
-    fn top(&mut self) -> &mut Self::VariablesState;
-
-    fn current_func(&self) -> FuncDef;
 }
 
 trait ExeTraceStorage {
