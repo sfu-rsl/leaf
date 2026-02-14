@@ -26,8 +26,8 @@ pub(crate) mod utils;
 
 use common::log_info;
 
-fn init() {
-    utils::logging::init_logging();
+fn init<L: utils::logging::LeafTracingSubLayerFactory>() {
+    utils::logging::init_logging::<L>();
     log_info!("Initializing runtime library");
 }
 
