@@ -28,8 +28,22 @@ common = { workspace = true, features = [
 leaf_macros = { path = "../../macros", package = "macros" }
 
 config = { workspace = true, features = ["toml", "json"] }
-tracing-subscriber = { workspace = true }
-tracing = { workspace = true }
+
+# tracing
+tracing-subscriber = { workspace = true, features = ["json"] }
+tracing = { workspace = true, features = ["valuable"] }
+valuable = { version = "0.1.1", features = ["derive"] }
+valuable-serde = "0.1.1"
+tracing-appender = "0.2"
+json-subscriber = "0.2.7"
+tracing-flame = { version = "0.2.0", optional = true }
+# Refer to the compatibility table in their repository. The semantic versioning does not seems to be reliable.
+tracing-tracy = { version = "=0.11.2", optional = true }
+tracy-client = { version = "=0.17.3", optional = true }
+tracy-client-sys = { version = "=0.24.0", optional = true }
+tracing-tree = { workspace = true }
+clippy-tracing-attributes = "0.1.0"
+
 paste = "1.0"
 z3 = { workspace = true }
 z3-sys = { workspace = true }
@@ -38,17 +52,9 @@ derive_more = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tracing-tree = { workspace = true }
 chrono = "0.4.38"
 const_format = { workspace = true }
-tracing-flame = { version = "0.2.0", optional = true }
-# Refer to the compatibility table in their repository. The semantic versioning does not seems to be reliable.
-tracing-tracy = { version = "=0.11.2", optional = true }
-tracy-client = { version = "=0.17.3", optional = true }
-tracy-client-sys = { version = "=0.24.0", optional = true }
-clippy-tracing-attributes = "0.1.0"
 cfg-if = { version = "1.0" }
-
 
 [lints.rust]
 
@@ -58,7 +64,7 @@ release_sym_value_loss_checks = []
 
 implicit_flow = []
 
-runtime_access_raw_ptr = []
+runtime_access_raw_ptr = ["common/type_db_access_unsync"]
 runtime_access_mutex = []
 
 profile_flame = ["dep:tracing-flame"]
