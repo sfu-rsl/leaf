@@ -323,6 +323,9 @@ pub mod rw {
     #[cfg(feature = "rkyv")]
     mod rkyving {
 
+        #[cfg(not(feature = "type_db_access_unsync"))]
+        use once_map::sync::OnceMap;
+        #[cfg(feature = "type_db_access_unsync")]
         use once_map::unsync::OnceMap;
         use rkyv::{
             Archive,
