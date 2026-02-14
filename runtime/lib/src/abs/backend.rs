@@ -406,23 +406,7 @@ pub trait CoreTypeProvider<V> {
     fn try_to_value_type<'a>(&self, ty: V) -> Option<ValueType>;
 }
 
-pub(crate) trait CallTraceRecorder {
-    fn notify_call(
-        &mut self,
-        call_site: BasicBlockLocation<FuncDef>,
-        entered_func: FuncDef,
-        broken: bool,
-    );
-
-    fn notify_return(
-        &mut self,
-        ret_point: BasicBlockLocation<FuncDef>,
-        caller_func: FuncDef,
-        broken: bool,
-    );
-}
-
-pub(crate) trait PhasedCallTraceRecorder: CallTraceRecorder {
+pub(crate) trait PhasedCallTraceRecorder {
     fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>);
 
     fn finish_call(&mut self, entered_func: FuncDef, broken: bool);
@@ -430,8 +414,8 @@ pub(crate) trait PhasedCallTraceRecorder: CallTraceRecorder {
     fn start_return(&mut self, ret_point: BasicBlockLocation<FuncDef>);
 
     /// # Returns
-    /// The call site which the execution has returned to.
-    fn finish_return(&mut self, broken: bool) -> BasicBlockLocation<FuncDef>;
+    /// The caller which the execution has returned to.
+    fn finish_return(&mut self, broken: bool) -> FuncDef;
 }
 
 pub(crate) trait DecisionTraceRecorder {

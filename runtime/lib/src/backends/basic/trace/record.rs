@@ -13,7 +13,7 @@ use common::{
 use crate::{
     abs::{
         BasicBlockLocation, ConstraintKind, FuncDef,
-        backend::{CallTraceRecorder, DecisionTraceRecorder, PhasedCallTraceRecorder},
+        backend::{DecisionTraceRecorder, PhasedCallTraceRecorder},
     },
     utils::{HasIndex, Indexed, RefView, alias::RRef, file::JsonLinesFormatter},
 };
@@ -80,34 +80,6 @@ where
     BasicExeTraceRecorder::new(config)
 }
 
-impl CallTraceRecorder for BasicExeTraceRecorder {
-    fn notify_call(
-        &mut self,
-        call_site: BasicBlockLocation<FuncDef>,
-        entered_func: FuncDef,
-        broken: bool,
-    ) {
-        self.notify_step(ExeTraceRecord::Call {
-            from: call_site.into(),
-            to: entered_func.body_id,
-            broken,
-        });
-    }
-
-    fn notify_return(
-        &mut self,
-        ret_point: BasicBlockLocation<FuncDef>,
-        caller_func: FuncDef,
-        broken: bool,
-    ) {
-        self.notify_step(ExeTraceRecord::Return {
-            from: ret_point.into(),
-            to: caller_func.body_id,
-            broken,
-        });
-    }
-}
-
 impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self))]
     fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>) {
@@ -139,7 +111,11 @@ impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
             }
         };
 
-        self.notify_call(call_site, entered_func, broken);
+        self.notify_step(ExeTraceRecord::Call {
+            from: call_site.into(),
+            to: entered_func.body_id,
+            broken,
+        });
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -150,7 +126,7 @@ impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    fn finish_return(&mut self, broken: bool) -> BasicBlockLocation<FuncDef> {
+    fn finish_return(&mut self, broken: bool) -> FuncDef {
         let call_site = self.stack.last().copied().expect("Inconsistent stack info");
         let Some(ret_point) = self.last_ret_point.take() else {
             if !broken {
@@ -159,12 +135,16 @@ impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
                     call_site
                 )
             } else {
-                return call_site;
+                return call_site.body;
             }
         };
 
-        self.notify_return(ret_point, call_site.body, broken);
-        call_site
+        self.notify_step(ExeTraceRecord::Return {
+            from: ret_point.into(),
+            to: call_site.body.body_id,
+            broken,
+        });
+        call_site.body
     }
 }
 
@@ -226,16 +206,16 @@ impl BasicExeTraceRecorder {
         // NOTE: This happens when an external function calls internal ones.
         if let Some(unfinished) = last_ret_point {
             core::hint::cold_path();
-            self.notify_return(
-                unfinished,
-                common::types::FuncDef {
+            self.notify_step(ExeTraceRecord::Return {
+                from: unfinished.into(),
+                to: common::types::FuncDef {
                     body_id: InstanceKindId::INVALID,
                     static_addr: core::ptr::null(),
                     as_dyn_method: None,
                 }
                 .into(),
-                true,
-            );
+                broken: true,
+            });
         }
     }
 

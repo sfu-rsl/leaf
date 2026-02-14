@@ -133,16 +133,16 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
     fn after_call(mut self, assignment_id: AssignmentId, result_dest: Self::Place) {
         debug_assert!(!result_dest.is_symbolic());
         let (mut return_val, sanity) = self.flow_manager.finalize_call();
-        let call_site = self
+        let caller = self
             .trace_recorder
             .finish_return(matches!(sanity, crate::call::CallFlowSanity::Broken));
-        debug_assert_eq!(call_site.body, self.current_func());
+        debug_assert_eq!(caller, self.current_func());
 
         #[cfg(feature = "implicit_flow")]
         super::assignment::precondition::add_antecedent(
             self.implication_investigator,
             || result_dest.type_info().get_size(self.type_manager).unwrap(),
-            (call_site.body.body_id, assignment_id),
+            (caller.body_id, assignment_id),
             &mut return_val,
         );
 

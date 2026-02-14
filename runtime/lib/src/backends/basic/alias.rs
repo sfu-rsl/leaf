@@ -174,10 +174,13 @@ impl<T> TraceManagerWithViews for T where
 }
 
 pub(super) trait ExeTraceRecorder:
-    CallTraceRecorder + DecisionTraceRecorder + ExeTraceStorage
+    PhasedCallTraceRecorder + DecisionTraceRecorder + ExeTraceStorage
 {
 }
-impl<T> ExeTraceRecorder for T where T: CallTraceRecorder + DecisionTraceRecorder + ExeTraceStorage {}
+impl<T> ExeTraceRecorder for T where
+    T: PhasedCallTraceRecorder + DecisionTraceRecorder + ExeTraceStorage
+{
+}
 
 pub(super) trait TraceQuerier:
     GenericTraceQuerier<
