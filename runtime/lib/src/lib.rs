@@ -32,3 +32,4 @@ fn init<L: utils::logging::LeafTracingSubLayerFactory>() {
 }
 
 pub type BasicPri = pri::fluent::FluentPri<backends::basic::BasicInstanceManager>;
+pub type CftPri = pri::fluent::FluentPri<backends::cf_tracer::CftInstanceManager>;

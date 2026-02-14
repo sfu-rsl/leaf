@@ -1,0 +1,17 @@
+[package]
+name = "runtime_cf_tracer"
+version = { workspace = true }
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "leafrt_cf_tracer"
+crate-type = ["cdylib"]
+
+[dependencies]
+common = { workspace = true }
+runtime = { path = "../../lib", features = [
+    "implicit_flow",
+    "runtime_access_raw_ptr",
+    "release_sym_value_loss_checks",
+] }
