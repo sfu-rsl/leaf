@@ -2,6 +2,8 @@
 rustflags = [
     "--cfg",
     "info_db_fmt=\"rkyv\"",
+    "--cfg",
+    "tracing_unstable",
 ]
 
 [env]
