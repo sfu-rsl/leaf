@@ -23,6 +23,7 @@ type_info_rw = [
     "dep:once_map",
     "logging",
 ]
+type_db_access_unsync = []
 config = ["std", "dep:config", "logging"]
 directed = ["std", "serde", "dep:serde_json"]
 trace_types = ["std", "dep:derive_more"]
