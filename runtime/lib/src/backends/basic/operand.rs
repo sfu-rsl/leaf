@@ -1,5 +1,6 @@
 use crate::{
-    abs::{Constant, SymVariable, backend::OperandHandler},
+    abs::{Constant, SymVariable},
+    pri::fluent::backend::OperandHandler,
     utils::alias::RRef,
 };
 

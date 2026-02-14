@@ -3,13 +3,13 @@ use std::cell::RefMut;
 use crate::{
     abs::{
         AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local,
-        backend::{ArgsTupling, CallHandler, PhasedCallTraceRecorder},
-        utils::BasicBlockLocationExt,
+        backend::PhasedCallTraceRecorder, utils::BasicBlockLocationExt,
     },
     call::{
         CallFlowManager, CallShadowMemory, DefaultCallFlowManager, SignaturePlaces,
         tupling::ArgsTuplingInfo,
     },
+    pri::fluent::backend::{ArgsTupling, CallHandler},
     utils::InPlaceSelfHierarchical,
 };
 

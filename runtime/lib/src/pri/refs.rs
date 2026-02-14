@@ -93,6 +93,12 @@ mod noop {
     #[derive(Default)]
     pub struct NoOpRefManager<V>(V);
 
+    impl<V> NoOpRefManager<V> {
+        pub(crate) const fn new(value: V) -> Self {
+            Self(value)
+        }
+    }
+
     impl<V: Copy> RefManager for NoOpRefManager<V> {
         type Value = V;
 

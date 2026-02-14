@@ -31,6 +31,7 @@ use crate::{
         backend::*,
     },
     backends::basic::place::DiscriminantPossiblePlace,
+    pri::fluent::backend::*,
     utils::{HasIndex, RefView, alias::RRef},
 };
 

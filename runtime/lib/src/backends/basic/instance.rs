@@ -12,10 +12,15 @@ use common::type_info::rw::LoadedTypeDatabase;
 
 use cfg_if::cfg_if;
 
-use crate::abs::backend::{OperandHandler, RuntimeBackend};
-use crate::backends::basic::{BasicBackendConfig, BasicPlaceBuilder};
+use crate::pri::{
+    fluent::{
+        InstanceManager,
+        backend::{OperandHandler, RuntimeBackend},
+    },
+    refs::DefaultRefManager,
+};
 
-use crate::pri::{fluent::InstanceManager, refs::DefaultRefManager};
+use super::{BasicBackendConfig, BasicPlaceBuilder};
 
 type BackendImpl = crate::backends::basic::BasicBackend;
 type PlaceInfo = <BackendImpl as RuntimeBackend>::PlaceInfo;
@@ -129,6 +134,8 @@ impl InstanceManager for BasicInstanceManager {
             log_info!("Basic backend initialized");
         });
     }
+
+    fn deinit() {}
 
     #[inline]
     fn perform_on_backend<T>(action: impl for<'a> FnOnce(&'a mut Self::Backend) -> T) -> T {

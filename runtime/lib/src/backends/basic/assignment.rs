@@ -6,9 +6,9 @@ use crate::{
     abs::{
         self, AssignmentId, BinaryOp, CastKind, FieldIndex, InstanceKindId, IntType, UnaryOp,
         VariantIndex,
-        backend::AssignmentHandler,
         expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
     },
+    pri::fluent::backend::AssignmentHandler,
     utils::{MutAccess, alias::RRef},
 };
 
