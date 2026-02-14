@@ -14,9 +14,11 @@ pub(crate) use identity;
 #[inline(always)]
 pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
     unsafe {
-        TypeId::new(core::intrinsics::transmute(
-            const { core::any::TypeId::of::<T>() },
-        ))
+        TypeId::new(
+            /* NOTE: Constant evaluation of `intrinsics::transmute` is currently not possible
+             * because the internal representation of `core::any::TypeId` is based on pointers. */
+            core::intrinsics::transmute(const { core::any::TypeId::of::<T>() }),
+        )
         .unwrap_unchecked()
     }
 }

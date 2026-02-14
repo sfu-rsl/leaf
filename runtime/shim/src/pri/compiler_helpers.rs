@@ -79,8 +79,12 @@ pub fn set_place_address_typed<T>(place: PlaceRef, address: *const T) {
 )]
 #[inline(always)]
 pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
-    /* NOTE: Once this function is const in stable build, we can mark this
-     * function as constant as well. */
+    /* NOTE: Why rec-guarding?
+     * As transmute over TypeId does not work at constant evaluation time,
+     * actual value computation cannot be forced and there is a chance that any
+     * function call in `common::utils::type_id_if` may not be inlined, so the
+     * possibility of recursion exists especially in non-codegen-all builds.
+     * Fortunately, LLVM is smart enough to improve in the actual optimized builds. */
     /* NOTE: Do we need to bother about inlining?
      * Based on the last checks, LLVM is smart enough to inline this function
      * automatically and even replace everything with u128. */
@@ -93,7 +97,6 @@ pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
     }
     intrinsics::const_eval_select((), common::utils::type_id_of::<T>, rt::<T>)
 }
-
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
