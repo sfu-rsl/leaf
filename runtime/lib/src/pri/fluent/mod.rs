@@ -1,8 +1,10 @@
 // Converting flat calls to a fluent chain of calls.
 
+pub(crate) mod backend;
+
 use common::pri::{
     AssertionInfo, AssignmentId, BasicBlockIndex, CalleeDef, FieldIndex, FuncDef, LocalIndex,
-    OperandRef, PlaceRef, ProgramRuntimeInterface, RawAddress, Ref, SwitchInfo, TypeId, TypeSize,
+    OperandRef, PlaceRef, ProgramRuntimeInterface, RawAddress, SwitchInfo, TypeId, TypeSize,
     VariantIndex,
 };
 use common::{log_debug, log_info};
@@ -10,15 +12,12 @@ use leaf_macros::trait_log_fn;
 
 use crate::abs::{
     self, AssertKind, CastKind, Constant, FloatType, IntType, Local, PlaceUsage, SymVariable,
-    ValueType,
-    backend::{
-        AnnotationHandler, ArgsTupling, AssignmentHandler, CallHandler, ConstraintHandler,
-        MemoryHandler, OperandHandler, PlaceBuilder, PlaceHandler, PlaceMetadataHandler,
-        PlaceProjector, RawMemoryHandler, RuntimeBackend, Shutdown, SwitchHandler,
-    },
+    ValueType, backend::Shutdown,
 };
 
 use super::refs::RefManager;
+
+use self::backend::*;
 
 /// Manages the instance(s) of the runtime backend and provide access to them.
 pub(crate) trait InstanceManager {
@@ -31,6 +30,8 @@ pub(crate) trait InstanceManager {
     type OperandRefManager: RefManager<Ref = OperandRef, Value = <Self::Backend as RuntimeBackend>::Operand>;
 
     fn init();
+
+    fn deinit();
 
     fn perform_on_backend<T>(action: impl for<'a> FnOnce(&'a mut Self::Backend) -> T) -> T;
 
@@ -69,6 +70,7 @@ where
 
     fn shutdown_runtime_lib() {
         IM::perform_on_backend(|b| b.shutdown());
+        IM::deinit();
     }
 
     #[tracing::instrument(target = "pri", skip_all, level = "trace")]
@@ -1004,6 +1006,7 @@ where
     }
 }
 
+#[allow(private_bounds)]
 impl<IM: InstanceManager> FluentPri<IM>
 where
     <IM::Backend as RuntimeBackend>::Operand: Clone,

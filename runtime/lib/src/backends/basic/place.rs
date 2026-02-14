@@ -143,9 +143,9 @@ mod data_types {
 pub(crate) use data_types::*;
 
 mod builders {
-    use crate::abs::backend::{
+    use crate::pri::fluent::backend::{
         PlaceBuilder, PlaceMetadataHandler, PlaceProjector,
-        implementation::{DefaultPlaceBuilder, DefaultPlaceProjectionHandler},
+        shared::{DefaultPlaceBuilder, DefaultPlaceProjectionHandler},
     };
 
     use super::*;
@@ -220,7 +220,7 @@ pub(crate) use builders::BasicPlaceBuilder;
 mod handlers {
     use common::type_info::{TagEncodingInfo, TagInfo};
 
-    use crate::abs::{PlaceUsage, backend::PlaceHandler};
+    use crate::{abs::PlaceUsage, pri::fluent::backend::PlaceHandler};
 
     use super::*;
     use backend::{BasicBackend, BasicPlaceInfo, TypeDatabase, VariablesState};

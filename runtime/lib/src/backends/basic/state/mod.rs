@@ -1,7 +1,7 @@
 mod pointer_based;
 mod sym_place;
 
-use crate::abs::backend::MemoryHandler;
+use crate::pri::fluent::backend::MemoryHandler;
 
 pub(super) use pointer_based::RawPointerVariableState;
 pub(super) use sym_place::{

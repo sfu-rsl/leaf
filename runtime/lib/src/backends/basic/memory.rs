@@ -2,10 +2,9 @@ use std::borrow::Cow;
 
 use common::log_warn;
 
-use crate::abs::{
-    AssignmentId, PlaceUsage, RawAddress, TypeId, TypeSize,
-    backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
-    expr::BinaryExprBuilder,
+use crate::{
+    abs::{AssignmentId, PlaceUsage, RawAddress, TypeId, TypeSize, expr::BinaryExprBuilder},
+    pri::fluent::backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
 };
 
 use crate::backends::basic::{self as backend};

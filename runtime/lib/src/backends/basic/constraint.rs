@@ -3,9 +3,9 @@ use std::cell::RefMut;
 use crate::{
     abs::{
         self, AssertKind, BasicBlockIndex, BasicBlockLocation, ConstraintKind,
-        backend::{ConstraintHandler, SwitchHandler},
         utils::BasicBlockLocationExt,
     },
+    pri::fluent::backend::{ConstraintHandler, SwitchHandler},
     utils::alias::RRef,
 };
 

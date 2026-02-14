@@ -1,6 +1,6 @@
 use std::cell::RefMut;
 
-use crate::abs::backend::AnnotationHandler;
+use crate::pri::fluent::backend::AnnotationHandler;
 
 use crate::backends::basic as backend;
 use backend::BasicBackend;
