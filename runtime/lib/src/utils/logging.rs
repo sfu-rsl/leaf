@@ -1,17 +1,31 @@
-pub(crate) use common::utils::comma_separated;
-use std::fmt::Display;
+use tracing_subscriber::{
+    EnvFilter, Layer,
+    layer::{Filter, SubscriberExt},
+    util::SubscriberInitExt,
+};
+use tracing_tree::{HierarchicalLayer, time::FormatTime};
 
-pub(crate) fn init_logging() {
-    use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
-    use tracing_tree::{HierarchicalLayer, time::FormatTime};
+pub(crate) trait LeafTracingSubLayerFactory {
+    fn layer() -> impl Layer<tracing_subscriber::Registry> + Sized + Send + Sync + 'static;
 
+    fn filter_rest<S: 'static>() -> impl Filter<S> + Sized + Send + Sync + 'static;
+}
+
+pub(crate) struct IdentityFactory;
+
+impl LeafTracingSubLayerFactory for IdentityFactory {
+    fn layer() -> impl Layer<tracing_subscriber::Registry> + Sized + Send + Sync + 'static {
+        tracing_subscriber::layer::Identity::new()
+    }
+
+    fn filter_rest<S: 'static>() -> impl Filter<S> + Sized + Send + Sync + 'static {
+        tracing_subscriber::filter::filter_fn(|_| true)
+    }
+}
+
+pub(crate) fn init_logging<L: LeafTracingSubLayerFactory>() {
     const ENV_LOG: &str = "LEAF_LOG";
     const ENV_WRITE_STYLE: &str = "LEAF_LOG_STYLE";
-    const ENV_FLAME_GRAPH: &str = "FLAME_OUTPUT";
-
-    let env = std::env::var(ENV_LOG).unwrap_or_default();
-    let flame_graph_output =
-        std::env::var(ENV_FLAME_GRAPH).unwrap_or_else(|_| "tracing.folded".into());
 
     #[derive(Debug, Clone, Copy, Eq, PartialEq, Default)]
     struct ChronoLocalDateTime;
@@ -43,15 +57,23 @@ pub(crate) fn init_logging() {
         .with_deferred_spans(false)
         .with_targets(true);
 
-    let default_directive = format!("pri=off,z3=off,{}", env);
+    let default_directive = format!(
+        "pri=off,z3=off,{}",
+        std::env::var(ENV_LOG).unwrap_or_default()
+    );
     let env_filter = EnvFilter::builder().parse_lossy(default_directive);
 
-    let subscriber = tracing_subscriber::registry()
-        .with(env_filter)
-        .with(fmt_layer);
+    let subscriber = tracing_subscriber::registry().with(L::layer()).with(
+        fmt_layer
+            .with_filter(env_filter)
+            .with_filter(L::filter_rest()),
+    );
 
     #[cfg(feature = "profile_flame")]
     let subscriber = {
+        const ENV_FLAME_GRAPH: &str = "FLAME_OUTPUT";
+        let flame_graph_output =
+            std::env::var(ENV_FLAME_GRAPH).unwrap_or_else(|_| "tracing.folded".into());
         let (flame_layer, _guard) =
             tracing_flame::FlameLayer::with_file(flame_graph_output).unwrap();
         subscriber.with(flame_layer)

@@ -103,7 +103,7 @@ impl InstanceManager for BasicInstanceManager {
 
     fn init() {
         INIT.call_once(|| {
-            crate::init();
+            crate::init::<crate::utils::logging::IdentityFactory>();
 
             log_info!("Initializing basic backend");
             let config = load_config();
