@@ -3542,40 +3542,47 @@ mod implementation {
                             ExistentialTraitRef, elaborate,
                         };
                         // Source: the assertion in `new_dynamic`.
-                        let e_trait_ref = ExistentialTraitRef::erase_self_ty(tcx, trait_ref);
-                        let associated_types = elaborate::supertraits(
-                            tcx,
-                            Binder::dummy(trait_ref),
-                        )
-                        .flat_map(|principal| {
-                            tcx.associated_items(principal.def_id())
-                                .in_definition_order()
-                                .filter(|item| item.is_type())
-                                .filter(|item| !item.is_impl_trait_in_trait())
-                                .filter(|item| !tcx.generics_require_sized_self(item.def_id))
-                        });
+                        let associated_types =
+                            elaborate::supertraits(tcx, Binder::dummy(trait_ref))
+                                .flat_map(|principal| {
+                                    tcx.associated_items(principal.def_id())
+                                        .in_definition_order()
+                                        .filter(|item| item.is_type())
+                                        .filter(|item| !item.is_impl_trait_in_trait())
+                                        .filter(|item| {
+                                            !tcx.generics_require_sized_self(item.def_id)
+                                        })
+                                        .map(move |item| {
+                                            (
+                                                tcx.instantiate_bound_regions_with_erased(
+                                                    principal,
+                                                ),
+                                                item,
+                                            )
+                                        })
+                                })
+                                .collect_vec();
                         tcx.mk_poly_existential_predicates_from_iter(
                             // impl Tr<U, V>
-                            iter::once(ExistentialPredicate::Trait(e_trait_ref))
-                                // A1 = X, A2 = Y, ...
-                                .chain(associated_types.map(|item| {
-                                    // <T as Tr<U, V>>::A1
-                                    let proj_term = Ty::new_projection(
-                                        tcx,
-                                        item.def_id,
-                                        trait_ref.args.iter().map(|a| a.clone()),
-                                    )
-                                    .into();
-                                    ExistentialPredicate::Projection(ExistentialProjection::new(
-                                        tcx,
-                                        item.def_id,
-                                        e_trait_ref.args,
-                                        proj_term,
-                                    ))
-                                }))
-                                // Required by: `mk_poly_existential_predicates`
-                                .sorted_by(|a, b| a.stable_cmp(tcx, b))
-                                .map(|p| Binder::dummy(p)),
+                            iter::once(ExistentialPredicate::Trait(
+                                ExistentialTraitRef::erase_self_ty(tcx, trait_ref),
+                            ))
+                            // A1 = X, A2 = Y, ...
+                            .chain(associated_types.into_iter().map(|(principal, item)| {
+                                // <T as Tr<U, V>>::A1
+                                let proj_term =
+                                    Ty::new_projection_from_args(tcx, item.def_id, principal.args)
+                                        .into();
+                                ExistentialPredicate::Projection(ExistentialProjection::new(
+                                    tcx,
+                                    item.def_id,
+                                    ExistentialTraitRef::erase_self_ty(tcx, principal).args,
+                                    proj_term,
+                                ))
+                            }))
+                            // Required by: `mk_poly_existential_predicates`
+                            .sorted_by(|a, b| a.stable_cmp(tcx, b))
+                            .map(|p| Binder::dummy(p)),
                         )
                     },
                     tcx.lifetimes.re_erased,
