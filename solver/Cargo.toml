@@ -1,0 +1,27 @@
+[package]
+name = "leafsolver"
+version = { workspace = true }
+edition = "2021"
+
+[lib]
+name = "leafsolver"
+path = "src/lib.rs"
+
+[[bin]]
+name = "leafsolver"
+path = "src/bin/main.rs"
+
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "common/serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true }
+clap = { workspace = true }
+delegate = { workspace = true }
+z3 = { workspace = true }
+z3-sys = { workspace = true }
+derive_more = { workspace = true }
+common = { workspace = true, features = ["z3", "logging", "serde"] }
