@@ -1,7 +1,7 @@
 use core::{
     intrinsics::{self, transmute, transmute_unchecked},
     marker::FnPtr,
-    ops::{CoerceUnsized, Deref},
+    ops::{CoerceUnsized, Receiver},
 };
 
 use super::common::{
@@ -130,6 +130,7 @@ pub const fn assertion_info(
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
 pub fn callee_def_static<F: FnPtr>(func_addr: F) -> CalleeDef {
     CalleeDef {
         static_addr: func_addr.addr(),
@@ -138,18 +139,25 @@ pub fn callee_def_static<F: FnPtr>(func_addr: F) -> CalleeDef {
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-pub fn callee_def_maybe_virtual<F: FnPtr, R: ?Sized>(
+#[inline(always)]
+pub fn callee_def_maybe_virtual<F: FnPtr, Pointee: ?Sized, R: Receiver<Target = Pointee>>(
     func_addr: F,
-    receiver_ptr: *const R,
+    receiver: &R,
     identifier: u64,
-) -> CalleeDef {
+) -> CalleeDef
+where
+    <Pointee as core::ptr::Pointee>::Metadata: 'static,
+{
     CalleeDef {
         static_addr: func_addr.addr(),
         as_virtual: {
-            if is_ptr_of_dyn(receiver_ptr) {
-                let metadata = intrinsics::ptr_metadata(receiver_ptr);
+            if const { is_dyn::<Pointee>() } {
                 Some((
-                    unsafe { intrinsics::transmute_unchecked(metadata) },
+                    unsafe {
+                        // NOTE: UB happens if it is not really a dyn type.
+                        let metadata = metadata_from_receiver::<Pointee, R>(receiver);
+                        transmute_unchecked(metadata)
+                    },
                     identifier,
                 ))
             } else {
@@ -160,6 +168,7 @@ pub fn callee_def_maybe_virtual<F: FnPtr, R: ?Sized>(
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
 pub fn func_def_static<F: FnPtr>(
     addr: F,
     instance_kind_discr: InstanceKindDiscr,
@@ -174,27 +183,32 @@ pub fn func_def_static<F: FnPtr>(
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-pub fn func_def_dyn_method<F: FnPtr, T: ?Sized, Dyn: ?Sized>(
+#[inline(always)]
+pub fn func_def_dyn_method<F: FnPtr, TSelf: core::ptr::Thin, Dyn: ?Sized>(
     static_addr: F,
-    receiver_ptr: *const T,
     identifier: u64,
     instance_kind_discr: InstanceKindDiscr,
     crate_id: u32,
     body_id: u32,
 ) -> FuncDef
 where
-    *const T: CoerceUnsized<*const Dyn>,
+    *const TSelf: CoerceUnsized<*const Dyn>,
+    <Dyn as core::ptr::Pointee>::Metadata: 'static,
 {
     FuncDef {
         static_addr: static_addr.addr(),
         as_dyn_method: Some((
             {
-                let receiver_ptr = receiver_ptr as *const Dyn;
-                let metadata = intrinsics::ptr_metadata(receiver_ptr);
-                if !is_ptr_of_dyn(receiver_ptr) {
-                    unsafe { intrinsics::unreachable() }
+                // NOTE: UB happens if the following assumption does not hold.
+                if const { !is_dyn::<Dyn>() } {
+                    loop {}
                 }
-                unsafe { transmute_unchecked(metadata) }
+
+                unsafe {
+                    let ptr = transmute::<usize, *const TSelf>(0) as *const Dyn;
+                    let metadata = intrinsics::ptr_metadata(ptr);
+                    transmute_unchecked(metadata)
+                }
             },
             identifier,
         )),
@@ -202,43 +216,51 @@ where
     }
 }
 
+/* Possible receiver types based on: https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility
+ * - &Self (i.e. &self)
+ * - &mut Self (i.e &mut self)
+ * - Box<Self>
+ * - Rc<Self>
+ * - Arc<Self>
+ * - Pin<P> where P is one of the types above
+ * As all of these types are a wrapper around a pointer to a possibly DST,
+ * a very unsafe transmute should work to obtain the metadata from the receiver type.
+ * (all DSTs have the same metadata layout)
+ * This might break if the generalization over receiver types happen in the compiler.
+ * (You can follow features like `dispatch_from_dyn` and `arbitrary_self_types` in the compiler.)
+ */
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[inline]
-pub fn receiver_to_raw_ptr<Pointee: ?Sized, Ptr: Deref<Target = Pointee>>(
-    receiver: &Ptr,
-) -> *const Pointee {
-    // NOTE: This is because of call to Deref (which is not inlined)
-    super::run_rec_guarded::<false, _>(
-        unsafe {
-            const ZEROS: [usize; 2] = [0; 2];
-            intrinsics::read_via_copy(&ZEROS as *const _ as *const () as *const *const Pointee)
-        },
-        || receiver.deref() as *const Pointee,
-    )
+pub unsafe fn metadata_from_receiver<Pointee: ?Sized, R: Receiver<Target = Pointee>>(
+    receiver: &R,
+) -> <Pointee as core::ptr::Pointee>::Metadata {
+    // The following can cause UB if the receiver does not have the same alignment and size as assumed.
+    let ptr = intrinsics::read_via_copy(receiver as *const R as *const *const Pointee);
+    intrinsics::ptr_metadata(ptr)
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
 #[inline(always)]
-const fn is_ptr_of_dyn<T: ?Sized>(_ptr: *const T) -> bool {
+const fn is_dyn<T: ?Sized>() -> bool
+where
+    // This is not necessarily true, but works for instrumentation as lifetimes are erased.
+    <T as core::ptr::Pointee>::Metadata: 'static,
+{
+    /* Based on the documentation, three cases are possible for the metadata of a pointer:
+     *- () for sized types
+     *- usize for slice types
+     *- DynMetadata for dyn types
+     */
     const {
-        intrinsics::size_of::<<T as core::ptr::Pointee>::Metadata>()
-            == intrinsics::size_of::<DynRawMetadata>()
+        !intrinsics::type_id_eq(
+            intrinsics::type_id::<<T as core::ptr::Pointee>::Metadata>(),
+            intrinsics::type_id::<()>(),
+        ) && !intrinsics::type_id_eq(
+            intrinsics::type_id::<<T as core::ptr::Pointee>::Metadata>(),
+            intrinsics::type_id::<usize>(),
+        )
     }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub fn receiver_pin_to_raw_ptr<Pointee: ?Sized, Ptr: Deref<Target = Pointee>>(
-    receiver: &core::pin::Pin<Ptr>,
-) -> *const Pointee {
-    receiver_to_raw_ptr(receiver)
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub fn receiver_self_to_raw_ptr<Pointee: ?Sized>(receiver_ref: &Pointee) -> *const Pointee {
-    receiver_ref as *const Pointee
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]

@@ -221,9 +221,6 @@ pub(crate) mod sym {
                 callee_def_maybe_virtual,
                 func_def_static,
                 func_def_dyn_method,
-                receiver_to_raw_ptr,
-                receiver_pin_to_raw_ptr,
-                receiver_self_to_raw_ptr,
 
                 const_binary_op_of,
                 const_unary_op_of,
@@ -275,7 +272,7 @@ pub(crate) mod sym {
 
         pass_compiler_helpers_to!(symbols_in_compiler_helpers);
 
-        pub(crate) const ALL_HELPERS: [LS; 35] = pass_compiler_helpers_to!(bracket);
+        pub(crate) const ALL_HELPERS: [LS; 32] = pass_compiler_helpers_to!(bracket);
     }
     pub(crate) use compiler_helpers::*;
 
