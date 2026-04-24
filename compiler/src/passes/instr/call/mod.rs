@@ -162,9 +162,10 @@ pub(crate) trait StorageMarker: Sized {
     fn mark_dead(&mut self, place: impl FnOnce(&mut Self) -> PlaceRef);
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct SwitchInfo<'tcx> {
     pub(super) node_index: BasicBlock,
+    pub(super) original_node_index: Operand<'tcx>,
     pub(super) discr_ty: Ty<'tcx>,
     pub(super) discr: Option<OperandRef>,
 }

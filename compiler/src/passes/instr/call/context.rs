@@ -356,7 +356,7 @@ pub(crate) struct BranchingContext<'b, 'tcx, B> {
 
 impl<'tcx, B> SwitchInfoProvider<'tcx> for BranchingContext<'_, 'tcx, B> {
     fn switch_info(&self) -> SwitchInfo<'tcx> {
-        self.switch_info
+        self.switch_info.clone()
     }
 }
 

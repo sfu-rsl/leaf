@@ -23,6 +23,7 @@ where
 
         SwitchInfo {
             node_index: self.context.block_index(),
+            original_node_index: self.original_bb_index_as_arg(),
             discr_ty: discr.ty(self.context.local_decls(), self.tcx()),
             discr: discr_ref,
         }
@@ -126,10 +127,7 @@ where
                 self.make_bb_for_call_with_target(
                     func_name,
                     [
-                        Some(operand::const_from_uint(
-                            tcx,
-                            switch_info.node_index.as_u32(),
-                        )),
+                        Some(switch_info.original_node_index),
                         add_index_arg.then(|| operand::const_from_uint(tcx, index)),
                         Some(operand::move_for_local(switch_info.discr.unwrap().into())),
                         value_arg,
@@ -145,7 +143,7 @@ where
             blocks.push(self.make_bb_for_call_with_target(
                 sym::take_branch,
                 vec![
-                    operand::const_from_uint(tcx, switch_info.node_index.as_u32()),
+                    switch_info.original_node_index,
                     operand::const_from_uint(tcx, index),
                 ],
                 Some(self.context.block_index()),
@@ -257,7 +255,7 @@ where
                 func_name,
                 [
                     vec![
-                        operand::const_from_uint(tcx, switch_info.node_index.as_u32()),
+                        switch_info.original_node_index,
                         operand::move_for_local(switch_info.discr.unwrap().into()),
                     ],
                     additional_args,
@@ -270,10 +268,7 @@ where
         } else if self.config().switch_filter.control {
             blocks.push(self.make_bb_for_call_with_target(
                 sym::take_branch_ow,
-                vec![operand::const_from_uint(
-                    tcx,
-                    switch_info.node_index.as_u32(),
-                )],
+                vec![switch_info.original_node_index],
                 Some(self.context.block_index()),
             ));
         }
