@@ -41,6 +41,7 @@ unsafe_wrappers = ["dep:derive_more"]
 conc_loop = ["std"]
 building = ["std"]
 program_dep = ["std", "rkyv", "serde", "dep:macros"]
+ffi_ty_std_convert = []
 
 [dependencies]
 # No dependencies are supposed to be used by this crate in the mode that is used by the shim library.

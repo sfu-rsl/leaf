@@ -24,8 +24,11 @@ use self::implementation::CompilationPassAdapter;
 use crate::config::LeafCompilerConfig;
 use crate::utils::Chain;
 
-pub(crate) use codegen::{MonoItemInternalizer, InternalizationRules};
-pub(crate) use instr::{InstrumentationCounter, Instrumentor, pri_utils, InstrumentationRules};
+pub(crate) use codegen::{InternalizationRules, MonoItemInternalizer};
+pub(crate) use instr::{
+    InstrumentationCounter, InstrumentationRecursionChecker, InstrumentationRules, Instrumentor,
+    pri_utils,
+};
 pub(crate) use logger::CompilationPassLogExt;
 #[allow(unused)]
 pub(crate) use noop::NoOpPass;

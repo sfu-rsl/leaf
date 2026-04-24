@@ -11,15 +11,17 @@ pub use identity;
 #[cfg(core_build)]
 pub(crate) use identity;
 
+// NOTE: This function is also used in instrumentation, so extra care is needed about inlining.
 #[inline(always)]
 pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
     unsafe {
-        TypeId::new(
-            /* NOTE: Constant evaluation of `intrinsics::transmute` is currently not possible
-             * because the internal representation of `core::any::TypeId` is based on pointers. */
-            core::intrinsics::transmute(const { core::any::TypeId::of::<T>() }),
-        )
-        .unwrap_unchecked()
+        let type_id = const { core::any::TypeId::of::<T>() };
+        /* NOTE: Constant evaluation of `intrinsics::transmute` is currently not possible
+         * because the internal representation of `core::any::TypeId` is based on pointers.
+         * But it happens at the code generation phase. */
+        let raw: u128 = core::intrinsics::transmute(type_id);
+        // TypeId::new_unchecked(raw)
+        core::intrinsics::transmute(raw)
     }
 }
 

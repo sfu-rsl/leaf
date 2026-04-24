@@ -3,6 +3,7 @@ mod config;
 mod counter;
 mod decision;
 pub(crate) mod pri_utils;
+mod rec_check;
 
 use const_format::concatcp;
 
@@ -61,6 +62,7 @@ use self::{
 
 pub(crate) use config::InstrumentationRules;
 pub(crate) use counter::InstrumentationCounter;
+pub(crate) use rec_check::InstrumentationRecursionChecker;
 
 const TAG_INSTRUMENTATION: &str = "instrumentation";
 use TAG_INSTRUMENTATION as TAG_INSTR;

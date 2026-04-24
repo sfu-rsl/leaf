@@ -24,6 +24,7 @@ common = { workspace = true, features = [
     "answers",
     "directed",
     "program_dep",
+    "ffi_ty_std_convert",
 ] }
 leaf_macros = { path = "../../macros", package = "macros" }
 

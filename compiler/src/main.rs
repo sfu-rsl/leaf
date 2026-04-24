@@ -213,11 +213,12 @@ mod driver_callbacks {
         let passes = chain!(
             prerequisites_pass,
             <TypeInfoExporter>,
-            <InstrumentationCounter>,
             <ProgramMapExporter>,
             <ProgramDependenceMapExporter>,
             nctfe_pass,
             Instrumentor::new(true, None /* FIXME */, config.instr_rules.clone()),
+            <InstrumentationCounter>,
+            <InstrumentationRecursionChecker>,
         );
 
         if config.codegen_all_mir {

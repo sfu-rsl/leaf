@@ -22,8 +22,8 @@ impl ProgramRuntimeInterface for NoOpPri {
     type ConstStr = &'static str;
     type ConstByteStr = &'static [u8];
     type Slice<'a, T: 'a> = &'a [T];
-    // type TypeId = abs::TypeId;
-    type TypeId = common::ffi::U128Pack<TypeId>;
+    type TypeId = abs::TypeId;
+    // type TypeId = common::ffi::U128Pack<TypeId>;
     type PrimitiveType = abs::PrimitiveType;
     type BinaryOp = abs::BinaryOp;
     type UnaryOp = abs::UnaryOp;

@@ -4,12 +4,12 @@ use common::{ffi::*, pri::*};
 
 struct ExternPri;
 
-macro_rules! delegate_to_default {
+macro_rules! delegate_to_pri_impl {
     ($(#[$($attr: meta)*])* fn $name:ident ($($(#[$($arg_attr: meta)*])* $arg:ident : $arg_type:ty),* $(,)?) $(-> $ret_ty:ty)?;) => {
         $(#[$($attr)*])*
         #[inline(always)]
         fn $name ($($(#[$($arg_attr)*])* $arg : $arg_type),*) $(-> $ret_ty)? {
-            PriImpl::$name($($arg.into()),*).into()
+            PriImpl::$name($(From::from($arg)),*)
         }
     };
 }
@@ -34,7 +34,7 @@ impl ProgramRuntimeInterface for ExternPri {
     type DebugInfo = common::ffi::DebugInfo;
     type Tag = common::ffi::ConstStrPack;
 
-    common::pri::list_func_decls!(modifier: delegate_to_default, (from Self));
+    common::pri::list_func_decls!(modifier: delegate_to_pri_impl, (from Self));
 }
 impl FfiPri for ExternPri {}
 
