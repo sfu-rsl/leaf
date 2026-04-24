@@ -1,5 +1,5 @@
-use common::type_info::{FieldInfo, TypeInfo};
-use common::{log_debug, log_warn};
+use common::log_debug;
+use common::type_info::TypeInfo;
 
 use crate::type_info::TypeInfoExt;
 
@@ -17,7 +17,7 @@ mod retrieval {
     use common::type_info::{FieldsShapeInfo, StructShape, VariantInfo};
     use common::types::TypeSize;
 
-    use crate::abs::{IntType, ValueType, backend::CoreTypeProvider};
+    use crate::abs::{backend::CoreTypeProvider, IntType, ValueType};
 
     use super::*;
 
@@ -889,6 +889,25 @@ mod proj {
                         .expect_addr(type_manager, retriever)
                 }
                 _ => panic!("Not an address: {:?}", self),
+            }
+        }
+
+        pub(crate) fn expect_fat_ptr(
+            &self,
+            type_manager: &dyn TypeDatabase,
+            retriever: &dyn RawPointerRetriever,
+        ) -> FatPtrValue {
+            match self {
+                ConcreteValue::FatPointer(fat_ptr) => {
+                    // FIXME: Avoid cloning by using Cow.
+                    fat_ptr.clone()
+                }
+                ConcreteValue::Unevaluated(UnevalValue::Lazy(raw)) => unsafe {
+                    raw.retrieve(type_manager, retriever)
+                        .unwrap()
+                        .expect_fat_ptr(type_manager, retriever)
+                },
+                _ => panic!("Not a fat pointer: {:?}", self),
             }
         }
     }
