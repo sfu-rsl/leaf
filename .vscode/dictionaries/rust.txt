@@ -11,6 +11,7 @@ cxchg
 Deque
 dylib
 isize
+nonoverlapping
 peekable
 Reborrowing
 repr
