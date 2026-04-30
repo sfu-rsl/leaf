@@ -14,8 +14,8 @@ use cfg_if::cfg_if;
 
 use crate::pri::{
     fluent::{
-        InstanceManager,
         backend::{OperandHandler, RuntimeBackend},
+        InstanceManager,
     },
     refs::DefaultRefManager,
 };
@@ -55,7 +55,7 @@ cfg_if! {
     } else {
         thread_local! {
             // Place and operand references are local to functions, so they need not and should not be shared
-            static PLACE_REF_MANAGER: RefCell<DefaultRefManager<PlaceInfo>> =
+            static PLACE_REF_MANAGER: RefCell<DefaultRefManager<PlaceInfoImpl>> =
                 RefCell::new(DefaultRefManager::new());
         }
     }
