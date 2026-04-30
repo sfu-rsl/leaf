@@ -3,7 +3,7 @@ use std::{cell::RefCell, sync::Once};
 use crate::{
     backends::cf_tracer::{NullOperand, NullPlace},
     pri::{
-        fluent::{InstanceManager, backend::shared::noop::NoOpPlaceBuilder},
+        fluent::{backend::shared::noop::NoOpPlaceBuilder, InstanceManager},
         refs::NoOpRefManager,
     },
 };
@@ -36,7 +36,6 @@ impl InstanceManager for CftInstanceManager {
     fn init() {
         INIT.call_once(|| {
             crate::init::<super::tracing_i::LayerFactory>();
-            BACKEND.set(Some(CftBackend::new()));
         });
     }
 
@@ -44,11 +43,7 @@ impl InstanceManager for CftInstanceManager {
 
     fn perform_on_backend<T>(action: impl for<'a> FnOnce(&'a mut Self::Backend) -> T) -> T {
         BACKEND.with_borrow_mut(|b| {
-            let backend = if cfg!(debug_assertions) {
-                b.as_mut().expect("Runtime is not initialized.")
-            } else {
-                unsafe { b.as_mut().unwrap_unchecked() }
-            };
+            let backend = b.get_or_insert_with(CftBackend::new);
             action(backend)
         })
     }
