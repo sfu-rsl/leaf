@@ -1,5 +1,5 @@
 # NOTE: this version derived from https://github.com/rust-lang/rust/blob/master/rustfmt.toml
-version = "Two"
+style_edition = "2024"
 #use_small_heuristics = "Max"
 #merge_derives = false
 
