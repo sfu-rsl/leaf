@@ -1,3 +1,7 @@
+include = [
+    "$leaf_workspace_dir/.cargo/config.toml",
+]
+
 [build]
 rustflags = [
     $core_build_cfg_switch "--cfg",

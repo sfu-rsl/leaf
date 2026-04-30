@@ -341,6 +341,7 @@ def create_dummy_crate(
         leaf_as_in_core_switch=commenter(add_leaf_as_dep),
         leaf_as_external_switch=commenter(not add_leaf_as_dep),
         core_build_cfg_switch=commenter(not enable_core_build_cfg),
+        leaf_workspace_dir=leaf_workspace_dir,
     )
 
     return crate_path
