@@ -52,3 +52,7 @@ libafl = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2", features =
 ] }
 libafl_bolts = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
 libafl_targets = { git = "https://github.com/sfu-rsl/LibAFL", tag = "0.15.2" }
+
+[profile.release]
+debug = true
+split-debuginfo = "packed"
