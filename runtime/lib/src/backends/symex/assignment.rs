@@ -12,7 +12,7 @@ use crate::{
     utils::{MutAccess, alias::RRef},
 };
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{
     Implied, PlaceValueRef, Precondition, SymExBackend, SymExExprBuilder, SymExValue, TypeDatabase,
     TypeLayoutResolver, ValueRef, VariablesState, alias::SymExValueExprBuilder, expr::prelude::*,
@@ -505,7 +505,6 @@ pub(super) mod precondition {
 
     use crate::utils::RangeIntersection;
 
-    use crate::backends::symex as backend;
     use backend::{
         TypeLayoutResolver, TypeSize,
         implication::{PreconditionConstraints, PreconditionQuery},

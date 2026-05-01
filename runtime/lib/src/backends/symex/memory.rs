@@ -7,7 +7,7 @@ use crate::{
     pri::fluent::backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
 };
 
-use crate::backends::symex::{self as backend};
+use super::alias::backend;
 use backend::{
     SymExBackend, SymExExprBuilder, SymExPlaceValue, SymExSymPlaceHandler, SymExValue,
     TypeDatabase,

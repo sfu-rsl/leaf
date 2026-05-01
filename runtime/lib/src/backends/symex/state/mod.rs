@@ -8,7 +8,7 @@ pub(super) use sym_place::{
     SymPlaceHandler, SymPlaceSymEntity, strategies::make_sym_place_handler,
 };
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{SymExBackend, SymExPlaceValue, VariablesState};
 
 pub(crate) struct SymExMemoryHandler<'s> {

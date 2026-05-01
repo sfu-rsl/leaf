@@ -10,7 +10,7 @@ use crate::{
     type_info::TypeInfoExt,
 };
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, TypeLayoutResolver, ValueType};
 
 struct SymExTypeManager<D: TypeDatabase<'static>> {

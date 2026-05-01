@@ -13,7 +13,7 @@ use crate::{
     utils::InPlaceSelfHierarchical,
 };
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{
     GenericVariablesState, Implied, PlaceValueRef, SymExBackend, SymExValue, SymExVariablesState,
     TypeDatabase, Value, config::CallConfig, expr::prelude::DeterPlaceValueRef,
@@ -208,13 +208,15 @@ mod tupling {
 
     use crate::{
         abs::{FieldIndex, RawAddress},
-        backends::symex::expr::LazyTypeInfo,
         call::tupling::TuplingHelper,
         type_info::{FieldsShapeInfoExt, TypeInfoExt},
     };
 
     use super::*;
-    use backend::{TypeDatabase, expr::prelude::DeterministicPlaceValue};
+    use backend::{
+        TypeDatabase,
+        expr::{LazyTypeInfo, prelude::DeterministicPlaceValue},
+    };
 
     pub(crate) struct TuplingHelperImpl<'a> {
         pub(crate) type_manager: &'a dyn TypeDatabase,

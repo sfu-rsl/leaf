@@ -1,10 +1,11 @@
 use std::cell::RefMut;
 
+use common::log_debug;
+
 use crate::pri::fluent::backend::AnnotationHandler;
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::SymExBackend;
-use common::log_debug;
 
 const LOG_TAG_TAGS: &str = "tags";
 

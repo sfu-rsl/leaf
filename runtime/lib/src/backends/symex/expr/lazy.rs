@@ -3,7 +3,7 @@ use common::type_info::TypeInfo;
 
 use crate::type_info::TypeInfoExt;
 
-use crate::backends::symex as backend;
+use super::backend;
 use backend::alias::TypeDatabase;
 
 use super::*;

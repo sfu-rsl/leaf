@@ -4,8 +4,7 @@ use derive_more as dm;
 
 use common::types::PointerOffset;
 
-use crate::backends::symex::place::PlaceMetadata;
-
+use super::super::place::PlaceMetadata;
 use super::prelude::*;
 
 pub(crate) type PlaceValueRef = Rc<PlaceValue>;

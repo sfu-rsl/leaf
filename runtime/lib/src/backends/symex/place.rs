@@ -8,7 +8,7 @@ use common::{log_warn, types::RawAddress};
 
 use crate::abs::{Local, TypeId, TypeSize, ValueType, place::HasMetadata};
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{PlaceValueRef, expr::place::DeterPlaceValueRef};
 
 mod data_types {

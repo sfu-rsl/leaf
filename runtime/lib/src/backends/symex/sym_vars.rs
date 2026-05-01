@@ -6,7 +6,7 @@ use common::{log_info, types::trace::Constraint};
 
 use crate::abs::SymVariable;
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{
     ConcreteValue, ConcreteValueRef, SymExValue, SymValue, SymValueRef, SymVarId,
     SymVariablesManager, SymbolicVar, Value, expr::ConstValue,

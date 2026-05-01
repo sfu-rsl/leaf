@@ -17,9 +17,9 @@ use crate::pri::{
     refs::DefaultRefManager,
 };
 
-use super::{SymExBackendConfig, SymExPlaceBuilder};
+use super::{SymExBackend, SymExBackendConfig, SymExPlaceBuilder};
 
-type BackendImpl = crate::backends::symex::SymExBackend;
+type BackendImpl = SymExBackend;
 type PlaceInfoImpl = <BackendImpl as RuntimeBackend>::PlaceInfo;
 type OperandImpl = <BackendImpl as RuntimeBackend>::Operand;
 

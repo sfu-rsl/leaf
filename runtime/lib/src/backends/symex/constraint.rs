@@ -9,8 +9,9 @@ use crate::{
     utils::alias::RRef,
 };
 
-use crate::backends::symex as backend;
 use crate::call::CallFlowManager;
+
+use super::alias::backend;
 use backend::{
     SymExBackend, SymExExprBuilder, SymExTraceManager, SymExValue,
     alias::SymExValueUnaryExprBuilder, expr::prelude::ConstValue,
