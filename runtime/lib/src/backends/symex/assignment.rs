@@ -1,0 +1,688 @@
+use core::{iter, ops::DerefMut};
+
+use common::type_info::TagEncodingInfo;
+
+use crate::{
+    abs::{
+        self, AssignmentId, BinaryOp, CastKind, FieldIndex, InstanceKindId, IntType, UnaryOp,
+        VariantIndex,
+        expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
+    },
+    pri::fluent::backend::AssignmentHandler,
+    utils::{MutAccess, alias::RRef},
+};
+
+use crate::backends::symex as backend;
+use backend::{
+    Implied, PlaceValueRef, Precondition, SymExBackend, SymExExprBuilder, SymExValue, TypeDatabase,
+    TypeLayoutResolver, ValueRef, VariablesState, alias::SymExValueExprBuilder, expr::prelude::*,
+    implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
+    type_info::TypeLayoutResolverExt,
+};
+
+#[cfg(feature = "implicit_flow")]
+use backend::ImplicationInvestigator;
+
+pub(super) struct AssignmentServices<'a, EB> {
+    #[cfg(feature = "implicit_flow")]
+    pub(super) current_func: InstanceKindId,
+    pub(super) vars_state: &'a mut dyn VariablesState,
+    pub(super) expr_builder: RRef<EB>,
+    pub(super) type_manager: &'a dyn TypeDatabase,
+    #[cfg(feature = "implicit_flow")]
+    pub(super) implication_investigator: &'a dyn ImplicationInvestigator,
+}
+
+// Meant for leveraging field-level borrowing to avoid borrowing issues.
+macro_rules! services_from_backend {
+    ($backend:expr) => {{
+        use crate::call::CallFlowManager;
+        AssignmentServices {
+            #[cfg(feature = "implicit_flow")]
+            current_func: $backend.call_flow_manager.current_func().body_id,
+            vars_state: &mut $backend.vars_state,
+            expr_builder: $backend.expr_builder.clone(),
+            type_manager: $backend.type_manager.as_ref(),
+            #[cfg(feature = "implicit_flow")]
+            implication_investigator: $backend.implication_investigator.as_ref(),
+        }
+    }};
+}
+pub(super) use services_from_backend;
+
+pub(crate) struct SymExAssignmentHandler<'s, 'a: 's, EB> {
+    #[cfg(feature = "implicit_flow")]
+    id: AssignmentId,
+    dest: PlaceValueRef,
+    services: MutAccess<'s, AssignmentServices<'a, EB>>,
+}
+
+impl SymExAssignmentHandler<'_, '_, SymExExprBuilder> {
+    pub(super) fn new<'a>(
+        id: AssignmentId,
+        dest: PlaceValueRef,
+        backend: &'a mut SymExBackend,
+    ) -> SymExAssignmentHandler<'a, 'a, SymExExprBuilder> {
+        SymExAssignmentHandler::with_services(id, dest, services_from_backend!(backend).into())
+    }
+
+    pub(super) fn with_services<'s, 'a, EB>(
+        id: AssignmentId,
+        dest: PlaceValueRef,
+        services: MutAccess<'s, AssignmentServices<'a, EB>>,
+    ) -> SymExAssignmentHandler<'s, 'a, EB> {
+        SymExAssignmentHandler {
+            #[cfg(feature = "implicit_flow")]
+            id,
+            dest,
+            services,
+        }
+    }
+}
+
+impl<EB: SymExValueExprBuilder> AssignmentHandler for SymExAssignmentHandler<'_, '_, EB> {
+    type Place = PlaceValueRef;
+    type DiscriminablePlace = DiscriminantPossiblePlace;
+    type Operand = SymExValue;
+
+    fn use_of(mut self, operand: Self::Operand) {
+        self.set(operand)
+    }
+
+    fn repeat_of(mut self, operand: Self::Operand, count: usize) {
+        self.set_value(operand.map_value(|value| {
+            if value.is_symbolic() {
+                ConcreteValue::Array(ArrayValue {
+                    elements: vec![value; count],
+                })
+                .into()
+            } else {
+                UnevalValue::Some.into()
+            }
+        }))
+    }
+
+    fn ref_to(mut self, place: Self::Place, _is_mutable: bool) {
+        use backend::expr::place::*;
+        match place.as_ref() {
+            PlaceValue::Symbolic(sym_place) => match &sym_place.base {
+                // Reborrowing
+                SymbolicPlaceBase::Deref(DerefSymHostPlace { host, .. }) => {
+                    let value = self.expr_builder().transmute(
+                        // FIXME: retain antecedents
+                        Implied::by_unknown(host.clone().into()),
+                        self.dest.type_info().id().unwrap(),
+                        self.dest.type_info().clone(),
+                    );
+                    self.set(value);
+                }
+                SymbolicPlaceBase::SymIndex(..) => {
+                    // FIXME: retain antecedents
+                    self.set_value(Implied::by_unknown(
+                        Expr::Ref(SymIndexPlaceValueRef::new(place)).into(),
+                    ));
+                }
+            },
+            PlaceValue::Deterministic(..) => {
+                self.set_value(Implied::always(UnevalValue::Some.into()))
+            }
+        }
+    }
+
+    fn thread_local_ref_to(mut self) {
+        // Thread local references cannot refer to symbolic places, so the reference is concrete.
+        self.set_value(Implied::by_unknown(UnevalValue::Some.into()))
+    }
+
+    fn address_of(self, place: Self::Place, is_mutable: bool) {
+        // For symbolic values `ref_to` and `address_of` should have the same behavior.
+        self.ref_to(place, is_mutable)
+    }
+
+    fn cast_of(mut self, operand: Self::Operand, target: CastKind) {
+        let cast_value = self
+            .expr_builder()
+            .cast(operand, target, self.dest.type_info().clone());
+
+        self.set(cast_value)
+    }
+
+    fn binary_op_between(
+        mut self,
+        operator: BinaryOp,
+        first: Self::Operand,
+        second: Self::Operand,
+    ) {
+        let operator =
+            self.to_expr_builder_binary_op(operator, first.is_symbolic() || second.is_symbolic());
+
+        let second = if operator.is_shift() && second.is_symbolic() {
+            self.expr_builder().to_int(
+                second,
+                ValueType::try_from(self.dest.type_info())
+                    .unwrap()
+                    .expect_int(),
+                self.dest.type_info().clone(),
+            )
+        } else {
+            second
+        };
+
+        let result_value = self.expr_builder().binary_op((first, second), operator);
+        self.set(result_value)
+    }
+
+    fn unary_op_on(mut self, operator: UnaryOp, operand: Self::Operand) {
+        let result_value = self.expr_builder().unary_op(operand, operator.into());
+        self.set(result_value)
+    }
+
+    fn discriminant_from(mut self, place: Self::DiscriminablePlace) {
+        let discr_value = match place {
+            DiscriminantPossiblePlace::None => {
+                // https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Rvalue.html#variant.Discriminant
+                Implied::always(
+                    ConstValue::new_int(0_u128, self.get_int_type(self.dest.type_info()))
+                        .to_value_ref(),
+                )
+            }
+            DiscriminantPossiblePlace::SingleVariant { discr_bit_rep } => Implied::always(
+                ConstValue::new_int(discr_bit_rep, self.get_int_type(self.dest.type_info()))
+                    .to_value_ref(),
+            ),
+            DiscriminantPossiblePlace::TagPlaceWithInfo(tag_place, tag_encoding) => {
+                let tag_value = self.services.vars_state.copy_place(&tag_place);
+                if tag_value.is_symbolic() {
+                    tag_value.map_value(|value| {
+                        self.build_discriminant_expr(
+                            SymValueRef::new(value),
+                            tag_encoding,
+                            self.dest.type_info(),
+                            tag_place.type_info(),
+                        )
+                        .into()
+                    })
+                } else {
+                    tag_value
+                }
+            }
+        };
+
+        self.set(discr_value)
+    }
+
+    #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
+    fn array_from(mut self, elements: impl Iterator<Item = Self::Operand>) {
+        let (preconditions, values) = elements
+            .map(Implied::into_tuple)
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
+        let precondition = self.precondition_of_array(preconditions);
+
+        let value = ConcreteValue::Array(ArrayValue {
+            elements: values.into_iter().collect(),
+        });
+
+        self.set_no_ant(Implied {
+            by: precondition,
+            value: value.to_value_ref(),
+        })
+    }
+
+    fn adt_from(
+        mut self,
+        fields: impl Iterator<Item = Self::Operand>,
+        variant: Option<VariantIndex>,
+    ) {
+        let kind = match variant {
+            Some(variant) => AdtKind::Enum { variant },
+            None => AdtKind::Struct,
+        };
+        self.set_adt_value(kind, fields.map(|f| Some(f)))
+    }
+
+    fn union_from(mut self, active_field: FieldIndex, value: Self::Operand) {
+        let fields = (0..active_field)
+            .map(|_| None)
+            .chain(iter::once(Some(value)));
+        self.set_adt_value(AdtKind::Struct, fields.into_iter())
+    }
+
+    fn raw_ptr_from(self, data_ptr: Self::Operand, metadata: Self::Operand, _is_mutable: bool) {
+        let data_ptr = self.ensure_type_of_ptr_for_raw_ptr(data_ptr);
+        self.adt_from([data_ptr, metadata].into_iter(), None)
+    }
+
+    // TODO: Need to add support for the Deinit MIR instruction to have this working properly.
+    // This solution works for now to avoid crashes when samples are run.
+    fn variant_index(mut self, variant_index: VariantIndex) {
+        // FIXME: This implementation relies on internals of the VariablesState.
+        let value = Value::Concrete(ConcreteValue::Adt(AdtValue {
+            kind: AdtKind::Enum {
+                variant: variant_index,
+            },
+            fields: vec![],
+        }));
+        self.set_value(Implied::always(value))
+    }
+
+    fn shallow_init_box_from(self, value: Self::Operand) {
+        /* According to the Rust MIR documentation:
+         * https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Rvalue.html#variant.ShallowInitBox
+         * > Transmutes a *mut u8 into shallow-initialized Box<T>.
+         * BTW, very improbable to have a symbolic value here. */
+        let dst_ty_id = self.dest.type_id();
+        self.cast_of(value, CastKind::Transmute(dst_ty_id));
+    }
+
+    fn wrap_in_unsafe_binder(self, value: Self::Operand) {
+        let dst_ty_id = self.dest.type_id();
+        self.cast_of(value, CastKind::Transmute(dst_ty_id));
+    }
+
+    fn use_if_eq(mut self, val: Self::Operand, current: Self::Operand, expected: Self::Operand) {
+        let are_eq = self.expr_builder().eq((current.clone(), expected.clone()));
+        let are_eq = if !are_eq.is_symbolic() {
+            are_eq.map_value(|value| {
+                // As it will be abstracted to Some, we need to resolve them explicitly here.
+                let current = ConcreteValueRef::new(current.value.clone())
+                    .try_resolve_as_const(self.type_manager());
+                let expected =
+                    ConcreteValueRef::new(expected.value).try_resolve_as_const(self.type_manager());
+                match (current, expected) {
+                    (Some(current), Some(expected)) => {
+                        let are_eq = current == expected;
+                        ConstValue::Bool(are_eq).to_value_ref()
+                    }
+                    _ => value,
+                }
+            })
+        } else {
+            are_eq
+        };
+        let value = self.expr_builder().if_then_else((are_eq, val, current));
+        self.set(value)
+    }
+
+    fn use_and_check_eq(mut self, val: Self::Operand, expected: Self::Operand) {
+        let are_eq = self.expr_builder().eq((val.clone(), expected));
+        self.set_adt_value(
+            AdtKind::Struct,
+            [Some(val.clone()), Some(are_eq)].into_iter(),
+        )
+    }
+
+    fn some(mut self) {
+        self.set_value(Implied::always(UnevalValue::Some.into()))
+    }
+}
+
+impl<'a, EB> SymExAssignmentHandler<'_, 'a, EB> {
+    fn expr_builder(&self) -> impl DerefMut<Target = EB> + '_ {
+        self.services.expr_builder.as_ref().borrow_mut()
+    }
+
+    fn type_manager(&self) -> &'a dyn TypeDatabase {
+        self.services.type_manager
+    }
+
+    #[inline]
+    fn set_value(&mut self, value: Implied<Value>) {
+        self.set(value.map_value(Value::to_value_ref));
+    }
+
+    fn set(&mut self, mut value: SymExValue) {
+        #[cfg(feature = "implicit_flow")]
+        self.add_antecedent(&mut value);
+        self.set_no_ant(value);
+    }
+
+    #[inline]
+    fn set_no_ant(&mut self, value: SymExValue) {
+        self.services.vars_state.set_place(&self.dest, value);
+    }
+
+    fn get_int_type(&self, ty_info: &LazyTypeInfo) -> IntType {
+        let ty = self
+            .type_manager()
+            .try_to_value_type(ty_info.clone())
+            .expect("Expected the type of the discriminant raw value to be a primitive");
+        *ty.as_int()
+            // https://doc.rust-lang.org/reference/type-layout.html#primitive-representations
+            .unwrap_or_else(|| panic!("Expected the type of the tag to be a int type: {:?}", ty))
+    }
+}
+
+impl<'s, EB: SymExValueExprBuilder> SymExAssignmentHandler<'_, '_, EB> {
+    #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
+    fn set_adt_value(
+        &mut self,
+        kind: AdtKind,
+        fields: impl Iterator<Item = Option<<Self as AssignmentHandler>::Operand>>,
+    ) {
+        let (preconditions, values) = fields
+            .map(|f| -> (Option<Precondition>, Option<ValueRef>) {
+                f.map(Implied::into_tuple).unzip()
+            })
+            .unzip::<_, _, Vec<_>, Vec<_>>();
+
+        #[cfg(not(feature = "implicit_flow"))]
+        let precondition = Precondition::unknown();
+        #[cfg(feature = "implicit_flow")]
+        let precondition = self.precondition_of_adt(&kind, preconditions);
+
+        let value = ConcreteValue::Adt(AdtValue {
+            kind,
+            fields: values.into_iter().map(|f| AdtField { value: f }).collect(),
+        });
+
+        self.set_no_ant(Implied {
+            by: precondition,
+            value: value.to_value_ref(),
+        })
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    fn build_discriminant_expr(
+        &self,
+        tag_value: SymValueRef,
+        tag_encoding: &TagEncodingInfo,
+        discr_ty_info: &LazyTypeInfo,
+        tag_ty_info: &LazyTypeInfo,
+    ) -> SymValueRef {
+        use TagEncodingInfo::*;
+        match tag_encoding {
+            Direct => tag_value,
+            Niche {
+                non_niche_value,
+                niche_value_range,
+                tag_value_start,
+            } => {
+                let discr_ty = self.get_int_type(discr_ty_info);
+                let tag_ty = self.get_int_type(tag_ty_info);
+
+                let into_tag_value = |v: u128| ConstValue::new_int(v, tag_ty).to_value_ref();
+                let into_discr_value = |v: u128| ConstValue::new_int(v, discr_ty).to_value_ref();
+
+                // Based on: `rustc_codegen_ssa::mir::place::PlaceRef::codegen_get_discr`
+                let niche_start = *niche_value_range.start();
+                let tag_value: ValueRef = tag_value.into();
+                let relative_max = niche_value_range.end() - niche_start;
+                let (is_niche, tagged_discr) = if relative_max == 0 {
+                    let is_niche = SymValueRef::new(
+                        self.expr_builder()
+                            .inner()
+                            .eq((tag_value.clone(), into_tag_value(*tag_value_start)).into())
+                            .into(),
+                    );
+                    let tagged_discr = into_discr_value(niche_start);
+                    (is_niche, tagged_discr)
+                } else {
+                    let relative_tag_value: ValueRef = self
+                        .expr_builder()
+                        .inner()
+                        .sub((tag_value.clone(), into_tag_value(*tag_value_start)).into())
+                        .into();
+                    let is_niche = SymValueRef::new(
+                        self.expr_builder()
+                            .inner()
+                            .le((relative_tag_value.clone(), into_tag_value(relative_max)).into())
+                            .into(),
+                    );
+                    let relative_discr_value = self
+                        .expr_builder()
+                        .inner()
+                        .to_int(relative_tag_value.into(), discr_ty, discr_ty_info.clone())
+                        .into();
+                    let tagged_discr = self
+                        .expr_builder()
+                        .inner()
+                        .add((relative_discr_value, into_discr_value(niche_start)).into())
+                        .into();
+                    let tagged_discr = self.expr_builder().inner().to_int(
+                        tagged_discr,
+                        discr_ty,
+                        discr_ty_info.clone(),
+                    );
+                    debug_assert!(tagged_discr.is_symbolic());
+                    (is_niche, tagged_discr)
+                };
+
+                let discr_value = self.expr_builder().inner().if_then_else((
+                    is_niche.into(),
+                    tagged_discr.into(),
+                    into_discr_value(*non_niche_value),
+                ));
+                SymValueRef::new(discr_value)
+            }
+        }
+    }
+
+    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: SymExValue) -> SymExValue {
+        if !data_ptr.is_symbolic() {
+            return data_ptr;
+        }
+
+        let field_ty = self
+            .type_manager()
+            .layouts()
+            .resolve_adt_fields(self.dest.type_id(), None)
+            .next()
+            .unwrap()
+            .1;
+
+        self.expr_builder()
+            .transmute(data_ptr, field_ty, LazyTypeInfo::from(field_ty))
+    }
+
+    fn to_expr_builder_binary_op(
+        &self,
+        operator: BinaryOp,
+        has_symbolic: bool,
+    ) -> abs::expr::BinaryOp {
+        match crate::abs::expr::BinaryOp::try_from(operator) {
+            Ok(operator) => operator,
+            Err(offset) => offset.with_size(if has_symbolic {
+                self.type_manager()
+                    .get_pointee_size(&self.dest.type_info().id().unwrap())
+                    .unwrap()
+            } else {
+                // Avoid type lookup if we are not going to be building expressions.
+                common::type_info::TypeInfo::SIZE_UNSIZED
+            }),
+        }
+    }
+}
+
+#[cfg(feature = "implicit_flow")]
+pub(super) mod precondition {
+    use std::{borrow::Cow, num::NonZero};
+
+    use common::type_info::TagInfo;
+
+    use crate::utils::RangeIntersection;
+
+    use crate::backends::symex as backend;
+    use backend::{
+        TypeLayoutResolver, TypeSize,
+        implication::{PreconditionConstraints, PreconditionQuery},
+        type_info::TypeLayoutResolverExt,
+    };
+
+    use super::*;
+
+    impl<'s, EB> SymExAssignmentHandler<'_, '_, EB> {
+        fn current_func(&self) -> InstanceKindId {
+            self.services.current_func
+        }
+
+        fn implication_investigator(&self) -> &dyn ImplicationInvestigator {
+            self.services.implication_investigator
+        }
+
+        pub(super) fn add_antecedent(&self, value: &mut SymExValue) {
+            add_antecedent(
+                self.implication_investigator(),
+                || self.dest.type_info().get_size(self.type_manager()).unwrap(),
+                (self.current_func(), self.id),
+                value,
+            );
+        }
+
+        pub(super) fn precondition_of_array(&self, elements: Vec<Precondition>) -> Precondition {
+            let for_elements = self
+                .implication_investigator()
+                .antecedent_of_latest_assignment((self.current_func(), self.id));
+
+            // If non of the elements have preconditions, don't bother with refined information.
+            let elements = if elements.iter().any(|p| p.is_some()) {
+                let element_intervals = self
+                    .type_manager()
+                    .layouts()
+                    .resolve_array_elements(self.dest.type_id())
+                    .1;
+                let elements = elements
+                    .into_iter()
+                    .zip(element_intervals)
+                    .map(|(mut p, (offset, size))| {
+                        if let Some(for_elements) = for_elements.as_ref() {
+                            p = p.add(Cow::Borrowed(for_elements), || size);
+                        }
+                        (p, (offset, size))
+                    })
+                    .flat_map(|(p, (offset, size))| {
+                        p.take_constraints()
+                            .zip(NonZero::new(size).map(|s| (offset, s)))
+                    })
+                    .flat_map(|(c, (offset, size))| c.at_loc(offset, size));
+                PreconditionConstraints::refined(elements)
+            } else {
+                None
+            };
+
+            Precondition::new(elements.or(for_elements.map(Into::into)))
+        }
+
+        pub(super) fn precondition_of_adt(
+            &self,
+            kind: &AdtKind,
+            mut fields: Vec<Option<Precondition>>,
+        ) -> Precondition {
+            let opt_tag_interval = self
+                .dest
+                .type_info()
+                .get_type(self.type_manager())
+                .unwrap()
+                .tag
+                .as_ref()
+                .and_then(|tag| {
+                    if let TagInfo::Regular { as_field, encoding } = tag {
+                        let tag_ty = self.type_manager().get_type(&as_field.ty);
+                        Some((
+                            (
+                                as_field.offset,
+                                tag_ty.size().and_then(NonZero::new).unwrap(),
+                            ),
+                            matches!(encoding, TagEncodingInfo::Niche { .. }),
+                        ))
+                    } else {
+                        None
+                    }
+                });
+
+            let (for_fields, for_tag) = if opt_tag_interval.is_some() {
+                let antecedents = self
+                    .implication_investigator()
+                    .antecedent_of_latest_enum_assignment((self.current_func(), self.id));
+
+                let (for_fields, for_tag) = antecedents.map(|a| (a.fields, a.tag)).unzip();
+                (for_fields.flatten(), for_tag)
+            } else {
+                // If not enum, work as regular.
+                let for_fields = self
+                    .implication_investigator()
+                    .antecedent_of_latest_assignment((self.current_func(), self.id));
+                (for_fields, None)
+            };
+
+            let mut fields = if fields.iter().flatten().any(|p| p.is_some()) {
+                let with_intervals = self
+                    .type_manager()
+                    .layouts()
+                    .resolve_adt_fields(self.dest.type_id(), kind.variant_index())
+                    .flat_map(|(index, _, offset, size)| {
+                        fields[index as usize].take().map(|p| (p, (offset, size)))
+                    });
+                with_intervals
+                    .map(|(mut p, (offset, size))| {
+                        if let Some(for_fields) = for_fields.as_ref() {
+                            p = p.add(Cow::Borrowed(for_fields), || size);
+                        }
+                        (p, (offset, size))
+                    })
+                    .flat_map(|(p, (offset, size))| {
+                        p.take_constraints()
+                            .zip(NonZero::new(size).map(|s| (offset, s)))
+                    })
+                    .flat_map(|(c, (offset, size))| c.at_loc(offset, size))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::with_capacity(for_tag.is_some() as usize)
+            };
+
+            if let Some(antecedents) = for_tag {
+                let ((tag_offset, tag_size), is_niche) = opt_tag_interval.unwrap();
+                if is_niche {
+                    // If the tag is niche, and it is the niche variant assignment
+                    let tag_range = tag_offset..(tag_offset + tag_size.get());
+                    if let Some((offset, size, existing)) =
+                        fields.iter_mut().find(|(offset, size, _)| {
+                            RangeIntersection::is_overlapping(
+                                &(*offset..(offset + size.get())),
+                                &tag_range,
+                            )
+                        })
+                    {
+                        // Then it should fall into one of the fields.
+                        debug_assert!(RangeIntersection::contains(
+                            &(*offset..(*offset + size.get())),
+                            &tag_range,
+                        ));
+                        existing.extend_with(&antecedents);
+                    } else {
+                        fields.push((tag_offset, tag_size, antecedents));
+                    }
+                } else {
+                    fields.push((tag_offset, tag_size, antecedents));
+                }
+            }
+
+            /* NOTE: What happens when we have ZST fields?
+             * Although these fields the same offset, they won't appear hear because:
+             * 1. Structurally, we enforce a non-zero type.
+             * 2. They are constants (most of the time), so they should not have preconditions.
+             */
+            Precondition::new(
+                PreconditionConstraints::refined(fields).or(for_fields.map(Into::into)),
+            )
+        }
+    }
+
+    pub(crate) fn add_antecedent(
+        implication_investigator: &(impl ImplicationInvestigator + ?Sized),
+        whole_size: impl FnOnce() -> TypeSize,
+        assignment_id: (InstanceKindId, AssignmentId),
+        value: &mut SymExValue,
+    ) {
+        let Some(antecedent) =
+            implication_investigator.antecedent_of_latest_assignment(assignment_id)
+        else {
+            return;
+        };
+
+        value.add_antecedents(Cow::Owned(antecedent), whole_size);
+    }
+}
