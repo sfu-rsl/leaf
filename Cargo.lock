@@ -409,9 +409,9 @@ dependencies = [
  "paste",
  "regex-lite",
  "ron",
- "runtime_basic_li",
- "runtime_basic_li_no_implicit",
  "runtime_noop",
+ "runtime_symex_li",
+ "runtime_symex_li_no_implicit",
  "serde",
  "serde_json",
  "smallvec",
@@ -1700,30 +1700,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "runtime_basic"
-version = "0.2.0"
-dependencies = [
- "common",
- "runtime",
-]
-
-[[package]]
-name = "runtime_basic_li"
-version = "0.2.0"
-dependencies = [
- "common",
- "runtime",
-]
-
-[[package]]
-name = "runtime_basic_li_no_implicit"
-version = "0.2.0"
-dependencies = [
- "common",
- "runtime",
-]
-
-[[package]]
 name = "runtime_cf_tracer"
 version = "0.2.0"
 dependencies = [
@@ -1733,6 +1709,30 @@ dependencies = [
 
 [[package]]
 name = "runtime_noop"
+version = "0.2.0"
+dependencies = [
+ "common",
+ "runtime",
+]
+
+[[package]]
+name = "runtime_symex"
+version = "0.2.0"
+dependencies = [
+ "common",
+ "runtime",
+]
+
+[[package]]
+name = "runtime_symex_li"
+version = "0.2.0"
+dependencies = [
+ "common",
+ "runtime",
+]
+
+[[package]]
+name = "runtime_symex_li_no_implicit"
 version = "0.2.0"
 dependencies = [
  "common",
