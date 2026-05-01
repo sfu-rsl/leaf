@@ -32,5 +32,5 @@ fn init<L: utils::logging::LeafTracingSubLayerFactory>() {
     log_info!("Initializing runtime library");
 }
 
-pub type SymExPri = pri::fluent::FluentPri<backends::basic::SymExInstanceManager>;
+pub type SymExPri = pri::fluent::FluentPri<backends::symex::SymExInstanceManager>;
 pub type CftPri = pri::fluent::FluentPri<backends::cf_tracer::CftInstanceManager>;
