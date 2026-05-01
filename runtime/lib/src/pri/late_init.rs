@@ -79,8 +79,8 @@ mod instantiations {
         };
     }
 
-    use crate::BasicPri;
-    impl_pri_for_late_init_pri_of!(BasicPri);
+    use crate::SymExPri;
+    impl_pri_for_late_init_pri_of!(SymExPri);
 
     use crate::CftPri;
     impl_pri_for_late_init_pri_of!(CftPri);

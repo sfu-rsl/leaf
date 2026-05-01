@@ -27,8 +27,7 @@ use common::{
 
 use crate::{
     abs::{
-        FuncDef, PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex,
-        backend::*,
+        PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex, backend::*,
     },
     backends::basic::place::DiscriminantPossiblePlace,
     pri::fluent::backend::*,
@@ -36,46 +35,76 @@ use crate::{
 };
 
 use self::{
-    alias::{TraceManager, TypeDatabase, *},
-    annotation::BasicAnnotationHandler,
-    assignment::BasicAssignmentHandler,
-    call::{BasicCallFlowManager, BasicCallHandler},
-    concrete::BasicConcretizer,
-    constraint::BasicConstraintHandler,
+    alias::{TraceManager, TypeDatabase, VariablesState},
     expr::{SymVarId, prelude::*},
     implication::{Antecedents, Implied, Precondition},
-    memory::BasicRawMemoryHandler,
-    operand::BasicOperandHandler,
-    place::BasicPlaceHandler,
-    state::{BasicMemoryHandler, RawPointerVariableState, make_sym_place_handler},
-    sym_vars::BasicSymVariablesManager,
-    trace::{BasicExeTraceRecorder, default_trace_querier},
+    state::make_sym_place_handler,
+    trace::default_trace_querier,
 };
 
-type BasicTraceManager = dyn TraceManager;
+pub(crate) use self::{config::SymExBackendConfig, instance::SymExInstanceManager};
 
-pub(crate) use self::{
-    config::BasicBackendConfig, instance::BasicInstanceManager, place::BasicPlaceBuilder,
-};
+mod associated_types {
+    use super::*;
 
-pub struct BasicBackend {
-    vars_state: BasicVariablesState,
-    call_flow_manager: BasicCallFlowManager,
-    vars_state_factory: Box<dyn Fn() -> BasicVariablesState>,
-    trace_manager: RRef<BasicTraceManager>,
-    trace_recorder: RRef<BasicExeTraceRecorder>,
-    expr_builder: RRef<BasicExprBuilder>,
-    sym_values: RRef<BasicSymVariablesManager>,
-    type_manager: Rc<dyn TypeDatabase>,
-    sym_place_handler: RRef<BasicSymPlaceHandler>,
+    pub(super) type SymExPlaceInfo = place::PlaceWithMetadata;
+    pub(super) type SymExPlaceValue = PlaceValueRef;
+    pub(super) type SymExValue = Implied<ValueRef>;
+
+    pub(super) type SymExPlaceBuilder = place::SymExPlaceBuilder;
+    pub(super) type SymExPlaceHandler<'a> = place::SymExPlaceHandler<'a>;
+    pub(super) type SymExOperandHandler<'a> = operand::SymExOperandHandler<'a>;
+
+    pub(super) type SymExVariablesState = alias::SymExVariablesState;
+    pub(super) type SymExSymPlaceHandler = alias::SymExSymPlaceHandler;
+
+    pub(super) type SymExExprBuilder = alias::DefaultExprBuilder;
+
+    pub(super) type SymExAssignmentHandler<'a> =
+        assignment::SymExAssignmentHandler<'a, 'a, SymExExprBuilder>;
     #[cfg(feature = "implicit_flow")]
-    implication_investigator: Rc<dyn ImplicationInvestigator>,
+    pub(super) type SymExImplicationInvestigator = dyn ImplicationInvestigator;
+    pub(super) type SymExMemoryHandler<'a> = state::SymExMemoryHandler<'a>;
+    pub(super) type SymExRawMemoryHandler<'a> = memory::SymExRawMemoryHandler<'a, SymExExprBuilder>;
+
+    pub(super) type SymExSymVariablesManager = sym_vars::DefaultSymVariablesManager;
+    pub(super) type SymExConcretizer<EB> = concrete::DefaultConcretizer<EB>;
+
+    pub(super) type SymExConstraint = constraint::Constraint;
+    pub(super) type SymExConstraintDecisionCase = constraint::DecisionCase;
+
+    pub(super) type SymExConstraintHandler<'a> =
+        constraint::SymExConstraintHandler<'a, SymExExprBuilder>;
+
+    pub(super) type SymExCallFlowManager = call::SymExCallFlowManager;
+    pub(super) type SymExCallHandler<'a> = call::SymExCallHandler<'a>;
+
+    pub(super) type SymExAnnotationHandler<'a> = annotation::SymExAnnotationHandler<'a>;
+
+    pub(super) type SymExTraceManager = dyn TraceManager;
+    pub(super) type SymExExeTraceRecorder = trace::SymExExeTraceRecorder;
+    pub(super) type SymExTypeManager = dyn TypeDatabase;
+}
+use associated_types::*;
+
+pub struct SymExBackend {
+    vars_state: SymExVariablesState,
+    call_flow_manager: SymExCallFlowManager,
+    vars_state_factory: Box<dyn Fn() -> SymExVariablesState>,
+    trace_manager: RRef<SymExTraceManager>,
+    trace_recorder: RRef<SymExExeTraceRecorder>,
+    expr_builder: RRef<SymExExprBuilder>,
+    sym_values: RRef<SymExSymVariablesManager>,
+    type_manager: Rc<SymExTypeManager>,
+    sym_place_handler: RRef<SymExSymPlaceHandler>,
+    #[cfg(feature = "implicit_flow")]
+    implication_investigator: Rc<SymExImplicationInvestigator>,
     tags: RRef<Vec<Tag>>,
 }
 
-impl BasicBackend {
+impl SymExBackend {
     pub fn new(
-        config: BasicBackendConfig,
+        config: SymExBackendConfig,
         types_db: impl crate::type_info::TypeDatabase<'static> + 'static,
     ) -> Self {
         let type_manager_ref = Rc::new(type_info::default_type_manager(types_db));
@@ -83,7 +112,7 @@ impl BasicBackend {
             type_manager_ref.clone(),
         )));
         let expr_builder = expr_builder_ref.clone();
-        let sym_var_manager = Rc::new(RefCell::new(BasicSymVariablesManager::new()));
+        let sym_var_manager = Rc::new(RefCell::new(SymExSymVariablesManager::default()));
 
         let tags_ref = Rc::new(RefCell::new(Vec::new()));
 
@@ -104,7 +133,7 @@ impl BasicBackend {
         #[cfg(feature = "implicit_flow")]
         let implication_investigator = {
             let constraint_steps = TraceViewProvider::view(&trace_manager);
-            let constraints = TraceViewProvider::<BasicConstraint>::view(&trace_manager);
+            let constraints = TraceViewProvider::<SymExConstraint>::view(&trace_manager);
             let sym_dependent_step_indices =
                 TraceIndicesProvider::<trace::SymDependentMarker>::indices(&trace_manager);
             let trace_querier = Rc::new(default_trace_querier(
@@ -119,7 +148,7 @@ impl BasicBackend {
 
         let sym_place_handler_factory = |s| {
             Rc::new(RefCell::from(make_sym_place_handler(s, || {
-                Box::new(BasicConcretizer::new(
+                Box::new(SymExConcretizer::new(
                     expr_builder_ref.clone(),
                     trace_manager_ref.clone(),
                 ))
@@ -131,7 +160,7 @@ impl BasicBackend {
         let sym_place_handler = sym_write_handler_ref.clone();
 
         let variables_state_factory = Box::new(move || {
-            RawPointerVariableState::new(
+            SymExVariablesState::new(
                 type_manager_ref.clone(),
                 sym_read_handler_ref.clone(),
                 sym_write_handler_ref.clone(),
@@ -160,63 +189,63 @@ impl BasicBackend {
     }
 }
 
-impl RuntimeBackend for BasicBackend {
+impl RuntimeBackend for SymExBackend {
     type PlaceHandler<'a>
-        = BasicPlaceHandler<'a>
+        = SymExPlaceHandler<'a>
     where
         Self: 'a;
 
     type OperandHandler<'a>
-        = BasicOperandHandler<'a>
+        = SymExOperandHandler<'a>
     where
         Self: 'a;
 
     type AssignmentHandler<'a>
-        = BasicAssignmentHandler<'a, 'a, BasicExprBuilder>
+        = SymExAssignmentHandler<'a>
     where
         Self: 'a;
 
     type MemoryHandler<'a>
-        = BasicMemoryHandler<'a>
+        = SymExMemoryHandler<'a>
     where
         Self: 'a;
 
     type RawMemoryHandler<'a>
-        = BasicRawMemoryHandler<'a, BasicExprBuilder>
+        = SymExRawMemoryHandler<'a>
     where
         Self: 'a;
 
     type ConstraintHandler<'a>
-        = BasicConstraintHandler<'a, BasicExprBuilder>
+        = SymExConstraintHandler<'a>
     where
         Self: 'a;
 
     type CallHandler<'a>
-        = BasicCallHandler<'a>
+        = SymExCallHandler<'a>
     where
         Self: 'a;
 
     type DropHandler<'a>
-        = BasicCallHandler<'a>
+        = SymExCallHandler<'a>
     where
         Self: 'a;
 
     type AnnotationHandler<'a>
-        = BasicAnnotationHandler<'a>
+        = SymExAnnotationHandler<'a>
     where
         Self: 'a;
 
-    type PlaceInfo = BasicPlaceInfo;
+    type PlaceInfo = SymExPlaceInfo;
     type Place = PlaceValueRef;
     type DiscriminablePlace = DiscriminantPossiblePlace;
-    type Operand = BasicValue;
+    type Operand = SymExValue;
 
     fn place(&mut self, usage: PlaceUsage) -> Self::PlaceHandler<'_> {
-        BasicPlaceHandler::new(usage, self)
+        SymExPlaceHandler::new(usage, self)
     }
 
     fn operand(&mut self) -> Self::OperandHandler<'_> {
-        BasicOperandHandler::new(self)
+        SymExOperandHandler::new(self)
     }
 
     fn assign_to<'a>(
@@ -224,43 +253,43 @@ impl RuntimeBackend for BasicBackend {
         id: AssignmentId,
         dest: <Self::AssignmentHandler<'a> as AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a> {
-        BasicAssignmentHandler::new(id, dest, self)
+        SymExAssignmentHandler::new(id, dest, self)
     }
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
-        BasicMemoryHandler::new(self)
+        SymExMemoryHandler::new(self)
     }
 
     fn raw_memory<'a>(&'a mut self) -> Self::RawMemoryHandler<'a> {
-        BasicRawMemoryHandler::new(self)
+        SymExRawMemoryHandler::new(self)
     }
 
     fn constraint_at(&mut self, location: BasicBlockIndex) -> Self::ConstraintHandler<'_> {
-        BasicConstraintHandler::new(self, location)
+        SymExConstraintHandler::new(self, location)
     }
 
     fn call_control(&mut self) -> Self::CallHandler<'_> {
-        BasicCallHandler::new(self)
+        SymExCallHandler::new(self)
     }
 
     fn dropping(&mut self) -> Self::DropHandler<'_> {
-        BasicCallHandler::new(self)
+        SymExCallHandler::new(self)
     }
 
     fn annotate(&mut self) -> Self::AnnotationHandler<'_> {
-        BasicAnnotationHandler::new(self)
+        SymExAnnotationHandler::new(self)
     }
 }
 
-impl Shutdown for BasicBackend {
+impl Shutdown for SymExBackend {
     fn shutdown(&mut self) {
-        log_info!("Shutting down the basic backend");
+        log_info!("Shutting down the backend");
         self.trace_manager.borrow_mut().shutdown();
     }
 }
 
 trait SymVariablesManager {
-    fn add_variable(&mut self, var: SymVariable<BasicValue>) -> SymValueRef;
+    fn add_variable(&mut self, var: SymVariable<SymExValue>) -> SymValueRef;
 
     fn iter_variables(
         &self,

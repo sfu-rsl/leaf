@@ -2,11 +2,13 @@ use core::ops::DerefMut;
 
 use super::{
     ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,
+    SymExConstraint, SymExConstraintDecisionCase, SymExPlaceInfo, SymExPlaceValue, SymExValue,
     TraceIndicesProvider, TraceViewProvider,
-    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef, place::PlaceValueRef},
+    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
     implication::Implied,
-    trace::BasicExeTraceRecorder,
+    trace::SymExExeTraceRecorder,
 };
+
 use crate::{
     abs::{
         self, FloatType, IntType, TypeId,
@@ -59,12 +61,6 @@ where
 {
 }
 
-pub(super) trait ValueRefUnaryExprBuilder
-where
-    Self: for<'a> UnaryExprBuilder<ExprRef<'a> = ValueRef, Expr<'a> = ValueRef>,
-{
-}
-
 pub(super) trait ValueRefExprBuilderWrapper {
     fn inner<'a>(&'a mut self) -> impl DerefMut<Target = impl ValueRefExprBuilder + 'a>;
 }
@@ -96,14 +92,14 @@ where
 {
 }
 
-pub(super) trait BasicValueExprBuilder: ImpliedValueRefExprBuilder {}
-impl<T: ImpliedValueRefExprBuilder> BasicValueExprBuilder for T {}
+pub(super) trait SymExValueExprBuilder: ImpliedValueRefExprBuilder {}
+impl<T: ImpliedValueRefExprBuilder> SymExValueExprBuilder for T {}
 
-pub(super) trait BasicValueUnaryExprBuilder: ImpliedValueRefUnaryExprBuilder {}
-impl<T: ImpliedValueRefUnaryExprBuilder> BasicValueUnaryExprBuilder for T {}
+pub(super) trait SymExValueUnaryExprBuilder: ImpliedValueRefUnaryExprBuilder {}
+impl<T: ImpliedValueRefUnaryExprBuilder> SymExValueUnaryExprBuilder for T {}
 
-pub(super) use super::expr::builders::DefaultImpliedExprBuilder as BasicExprBuilder;
-pub(super) use super::expr::builders::DefaultSymExprBuilder as BasicSymExprBuilder;
+pub(super) use super::expr::builders::DefaultImpliedExprBuilder as DefaultExprBuilder;
+pub(super) use super::expr::builders::DefaultSymExprBuilder;
 
 pub(super) trait TypeDatabase:
     abs::backend::TypeDatabase<'static>
@@ -119,56 +115,49 @@ impl<T> TypeDatabase for T where
 }
 
 pub(super) trait VariablesState:
-    GenericVariablesState<PlaceInfo = BasicPlaceInfo, PlaceValue = PlaceValueRef, Value = BasicValue>
+    GenericVariablesState<PlaceInfo = SymExPlaceInfo, PlaceValue = SymExPlaceValue, Value = SymExValue>
 {
 }
 impl<T> VariablesState for T where
     T: GenericVariablesState<
-            PlaceInfo = BasicPlaceInfo,
-            PlaceValue = PlaceValueRef,
-            Value = BasicValue,
+            PlaceInfo = SymExPlaceInfo,
+            PlaceValue = SymExPlaceValue,
+            Value = SymExValue,
         >
 {
 }
 
-pub(super) type BasicSymPlaceHandler = dyn super::state::SymPlaceHandler<
+pub(super) type SymExSymPlaceHandler = dyn super::state::SymPlaceHandler<
         SymEntity = super::state::SymPlaceSymEntity,
         ConcEntity = super::ConcreteValueRef,
         Entity = ValueRef,
     >;
 
-pub(super) type BasicValue = Implied<ValueRef>;
+pub(super) type SymExVariablesState = super::state::RawPointerVariableState<DefaultSymExprBuilder>;
 
-pub(super) type BasicVariablesState = super::state::RawPointerVariableState<BasicSymExprBuilder>;
-
-pub(super) type BasicPlaceInfo = super::place::PlaceWithMetadata;
-
-pub(super) type BasicPlaceValue = PlaceValueRef;
-
-pub(super) use super::constraint::Constraint as BasicConstraint;
-pub(super) use super::constraint::DecisionCase as BasicConstraintDecisionCase;
-pub(super) type BasicDecisionTraceRecorder =
-    dyn DecisionTraceRecorder<Case = BasicConstraintDecisionCase>;
+pub(super) type DynDecisionTraceRecorder =
+    dyn DecisionTraceRecorder<Case = SymExConstraintDecisionCase>;
 
 pub(crate) trait TraceManager:
-    abs::backend::TraceManager<super::trace::Step, BasicValue, ConstValue> + Shutdown
+    abs::backend::TraceManager<super::trace::Step, SymExValue, ConstValue> + Shutdown
 {
 }
 impl<T> TraceManager for T where
-    T: abs::backend::TraceManager<super::trace::Step, BasicValue, ConstValue> + Shutdown
+    T: abs::backend::TraceManager<super::trace::Step, SymExValue, ConstValue> + Shutdown
 {
 }
+
 pub(super) trait TraceManagerWithViews:
     TraceManager
     + TraceViewProvider<Indexed<super::trace::Step>>
-    + TraceViewProvider<BasicConstraint>
+    + TraceViewProvider<SymExConstraint>
     + TraceIndicesProvider<super::trace::SymDependentMarker>
 {
 }
 impl<T> TraceManagerWithViews for T where
     T: TraceManager
         + TraceViewProvider<Indexed<super::trace::Step>>
-        + TraceViewProvider<BasicConstraint>
+        + TraceViewProvider<SymExConstraint>
         + TraceIndicesProvider<super::trace::SymDependentMarker>
 {
 }
@@ -184,15 +173,15 @@ impl<T> ExeTraceRecorder for T where
 
 pub(super) trait TraceQuerier:
     GenericTraceQuerier<
-        Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
-        Constraint = BasicConstraint,
+        Record = <SymExExeTraceRecorder as ExeTraceStorage>::Record,
+        Constraint = SymExConstraint,
     >
 {
 }
 impl<T> TraceQuerier for T where
     T: GenericTraceQuerier<
-            Record = <BasicExeTraceRecorder as ExeTraceStorage>::Record,
-            Constraint = BasicConstraint,
+            Record = <SymExExeTraceRecorder as ExeTraceStorage>::Record,
+            Constraint = SymExConstraint,
         >
 {
 }

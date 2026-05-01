@@ -10,7 +10,7 @@ use crate::{
         place::HasMetadata,
     },
     backends::basic::{
-        expr::{place::*, MultiValue as ValueSelect, SliceIndex},
+        expr::{MultiValue as ValueSelect, SliceIndex, place::*},
         place::PlaceMetadata,
     },
 };

@@ -19,7 +19,7 @@ use crate::{
 };
 
 use super::backend;
-use backend::{ConstValue, ExeTraceRecorder, ExeTraceStorage, config::OutputConfig};
+use backend::{ConstValue, ExeTraceStorage, alias::ExeTraceRecorder, config::OutputConfig};
 
 type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
 
@@ -42,7 +42,7 @@ impl Borrow<crate::abs::ExeTraceRecord<ConstValue>> for Record {
     }
 }
 
-pub(crate) struct BasicExeTraceRecorder {
+pub(crate) struct SymExExeTraceRecorder {
     counter: usize,
     records: RRef<Vec<Record>>,
     stack: Vec<BasicBlockLocation<FuncDef>>,
@@ -50,7 +50,7 @@ pub(crate) struct BasicExeTraceRecorder {
     serializer: Option<JsonSerializer<std::fs::File, JsonLinesFormatter>>,
 }
 
-impl BasicExeTraceRecorder {
+impl SymExExeTraceRecorder {
     fn new(config: Option<&OutputConfig>) -> Self {
         let file = config
             .and_then(|c| match c {
@@ -73,14 +73,14 @@ impl BasicExeTraceRecorder {
     }
 }
 
-pub(crate) fn create_trace_recorder(config: Option<&OutputConfig>) -> BasicExeTraceRecorder
+pub(crate) fn create_trace_recorder(config: Option<&OutputConfig>) -> SymExExeTraceRecorder
 where
-    BasicExeTraceRecorder: ExeTraceRecorder,
+    SymExExeTraceRecorder: ExeTraceRecorder,
 {
-    BasicExeTraceRecorder::new(config)
+    SymExExeTraceRecorder::new(config)
 }
 
-impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
+impl PhasedCallTraceRecorder for SymExExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self))]
     fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>) {
         let last_ret_point = self.last_ret_point.take();
@@ -148,7 +148,7 @@ impl PhasedCallTraceRecorder for BasicExeTraceRecorder {
     }
 }
 
-impl DecisionTraceRecorder for BasicExeTraceRecorder {
+impl DecisionTraceRecorder for SymExExeTraceRecorder {
     type Case = ConstValue;
 
     fn notify_decision(
@@ -163,7 +163,7 @@ impl DecisionTraceRecorder for BasicExeTraceRecorder {
     }
 }
 
-impl ExeTraceStorage for BasicExeTraceRecorder {
+impl ExeTraceStorage for SymExExeTraceRecorder {
     type Record = Record;
 
     fn records(&self) -> RefView<Vec<Self::Record>> {
@@ -171,7 +171,7 @@ impl ExeTraceStorage for BasicExeTraceRecorder {
     }
 }
 
-impl BasicExeTraceRecorder {
+impl SymExExeTraceRecorder {
     #[tracing::instrument(level = "debug", skip(self), fields(index = self.counter + 1))]
     fn notify_step(&mut self, record: ExeTraceRecord) -> usize {
         let index = {

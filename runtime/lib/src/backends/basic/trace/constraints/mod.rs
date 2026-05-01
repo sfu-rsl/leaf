@@ -26,10 +26,10 @@ use crate::{
 
 use super::backend;
 use backend::{
-    BasicConstraint, BasicDecisionTraceRecorder, BasicValue, ConstValue, SymVarId,
-    SymVariablesManager, TraceIndicesProvider, TraceManagerWithViews, TraceViewProvider, ValueRef,
-    config::SolverImpl,
-    config::{ExecutionTraceConfig, OutputConfig, TraceInspectorType},
+    ConstValue, SymExConstraint, SymExValue, SymVarId, SymVariablesManager, TraceIndicesProvider,
+    TraceViewProvider, ValueRef,
+    alias::{DynDecisionTraceRecorder, TraceManagerWithViews},
+    config::{ExecutionTraceConfig, OutputConfig, SolverImpl, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
     implication::PreconditionQuery,
 };
@@ -52,18 +52,18 @@ type IStep = Tagged<Indexed<Step>>;
 type IValue<'ctx> = Translation<ValueRef, CurrentSolverValue<'ctx>>;
 type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
 
-pub(crate) struct BasicTraceManager<M> {
+struct SymExTraceManager<M> {
     inner: M,
-    trace_recorder: RRef<BasicDecisionTraceRecorder>,
+    trace_recorder: RRef<DynDecisionTraceRecorder>,
     steps_view: RefView<Vec<Indexed<Step>>>,
-    constraints_view: RefView<Vec<BasicConstraint>>,
+    constraints_view: RefView<Vec<SymExConstraint>>,
     sym_dependent_steps_view: RefView<Vec<usize>>,
 }
 
-impl<M: AbsTraceManager<Indexed<Step>, BasicValue, ConstValue>>
-    AbsTraceManager<Step, BasicValue, ConstValue> for BasicTraceManager<M>
+impl<M: AbsTraceManager<Indexed<Step>, SymExValue, ConstValue>>
+    AbsTraceManager<Step, SymExValue, ConstValue> for SymExTraceManager<M>
 {
-    fn notify_step(&mut self, step: Step, constraint: BasicConstraint) {
+    fn notify_step(&mut self, step: Step, constraint: SymExConstraint) {
         let step_index = self
             .trace_recorder
             .borrow_mut()
@@ -78,7 +78,7 @@ impl<M: AbsTraceManager<Indexed<Step>, BasicValue, ConstValue>>
     }
 }
 
-impl<M: Shutdown> Shutdown for BasicTraceManager<M> {
+impl<M: Shutdown> Shutdown for SymExTraceManager<M> {
     delegate! {
         to self.inner {
             fn shutdown(&mut self);
@@ -86,26 +86,26 @@ impl<M: Shutdown> Shutdown for BasicTraceManager<M> {
     }
 }
 
-impl<M> TraceViewProvider<Indexed<Step>> for BasicTraceManager<M> {
+impl<M> TraceViewProvider<Indexed<Step>> for SymExTraceManager<M> {
     fn view(&self) -> RefView<Vec<Indexed<Step>>> {
         self.steps_view.clone()
     }
 }
 
-impl<M> TraceViewProvider<BasicConstraint> for BasicTraceManager<M> {
-    fn view(&self) -> RefView<Vec<BasicConstraint>> {
+impl<M> TraceViewProvider<SymExConstraint> for SymExTraceManager<M> {
+    fn view(&self) -> RefView<Vec<SymExConstraint>> {
         self.constraints_view.clone()
     }
 }
 
-impl<M> TraceIndicesProvider<SymDependentMarker> for BasicTraceManager<M> {
+impl<M> TraceIndicesProvider<SymDependentMarker> for SymExTraceManager<M> {
     fn indices(&self) -> RefView<Vec<usize>> {
         self.sym_dependent_steps_view.clone()
     }
 }
 
 pub(crate) fn create_trace_manager(
-    trace_recorder: RRef<BasicDecisionTraceRecorder>,
+    trace_recorder: RRef<DynDecisionTraceRecorder>,
     tags: RRef<Vec<Tag>>,
     sym_var_manager: RRef<impl SymVariablesManager + 'static>,
     trace_config: &ExecutionTraceConfig,
@@ -243,9 +243,9 @@ pub(crate) fn create_trace_manager(
         })
         .inspected_by(sym_discr_inspectors)
         .filtered_by(|_, c| c.discr.is_symbolic())
-        .adapt_value(|discr: BasicValue| discr.value)
+        .adapt_value(|discr: SymExValue| discr.value)
         .inspected_by(sym_dependent_recorder_inspector)
-        .filtered_by(|_, c: Constraint<&BasicValue, &ConstValue>| {
+        .filtered_by(|_, c: Constraint<&SymExValue, &ConstValue>| {
             c.discr.by.is_some() || c.discr.is_symbolic()
         })
         .inspected_by(outer_agg_inspector)
@@ -258,7 +258,7 @@ pub(crate) fn create_trace_manager(
         ))
         .on_shutdown(move || dump(&dumpers_ref));
 
-    BasicTraceManager {
+    SymExTraceManager {
         inner: manager,
         trace_recorder,
         steps_view,

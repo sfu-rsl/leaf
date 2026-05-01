@@ -23,7 +23,7 @@ use super::{
 };
 use backend::{
     ConstValue, SymVarId, SymVariablesManager, ValueRef, config::DivergenceFilterType,
-    outgen::BasicOutputGenerator,
+    outgen::DefaultOutputGenerator,
 };
 
 pub(super) fn create_imm_diverging_ans_finder<'ctx, V: 'ctx, C: 'ctx>(
@@ -39,7 +39,7 @@ where
     C: Borrow<CurrentSolverCase<'ctx>>,
     C: Borrow<ConstValue>,
 {
-    let mut output_generator = BasicOutputGenerator::new(output_config);
+    let mut output_generator = DefaultOutputGenerator::new(output_config);
     let model_consumer = move |mut model: Model<SymVarId, ValueRef>| {
         // Add missing answers.
         // FIXME: Performance can be improved.

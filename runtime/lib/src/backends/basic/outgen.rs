@@ -14,13 +14,13 @@ use crate::{
 
 use super::{config::OutputConfig, expr::prelude::*};
 
-pub(super) struct BasicOutputGenerator {
-    writers: Vec<Box<dyn BasicAnswersWriter>>,
+pub(super) struct DefaultOutputGenerator {
+    writers: Vec<Box<dyn SpecializedAnswersWriter>>,
 }
 
-impl BasicOutputGenerator {
+impl DefaultOutputGenerator {
     pub(super) fn new(configs: &[OutputConfig]) -> Self {
-        let mut writers = vec![Box::new(LoggingAnswersWriter) as Box<dyn BasicAnswersWriter>];
+        let mut writers = vec![Box::new(LoggingAnswersWriter) as Box<dyn SpecializedAnswersWriter>];
 
         writers.extend(configs.iter().map(|c| match c {
             OutputConfig::File(file_config) => match file_config.format {
@@ -29,7 +29,7 @@ impl BasicOutputGenerator {
                 }
                 FileFormat::Binary => Box::new(BinaryFileAnswersWriter::new(file_config)),
             },
-        } as Box<dyn BasicAnswersWriter>));
+        } as Box<dyn SpecializedAnswersWriter>));
 
         Self { writers }
     }
@@ -41,13 +41,13 @@ impl BasicOutputGenerator {
     }
 }
 
-trait BasicAnswersWriter {
+trait SpecializedAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>);
 }
 
 struct LoggingAnswersWriter;
 
-impl BasicAnswersWriter for LoggingAnswersWriter {
+impl SpecializedAnswersWriter for LoggingAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>) {
         crate::outgen::log_json(answers.iter());
     }
@@ -75,7 +75,7 @@ impl BinaryFileAnswersWriter {
     }
 }
 
-impl BasicAnswersWriter for BinaryFileAnswersWriter {
+impl SpecializedAnswersWriter for BinaryFileAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>) {
         let Ok(result) = self.inner.write(answers.iter().map(|(id, v)| {
             (

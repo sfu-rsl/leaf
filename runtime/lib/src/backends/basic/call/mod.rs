@@ -15,35 +15,35 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicValue, BasicVariablesState, GenericVariablesState, Implied, PlaceValueRef,
+    GenericVariablesState, Implied, PlaceValueRef, SymExBackend, SymExValue, SymExVariablesState,
     TypeDatabase, Value, config::CallConfig, expr::prelude::DeterPlaceValueRef,
 };
 
-pub(super) type BasicCallFlowManager =
-    DefaultCallFlowManager<DeterPlaceValueRef, BasicValue, breakage::BasicBreakageCallback>;
+pub(super) type SymExCallFlowManager =
+    DefaultCallFlowManager<DeterPlaceValueRef, SymExValue, breakage::SymExBreakageCallback>;
 
-pub(crate) fn default_flow_manager(config: CallConfig) -> BasicCallFlowManager
+pub(crate) fn default_flow_manager(config: CallConfig) -> SymExCallFlowManager
 where
-    BasicCallFlowManager: CallControlFlowManager
-        + CallDataFlowManager<Place = DeterPlaceValueRef, Value = BasicValue>,
+    SymExCallFlowManager: CallControlFlowManager
+        + CallDataFlowManager<Place = DeterPlaceValueRef, Value = SymExValue>,
 {
-    DefaultCallFlowManager::new(breakage::BasicBreakageCallback {
+    DefaultCallFlowManager::new(breakage::SymExBreakageCallback {
         strategy: config.external_call,
     })
 }
 
-pub(crate) struct BasicCallHandler<'a> {
-    flow_manager: &'a mut BasicCallFlowManager,
-    variables_state: &'a mut BasicVariablesState,
-    variables_state_factory: &'a dyn Fn() -> BasicVariablesState,
+pub(crate) struct SymExCallHandler<'a> {
+    flow_manager: &'a mut SymExCallFlowManager,
+    variables_state: &'a mut SymExVariablesState,
+    variables_state_factory: &'a dyn Fn() -> SymExVariablesState,
     type_manager: &'a dyn TypeDatabase,
     #[cfg(feature = "implicit_flow")]
     implication_investigator: &'a dyn super::ImplicationInvestigator,
     trace_recorder: RefMut<'a, dyn PhasedCallTraceRecorder>,
 }
 
-impl<'a> BasicCallHandler<'a> {
-    pub(super) fn new(backend: &'a mut BasicBackend) -> Self {
+impl<'a> SymExCallHandler<'a> {
+    pub(super) fn new(backend: &'a mut SymExBackend) -> Self {
         Self {
             flow_manager: &mut backend.call_flow_manager,
             variables_state: &mut backend.vars_state,
@@ -60,9 +60,9 @@ impl<'a> BasicCallHandler<'a> {
     }
 }
 
-impl<'a> CallHandler for BasicCallHandler<'a> {
+impl<'a> CallHandler for SymExCallHandler<'a> {
     type Place = PlaceValueRef;
-    type Operand = BasicValue;
+    type Operand = SymExValue;
     type MetadataHandler = ();
 
     fn before_call(mut self, def: CalleeDef, call_site: BasicBlockIndex) {
@@ -174,9 +174,9 @@ impl<'a> CallHandler for BasicCallHandler<'a> {
 }
 
 // Currently, we have no special mechanism for dropping beyond calling the (possible) glue
-impl DropHandler for BasicCallHandler<'_> {
+impl DropHandler for SymExCallHandler<'_> {
     type Place = PlaceValueRef;
-    type Operand = BasicValue;
+    type Operand = SymExValue;
 
     fn before_drop(self, def: CalleeDef, call_site: BasicBlockIndex) {
         <Self as CallHandler>::before_call(self, def, call_site);
@@ -220,11 +220,11 @@ mod tupling {
         pub(crate) type_manager: &'a dyn TypeDatabase,
         pub(crate) tuple_type: LazyTypeInfo,
         pub(crate) fields_info: Option<StructShape>,
-        pub(crate) temp_vars_state: BasicVariablesState,
+        pub(crate) temp_vars_state: SymExVariablesState,
     }
 
     impl<'a> CallShadowMemory<DeterPlaceValueRef> for TuplingHelperImpl<'a> {
-        type Value = BasicValue;
+        type Value = SymExValue;
 
         delegate! {
             #[through(CallShadowMemory::<DeterPlaceValueRef>)]
@@ -235,7 +235,7 @@ mod tupling {
         }
     }
 
-    impl TuplingHelper<DeterPlaceValueRef, BasicValue> for TuplingHelperImpl<'_> {
+    impl TuplingHelper<DeterPlaceValueRef, SymExValue> for TuplingHelperImpl<'_> {
         fn make_tupled_arg_pseudo_place(&mut self) -> DeterPlaceValueRef {
             DeterPlaceValueRef::new(
                 DeterministicPlaceValue::from_addr_type_info(
@@ -276,7 +276,7 @@ mod tupling {
         pub(crate) fn new(
             type_manager: &'a dyn TypeDatabase,
             tuple_type: LazyTypeInfo,
-            temp_vars_state: BasicVariablesState,
+            temp_vars_state: SymExVariablesState,
         ) -> Self {
             Self {
                 type_manager,
@@ -303,7 +303,7 @@ mod tupling {
         }
     }
 
-    impl<'a> BasicCallHandler<'a> {
+    impl<'a> SymExCallHandler<'a> {
         pub(super) fn collect_arg_types_if_tupled(
             tupling: ArgsTupling,
             arg_places: &[<Self as CallHandler>::Place],
@@ -320,8 +320,8 @@ mod tupling {
             tupling: ArgsTupling,
             arg_types: Option<Vec<backend::expr::LazyTypeInfo>>,
             type_manager: &'a dyn TypeDatabase,
-            variables_state_factory: &'a dyn Fn() -> BasicVariablesState,
-        ) -> impl FnOnce() -> ArgsTuplingInfo<'a, 'a, DeterPlaceValueRef, BasicValue> {
+            variables_state_factory: &'a dyn Fn() -> SymExVariablesState,
+        ) -> impl FnOnce() -> ArgsTuplingInfo<'a, 'a, DeterPlaceValueRef, SymExValue> {
             move || match tupling {
                 ArgsTupling::Untupled {
                     tupled_arg_index,
@@ -384,23 +384,23 @@ mod breakage {
     use crate::utils::alias::check_sym_value_loss;
 
     use super::backend;
-    use backend::{BasicValue, ConcreteValue, Implied, config::ExternalCallStrategy};
+    use backend::{ConcreteValue, Implied, SymExValue, config::ExternalCallStrategy};
     use common::{log_debug, log_warn};
 
     const TAG: &str = concatcp!(crate::call::TAG, "::breakage");
 
-    pub(crate) struct BasicBreakageCallback {
+    pub(crate) struct SymExBreakageCallback {
         pub(super) strategy: ExternalCallStrategy,
     }
 
-    impl BasicBreakageCallback {
+    impl SymExBreakageCallback {
         /// # Remarks
         /// Returns an empty vector if symbolic value loss checks are disabled.
         fn inspect_external_call_info<'a>(
             &self,
             current_func: FuncDef,
-            arg_values: &'a [BasicValue],
-        ) -> Vec<(usize, &'a BasicValue)> {
+            arg_values: &'a [SymExValue],
+        ) -> Vec<(usize, &'a SymExValue)> {
             if !check_sym_value_loss!() {
                 return vec![];
             }
@@ -432,7 +432,7 @@ mod breakage {
             &self,
             callee: FuncDef,
             current_func: FuncDef,
-            returned_value: &BasicValue,
+            returned_value: &SymExValue,
         ) {
             if !check_sym_value_loss!() {
                 return;
@@ -457,17 +457,17 @@ mod breakage {
         }
     }
 
-    fn unknown_value() -> BasicValue {
+    fn unknown_value() -> SymExValue {
         Implied::by_unknown(ConcreteValue::from(Constant::Some).to_value_ref())
     }
 
-    impl<P> CallFlowBreakageCallback<P, BasicValue> for BasicBreakageCallback {
+    impl<P> CallFlowBreakageCallback<P, SymExValue> for SymExBreakageCallback {
         fn after_return_with_args(
             &mut self,
             _callee: Option<CalleeDef>,
             current: FuncDef,
-            unconsumed_args: Vec<BasicValue>,
-        ) -> BasicValue {
+            unconsumed_args: Vec<SymExValue>,
+        ) -> SymExValue {
             let symbolic_args = self.inspect_external_call_info(current, &unconsumed_args);
 
             enum Action {
@@ -506,9 +506,9 @@ mod breakage {
             _caller: FuncDef,
             _expected_callee: CalleeDef,
             current: FuncDef,
-            unconsumed_args: Vec<BasicValue>,
+            unconsumed_args: Vec<SymExValue>,
             current_arg_places: &[P],
-        ) -> Vec<BasicValue> {
+        ) -> Vec<SymExValue> {
             self.inspect_external_call_info(current, &unconsumed_args);
             self.at_enter_with_no_caller(current, current_arg_places)
         }
@@ -517,7 +517,7 @@ mod breakage {
             &mut self,
             callee: FuncDef,
             current: FuncDef,
-            unconsumed_return_value: BasicValue,
+            unconsumed_return_value: SymExValue,
         ) {
             self.inspect_returned_value(callee, current, &unconsumed_return_value);
         }
@@ -526,7 +526,7 @@ mod breakage {
             &mut self,
             _current: FuncDef,
             current_arg_places: &[P],
-        ) -> Vec<BasicValue> {
+        ) -> Vec<SymExValue> {
             core::iter::repeat_n(unknown_value(), current_arg_places.len()).collect()
         }
 
@@ -534,8 +534,8 @@ mod breakage {
             &mut self,
             callee: FuncDef,
             current: FuncDef,
-            unconsumed_return_value: BasicValue,
-        ) -> BasicValue {
+            unconsumed_return_value: SymExValue,
+        ) -> SymExValue {
             self.inspect_returned_value(callee, current, &unconsumed_return_value);
             unknown_value()
         }
@@ -543,18 +543,18 @@ mod breakage {
         fn at_return_with_return_val(
             &mut self,
             current: FuncDef,
-            unconsumed_return_value: BasicValue,
+            unconsumed_return_value: SymExValue,
         ) {
             self.inspect_returned_value(current, current, &unconsumed_return_value);
         }
     }
 }
 
-impl<P> CallShadowMemory<P> for BasicVariablesState
+impl<P> CallShadowMemory<P> for SymExVariablesState
 where
-    P: AsRef<<BasicVariablesState as GenericVariablesState>::PlaceValue>,
+    P: AsRef<<SymExVariablesState as GenericVariablesState>::PlaceValue>,
 {
-    type Value = BasicValue;
+    type Value = SymExValue;
 
     fn take_place(&mut self, place: &P) -> Self::Value {
         GenericVariablesState::take_place(self, place.as_ref())

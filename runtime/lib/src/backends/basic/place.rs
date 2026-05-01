@@ -153,7 +153,7 @@ mod builders {
     use super::*;
 
     #[derive(Default)]
-    pub(crate) struct BasicPlaceBuilder;
+    pub(crate) struct SymExPlaceBuilder;
 
     macro_rules! err_on_partial_place_info {
         () => {{
@@ -162,11 +162,11 @@ mod builders {
         }};
     }
 
-    impl PlaceBuilder for BasicPlaceBuilder {
+    impl PlaceBuilder for SymExPlaceBuilder {
         type Place = PlaceWithMetadata;
         type Index = PlaceValueRef;
-        type Projector<'a> = BasicProjectionBuilder<'a>;
-        type MetadataHandler<'a> = BasicPlaceMetadataHandler<'a>;
+        type Projector<'a> = SymExProjectionBuilder<'a>;
+        type MetadataHandler<'a> = SymExPlaceMetadataHandler<'a>;
 
         fn from_base(self, base: PlaceInfoBase) -> Self::Place {
             let base = match base {
@@ -177,17 +177,17 @@ mod builders {
         }
 
         fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::Projector<'a> {
-            BasicProjectionBuilder(place)
+            SymExProjectionBuilder(place)
         }
 
         fn metadata(self, place: &mut Self::Place) -> Self::MetadataHandler<'_> {
-            BasicPlaceMetadataHandler(place)
+            SymExPlaceMetadataHandler(place)
         }
     }
 
-    pub(crate) struct BasicProjectionBuilder<'a>(&'a mut PlaceWithMetadata);
+    pub(crate) struct SymExProjectionBuilder<'a>(&'a mut PlaceWithMetadata);
 
-    impl PlaceProjector for BasicProjectionBuilder<'_> {
+    impl PlaceProjector for SymExProjectionBuilder<'_> {
         type Index = PlaceValueRef;
 
         fn by(self, proj: PlaceInfoProjection<Self::Index>) {
@@ -208,9 +208,9 @@ mod builders {
         }
     }
 
-    pub(crate) struct BasicPlaceMetadataHandler<'a>(&'a mut PlaceWithMetadata);
+    pub(crate) struct SymExPlaceMetadataHandler<'a>(&'a mut PlaceWithMetadata);
 
-    impl PlaceMetadataHandler for BasicPlaceMetadataHandler<'_> {
+    impl PlaceMetadataHandler for SymExPlaceMetadataHandler<'_> {
         fn set_address(&mut self, address: RawAddress) {
             if self.0.has_projection() {
                 let last = &mut self.0.projs_metadata_mut().last().unwrap();
@@ -239,7 +239,7 @@ mod builders {
         }
     }
 }
-pub(crate) use builders::BasicPlaceBuilder;
+pub(crate) use builders::SymExPlaceBuilder;
 
 mod handlers {
     use common::type_info::{TagEncodingInfo, TagInfo};
@@ -247,16 +247,16 @@ mod handlers {
     use crate::{abs::PlaceUsage, pri::fluent::backend::PlaceHandler};
 
     use super::*;
-    use backend::{BasicBackend, BasicPlaceInfo, TypeDatabase, VariablesState};
+    use backend::{SymExBackend, SymExPlaceInfo, TypeDatabase, VariablesState};
 
-    pub(crate) struct BasicPlaceHandler<'a> {
+    pub(crate) struct SymExPlaceHandler<'a> {
         vars_state: &'a mut dyn VariablesState,
         usage: PlaceUsage,
         type_manager: &'a dyn TypeDatabase,
     }
 
-    impl<'a> BasicPlaceHandler<'a> {
-        pub fn new(usage: PlaceUsage, backend: &'a mut BasicBackend) -> BasicPlaceHandler<'a> {
+    impl<'a> SymExPlaceHandler<'a> {
+        pub fn new(usage: PlaceUsage, backend: &'a mut SymExBackend) -> SymExPlaceHandler<'a> {
             Self {
                 vars_state: &mut backend.vars_state,
                 usage,
@@ -265,8 +265,8 @@ mod handlers {
         }
     }
 
-    impl PlaceHandler for BasicPlaceHandler<'_> {
-        type PlaceInfo<'a> = BasicPlaceInfo;
+    impl PlaceHandler for SymExPlaceHandler<'_> {
+        type PlaceInfo<'a> = SymExPlaceInfo;
         type Place = PlaceValueRef;
         type DiscriminablePlace = DiscriminantPossiblePlace;
 
@@ -314,4 +314,4 @@ mod handlers {
         TagPlaceWithInfo(PlaceValueRef, &'static TagEncodingInfo),
     }
 }
-pub(crate) use handlers::{BasicPlaceHandler, DiscriminantPossiblePlace};
+pub(crate) use handlers::{DiscriminantPossiblePlace, SymExPlaceHandler};

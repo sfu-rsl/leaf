@@ -17,11 +17,11 @@ mod retrieval {
     use common::type_info::{FieldsShapeInfo, StructShape, VariantInfo};
     use common::types::TypeSize;
 
-    use crate::abs::{backend::CoreTypeProvider, IntType, ValueType};
+    use crate::abs::{IntType, ValueType, backend::CoreTypeProvider};
 
     use super::*;
 
-    use backend::SymValueRefExprBuilder;
+    use backend::alias::SymValueRefExprBuilder;
 
     pub(crate) trait RawPointerRetriever {
         fn retrieve(&self, addr: RawAddress, type_id: TypeId) -> ValueRef;

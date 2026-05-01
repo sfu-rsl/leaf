@@ -1,8 +1,7 @@
 use super::super::alias::{
     SymValueRefExprBuilder, TypeDatabase, ValueRefBinaryExprBuilder, ValueRefExprBuilder,
-    ValueRefUnaryExprBuilder,
 };
-use super::{BinaryOp as BasicBinaryOp, UnaryOp as BasicUnaryOp, *};
+use super::{BinaryOp as SymExBinaryOp, UnaryOp as SymExUnaryOp, *};
 use crate::abs::{
     CastKind,
     expr::{
@@ -46,8 +45,6 @@ pub(crate) fn to_implied_expr_builder(
 impl ValueRefExprBuilder for DefaultExprBuilder {}
 
 impl ValueRefBinaryExprBuilder for DefaultExprBuilder {}
-
-impl ValueRefUnaryExprBuilder for DefaultExprBuilder {}
 
 impl ImpliedValueRefUnaryExprBuilder for DefaultImpliedExprBuilder {}
 
@@ -954,9 +951,9 @@ mod core {
         ) -> Self::Expr<'a> {
             if op.is_with_overflow() {
                 let wrapping_op = match op {
-                    AbsBinaryOp::AddWithOverflow => BasicBinaryOp::Add,
-                    AbsBinaryOp::SubWithOverflow => BasicBinaryOp::Sub,
-                    AbsBinaryOp::MulWithOverflow => BasicBinaryOp::Mul,
+                    AbsBinaryOp::AddWithOverflow => SymExBinaryOp::Add,
+                    AbsBinaryOp::SubWithOverflow => SymExBinaryOp::Sub,
+                    AbsBinaryOp::MulWithOverflow => SymExBinaryOp::Mul,
                     _ => unreachable!(),
                 };
                 self.with_overflow_op(operands, wrapping_op).into()
@@ -974,8 +971,8 @@ mod core {
                 self.binary_op(operands, wrapping_op)
             } else if op.is_saturating() {
                 let wrapping_op = match op {
-                    AbsBinaryOp::AddSaturating => BasicBinaryOp::Add,
-                    AbsBinaryOp::SubSaturating => BasicBinaryOp::Sub,
+                    AbsBinaryOp::AddSaturating => SymExBinaryOp::Add,
+                    AbsBinaryOp::SubSaturating => SymExBinaryOp::Sub,
                     _ => unreachable!(),
                 };
                 self.saturating_op(operands, wrapping_op).into()
@@ -1001,7 +998,7 @@ mod core {
         fn with_overflow_op(
             &mut self,
             operands: SymBinaryOperands,
-            wrapping_op: BasicBinaryOp,
+            wrapping_op: SymExBinaryOp,
         ) -> AdtValue {
             let (make_check_expr_if_possible, wrapping_value, _) =
                 self.break_down_for_overflow(operands, wrapping_op);
@@ -1031,7 +1028,7 @@ mod core {
         fn saturating_op(
             &mut self,
             operands: SymBinaryOperands,
-            wrapping_op: BasicBinaryOp,
+            wrapping_op: SymExBinaryOp,
         ) -> Expr {
             let (make_check_expr_if_possible, wrapping_value, ty) =
                 self.break_down_for_overflow(operands, wrapping_op);
@@ -1075,7 +1072,7 @@ mod core {
         fn break_down_for_overflow(
             &mut self,
             operands: SymBinaryOperands,
-            wrapping_op: BasicBinaryOp,
+            wrapping_op: SymExBinaryOp,
         ) -> (impl Fn(bool) -> Option<Expr>, Expr, IntType) {
             let op: OverflowingBinaryOp = wrapping_op.try_into().unwrap();
             let Ok(ValueType::Int(ty)) = ValueType::try_from(operands.as_flat().0.value()) else {
@@ -1424,7 +1421,7 @@ mod concrete {
 }
 
 mod simp {
-    use super::BasicBinaryOp::*;
+    use super::SymExBinaryOp::*;
     use super::*;
 
     /// # Generic Parameters
@@ -1834,7 +1831,7 @@ mod simp {
     pub(crate) struct ConstFolder;
 
     type FoldableOperands<'a> =
-        WithConstOperand<'a, BinaryExpr<BasicBinaryOp, WithConstOperand<'a, &'a SymValueRef>>>;
+        WithConstOperand<'a, BinaryExpr<SymExBinaryOp, WithConstOperand<'a, &'a SymValueRef>>>;
 
     impl<'a> FoldableOperands<'a> {
         #[inline]
@@ -1850,7 +1847,7 @@ mod simp {
         }
 
         #[inline]
-        fn expr(&self) -> &BinaryExpr<BasicBinaryOp, WithConstOperand<'a, &'a SymValueRef>> {
+        fn expr(&self) -> &BinaryExpr<SymExBinaryOp, WithConstOperand<'a, &'a SymValueRef>> {
             self.as_flat().0
         }
 
@@ -1876,7 +1873,7 @@ mod simp {
         fn new_expr(
             self,
             folded_value: ConstValue,
-            op: BasicBinaryOp,
+            op: SymExBinaryOp,
             is_reversed: bool,
         ) -> BinaryExpr {
             let expr = self.flatten().0;
@@ -2254,7 +2251,7 @@ mod simp {
         fn not<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
             match operand.as_ref() {
                 SymValue::Expression(Expr::Unary {
-                    operator: BasicUnaryOp::Not,
+                    operator: SymExUnaryOp::Not,
                     operand,
                 }) => Ok(operand.clone()),
                 _ => Err(operand),
@@ -2264,7 +2261,7 @@ mod simp {
         fn neg<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
             match operand.as_ref() {
                 SymValue::Expression(Expr::Unary {
-                    operator: BasicUnaryOp::Neg,
+                    operator: SymExUnaryOp::Neg,
                     operand,
                 }) => Ok(operand.clone()),
                 _ => Err(operand),
@@ -2278,7 +2275,7 @@ mod simp {
         fn bit_reverse<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
             match operand.as_ref() {
                 SymValue::Expression(Expr::Unary {
-                    operator: BasicUnaryOp::BitReverse,
+                    operator: SymExUnaryOp::BitReverse,
                     operand,
                 }) => Ok(operand.clone()),
                 _ => Err(operand),
@@ -2292,7 +2289,7 @@ mod simp {
         fn byte_swap<'a>(&mut self, operand: Self::ExprRef<'a>) -> Self::Expr<'a> {
             match operand.as_ref() {
                 SymValue::Expression(Expr::Unary {
-                    operator: BasicUnaryOp::ByteSwap,
+                    operator: SymExUnaryOp::ByteSwap,
                     operand,
                 }) => Ok(operand.clone()),
                 _ if ValueType::try_from(operand.value()).is_ok_and(|t| t.size().get() == 1) => {
@@ -2534,7 +2531,7 @@ mod shift {
                             )) => ConstValue::binary_op_arithmetic(
                                 second,
                                 &mask,
-                                BasicBinaryOp::BitAnd,
+                                SymExBinaryOp::BitAnd,
                             )
                             .to_value_ref(),
                             Value::Concrete(..) => {

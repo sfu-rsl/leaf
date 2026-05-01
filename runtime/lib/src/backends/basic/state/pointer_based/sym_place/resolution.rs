@@ -81,13 +81,13 @@ trait SymbolicPlaceResolver:
 }
 
 pub(crate) struct DefaultSymPlaceResolver<'a> {
-    type_manager: &'a dyn TypeDatabase,
+    type_manager: &'a SymExTypeManager,
     retriever: &'a dyn RawPointerRetriever,
 }
 
 impl<'a> DefaultSymPlaceResolver<'a> {
     pub(crate) fn new(
-        type_manager: &'a dyn TypeDatabase,
+        type_manager: &'a SymExTypeManager,
         retriever: &'a dyn RawPointerRetriever,
     ) -> Self {
         Self {
