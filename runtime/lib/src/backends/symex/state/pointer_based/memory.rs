@@ -13,13 +13,12 @@ pub(super) type Address = common::types::RawAddress;
 mod high {
     use common::{log_debug, log_warn, pri::TypeId, types::PointerOffset};
 
-    use crate::backends::symex::{
-        expr::{Expr, SymValue, SymValueRef},
+    use super::low::Memory;
+
+    use super::super::backend::{
+        expr::SymValueRef,
         implication::{Antecedents, Precondition, PreconditionConstraints, PreconditionQuery},
     };
-
-    use low::Memory;
-
     use super::*;
 
     type ValueObject = (SymValueRef, TypeId);

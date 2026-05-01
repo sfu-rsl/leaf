@@ -28,6 +28,7 @@ serdes
 SESE
 streamable
 Symbolizable
+symex
 tyexp
 Uneval
 unsat

@@ -15,7 +15,6 @@ use crate::{
         backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
         utils::Tagged,
     },
-    backends::symex::config::ConstraintFilterType,
     solvers::z3::Z3Solver,
     trace::{
         AdapterTraceManagerExt, AggregatorStepInspector, AggregatorTraceManager,
@@ -29,6 +28,7 @@ use backend::{
     ConstValue, SymExConstraint, SymExValue, SymVarId, SymVariablesManager, TraceIndicesProvider,
     TraceViewProvider, ValueRef,
     alias::{DynDecisionTraceRecorder, TraceManagerWithViews},
+    config::ConstraintFilterType,
     config::{ExecutionTraceConfig, OutputConfig, SolverImpl, TraceInspectorType},
     expr::translators::z3::Z3ValueTranslator,
     implication::PreconditionQuery,

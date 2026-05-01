@@ -1,14 +1,9 @@
 use core::ops::DerefMut;
 
-use super::{
-    ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,
-    SymExConstraint, SymExConstraintDecisionCase, SymExPlaceInfo, SymExPlaceValue, SymExValue,
-    TraceIndicesProvider, TraceViewProvider,
-    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
-    implication::Implied,
-    trace::SymExExeTraceRecorder,
-};
+use common::type_info::TypeInfo;
 
+// https://github.com/rust-lang/rust/issues/119776
+pub(super) use crate::backends::symex as backend;
 use crate::{
     abs::{
         self, FloatType, IntType, TypeId,
@@ -17,7 +12,15 @@ use crate::{
     },
     utils::Indexed,
 };
-use common::type_info::TypeInfo;
+
+use super::{
+    ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,
+    SymExConstraint, SymExConstraintDecisionCase, SymExPlaceInfo, SymExPlaceValue, SymExValue,
+    TraceIndicesProvider, TraceViewProvider,
+    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
+    implication::Implied,
+    trace::SymExExeTraceRecorder,
+};
 
 pub(super) trait SymValueRefExprBuilder
 where

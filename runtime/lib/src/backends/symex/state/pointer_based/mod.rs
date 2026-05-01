@@ -6,23 +6,23 @@ use common::type_info::TypeInfo;
 
 use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
-    backends::symex::{
-        GenericVariablesState, SymExSymPlaceHandler, SymExTypeManager, TypeLayoutResolver,
-        ValueRef,
-        alias::SymValueRefExprBuilder,
-        expr::{lazy::RawPointerRetriever, prelude::*},
-        implication::{
-            Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
-        },
-        place::{LocalWithMetadata, PlaceWithMetadata, Projection},
-        state::{SymPlaceSymEntity, sym_place::strategies::DerefBypassSymPlaceHandler},
-        type_info::TypeLayoutResolverExt,
-    },
     type_info::TypeInfoExt,
     utils::{InPlaceSelfHierarchical, alias::RRef, byte_offset_from},
 };
 
-use super::SymPlaceHandler;
+use super::{SymPlaceHandler, backend};
+
+use backend::{
+    GenericVariablesState, SymExSymPlaceHandler, SymExTypeManager, TypeLayoutResolver, ValueRef,
+    alias::SymValueRefExprBuilder,
+    expr::{lazy::RawPointerRetriever, prelude::*},
+    implication::{
+        Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
+    },
+    place::{LocalWithMetadata, PlaceWithMetadata, Projection},
+    state::{SymPlaceSymEntity, sym_place::strategies::DerefBypassSymPlaceHandler},
+    type_info::TypeLayoutResolverExt,
+};
 
 mod memory;
 pub(super) mod sym_place;

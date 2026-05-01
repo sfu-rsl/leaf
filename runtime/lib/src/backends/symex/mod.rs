@@ -29,7 +29,6 @@ use crate::{
     abs::{
         PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex, backend::*,
     },
-    backends::symex::place::DiscriminantPossiblePlace,
     pri::fluent::backend::*,
     utils::{HasIndex, RefView, alias::RRef},
 };
@@ -38,6 +37,7 @@ use self::{
     alias::{TraceManager, TypeDatabase, VariablesState},
     expr::{SymVarId, prelude::*},
     implication::{Antecedents, Implied, Precondition},
+    place::DiscriminantPossiblePlace,
     state::make_sym_place_handler,
     trace::default_trace_querier,
 };

@@ -7,7 +7,7 @@ use common::program_dep::{
 
 use crate::{abs::BasicBlockLocation, utils::HasIndex};
 
-use crate::backends::symex as backend;
+use super::backend;
 use backend::{
     AssignmentId, EnumAntecedentsResult, ImplicationInvestigator, InstanceKindId, SymExConstraint,
     alias::TraceQuerier,

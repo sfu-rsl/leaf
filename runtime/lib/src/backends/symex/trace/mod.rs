@@ -4,8 +4,7 @@ use core::fmt::Debug;
 
 use common::pri::BasicBlockLocation;
 
-use crate::backends::symex as backend;
-use crate::utils::alias::RRef;
+use super::alias::backend;
 
 mod constraints;
 pub(crate) use constraints::create_trace_manager;

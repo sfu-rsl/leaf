@@ -6,7 +6,7 @@ use crate::{
     utils::alias::RRef,
 };
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{
     Implied, PlaceValueRef, SymExBackend, SymExSymVariablesManager, SymVariablesManager,
     VariablesState, expr::prelude::ConcreteValue,

@@ -10,7 +10,6 @@ use crate::{
     utils::alias::RRef,
 };
 
-use super::super as backend;
 use backend::alias::{
     ImpliedValueRefUnaryExprBuilder, SymValueRefExprBuilder, TypeDatabase,
     ValueRefBinaryExprBuilder, ValueRefExprBuilder,

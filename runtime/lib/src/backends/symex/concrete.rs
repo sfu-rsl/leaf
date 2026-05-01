@@ -1,12 +1,12 @@
 use common::{log_debug, log_info};
 
-use crate::backends::symex::expr::{Expr, PorterValue, RawConcreteValue, SymValue};
 use crate::{abs::ConstraintKind, utils::alias::RRef};
 
-use crate::backends::symex as backend;
+use super::alias::backend;
 use backend::{
     ConcreteValueRef, Implied, SymExConstraint, SymExTraceManager, SymValueRef,
     alias::ValueRefBinaryExprBuilder,
+    expr::{Expr, PorterValue, RawConcreteValue, SymValue},
 };
 
 pub(super) type ConcolicValueObtainer<'a, ConcEntity> = dyn FnOnce() -> ConcEntity + 'a;

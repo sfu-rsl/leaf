@@ -4,18 +4,17 @@ use core::{iter, ops::Bound};
 
 use common::log_debug;
 
-use crate::{
-    abs::{
-        expr::sym_place::{SymbolicReadResolver, SymbolicReadTreeLeafMutator},
-        place::HasMetadata,
-    },
-    backends::symex::{
-        expr::{MultiValue as ValueSelect, SliceIndex, place::*},
-        place::PlaceMetadata,
-    },
+use crate::abs::{
+    expr::sym_place::{SymbolicReadResolver, SymbolicReadTreeLeafMutator},
+    place::HasMetadata,
 };
 
 use super::*;
+
+use backend::{
+    expr::{MultiValue as ValueSelect, SliceIndex, place::*},
+    place::PlaceMetadata,
+};
 
 use self::resolution::{DefaultSymPlaceResolver, Select as PlaceSelect, SinglePlaceResult};
 

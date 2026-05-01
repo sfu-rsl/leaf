@@ -5,7 +5,6 @@ use common::log_info;
 
 use crate::{
     abs::Constraint,
-    backends::symex::config::OutputConfig,
     trace::{
         TraceInspector,
         sanity_check::{FullTraceSanityChecker, StepSanityChecker},
@@ -14,8 +13,11 @@ use crate::{
 };
 
 use super::{
-    CurrentSolver, CurrentSolverCase, CurrentSolverTranslator, CurrentSolverValue,
-    backend::{SymVarId, SymVariablesManager, config::ConstraintSanityCheckLevel},
+    CurrentSolver, CurrentSolverCase, CurrentSolverTranslator, CurrentSolverValue, backend,
+};
+
+use backend::{
+    SymVarId, SymVariablesManager, config::ConstraintSanityCheckLevel, config::OutputConfig,
 };
 
 const TAG: &str = crate::trace::sanity_check::TAG;

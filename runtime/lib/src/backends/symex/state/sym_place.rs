@@ -1,6 +1,6 @@
 use derive_more as dm;
 
-use crate::backends::symex as backend;
+use super::backend;
 use backend::{
     concrete::ConcolicValueObtainer,
     expr::prelude::{ConcreteValueRef, SymValueRef, ValueRef},
@@ -58,9 +58,9 @@ impl SymPlaceSymEntity {
 pub(super) mod strategies {
     use common::{log_debug, log_info};
 
-    use crate::backends::symex::{concrete::Concretizer, config::SymbolicPlaceStrategy};
-
     use super::*;
+
+    use backend::{concrete::Concretizer, config::SymbolicPlaceStrategy};
 
     pub(crate) fn make_sym_place_handler(
         config: SymbolicPlaceStrategy,
