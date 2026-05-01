@@ -1,5 +1,5 @@
 /* NOTE: This module exists even if the `implicit_flow` feature is not enabled.
- * Because we don't want to make BasicValue conditional. It will be always `Implied` but
+ * Because we don't want to make Value conditional. It will be always `Implied` but
  * when the feature is not enabled, the precondition will be an instance of a ZST.
  */
 

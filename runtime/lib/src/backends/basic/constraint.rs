@@ -12,21 +12,21 @@ use crate::{
 use crate::backends::basic as backend;
 use crate::call::CallFlowManager;
 use backend::{
-    BasicBackend, BasicExprBuilder, BasicTraceManager, BasicValue, BasicValueUnaryExprBuilder,
-    expr::prelude::ConstValue,
+    SymExBackend, SymExExprBuilder, SymExTraceManager, SymExValue,
+    alias::SymExValueUnaryExprBuilder, expr::prelude::ConstValue,
 };
 
-pub(super) type Constraint = crate::abs::Constraint<BasicValue, ConstValue>;
+pub(super) type Constraint = crate::abs::Constraint<SymExValue, ConstValue>;
 pub(super) type DecisionCase = ConstValue;
 
-pub(crate) struct BasicConstraintHandler<'a, EB> {
+pub(crate) struct SymExConstraintHandler<'a, EB> {
     location: BasicBlockLocation,
-    trace_manager: RefMut<'a, BasicTraceManager>,
+    trace_manager: RefMut<'a, SymExTraceManager>,
     expr_builder: RRef<EB>,
 }
 
-impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
-    pub(super) fn new(backend: &'a mut BasicBackend, location: BasicBlockIndex) -> Self {
+impl<'a> SymExConstraintHandler<'a, SymExExprBuilder> {
+    pub(super) fn new(backend: &'a mut SymExBackend, location: BasicBlockIndex) -> Self {
         Self {
             trace_manager: backend.trace_manager.borrow_mut(),
             expr_builder: backend.expr_builder.clone(),
@@ -39,15 +39,15 @@ impl<'a> BasicConstraintHandler<'a, BasicExprBuilder> {
     }
 }
 
-impl<'a, EB: BasicValueUnaryExprBuilder> ConstraintHandler for BasicConstraintHandler<'a, EB> {
-    type Operand = BasicValue;
-    type SwitchHandler = BasicSwitchHandler<'a, EB>;
+impl<'a, EB: SymExValueUnaryExprBuilder> ConstraintHandler for SymExConstraintHandler<'a, EB> {
+    type Operand = SymExValue;
+    type SwitchHandler = SymExSwitchHandler<'a, EB>;
 
     #[inline]
     fn switch(self, discriminant: Option<Self::Operand>) -> Self::SwitchHandler {
         let discr = discriminant.expect("Data is missing");
         let discr = self.expr_builder.borrow_mut().no_op(discr);
-        BasicSwitchHandler {
+        SymExSwitchHandler {
             discr,
             parent: self,
         }
@@ -78,19 +78,19 @@ impl<'a, EB: BasicValueUnaryExprBuilder> ConstraintHandler for BasicConstraintHa
     }
 }
 
-impl<'a, EB> BasicConstraintHandler<'a, EB> {
+impl<'a, EB> SymExConstraintHandler<'a, EB> {
     fn notify_constraint(&mut self, constraint: Constraint) {
         self.trace_manager
             .notify_step(Into::into(self.location), constraint);
     }
 }
 
-pub(crate) struct BasicSwitchHandler<'a, EB> {
-    discr: BasicValue,
-    parent: BasicConstraintHandler<'a, EB>,
+pub(crate) struct SymExSwitchHandler<'a, EB> {
+    discr: SymExValue,
+    parent: SymExConstraintHandler<'a, EB>,
 }
 
-impl<'a, EB> SwitchHandler for BasicSwitchHandler<'a, EB> {
+impl<'a, EB> SwitchHandler for SymExSwitchHandler<'a, EB> {
     #[inline]
     fn take(mut self, _case_index: SwitchCaseIndex, value: Option<abs::Constant>) {
         let value = value.expect("Data is missing");
@@ -105,7 +105,7 @@ impl<'a, EB> SwitchHandler for BasicSwitchHandler<'a, EB> {
     }
 }
 
-impl<'a, EB> BasicSwitchHandler<'a, EB> {
+impl<'a, EB> SymExSwitchHandler<'a, EB> {
     fn create_constraint(&mut self, values: Vec<abs::Constant>) -> Constraint {
         let kind = match values.first().unwrap() {
             abs::Constant::Bool(false) => ConstraintKind::False,

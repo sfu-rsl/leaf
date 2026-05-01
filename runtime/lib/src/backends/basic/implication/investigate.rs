@@ -9,27 +9,27 @@ use crate::{abs::BasicBlockLocation, utils::HasIndex};
 
 use crate::backends::basic as backend;
 use backend::{
-    AssignmentId, BasicConstraint, EnumAntecedentsResult, ImplicationInvestigator, InstanceKindId,
-    TraceQuerier,
+    AssignmentId, EnumAntecedentsResult, ImplicationInvestigator, InstanceKindId, SymExConstraint,
+    alias::TraceQuerier,
 };
 
 use super::{Antecedents, PreconditionQuery};
 
-type BasicProgramDependenceMap = LoadedProgramDepMap;
+type DefaultProgramDependenceMap = LoadedProgramDepMap;
 
-fn default_program_dependence_map() -> BasicProgramDependenceMap {
+fn default_program_dependence_map() -> DefaultProgramDependenceMap {
     read_program_dep_map().expect("Failed to read program dependence map")
 }
 
-struct BasicImplicationInvestigator<Q> {
-    program_dep_map: BasicProgramDependenceMap,
+struct DefaultImplicationInvestigator<Q> {
+    program_dep_map: DefaultProgramDependenceMap,
     trace_querier: Rc<Q>,
 }
 
 pub(crate) fn default_implication_investigator<Q: TraceQuerier>(
     trace_querier: Rc<Q>,
 ) -> impl ImplicationInvestigator {
-    BasicImplicationInvestigator {
+    DefaultImplicationInvestigator {
         program_dep_map: default_program_dependence_map(),
         trace_querier,
     }
@@ -37,7 +37,7 @@ pub(crate) fn default_implication_investigator<Q: TraceQuerier>(
 
 type AssignmentLocation = (InstanceKindId, AssignmentId);
 
-impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q> {
+impl<Q: TraceQuerier> ImplicationInvestigator for DefaultImplicationInvestigator<Q> {
     #[tracing::instrument(level = "debug", skip(self), ret)]
     fn antecedent_of_latest_assignment(
         &self,
@@ -98,7 +98,7 @@ impl<Q: TraceQuerier> ImplicationInvestigator for BasicImplicationInvestigator<Q
     }
 }
 
-impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
+impl<Q: TraceQuerier> DefaultImplicationInvestigator<Q> {
     #[tracing::instrument(level = "debug", skip(self), ret)]
     fn control_dep_latest_at(&self, loc: BasicBlockLocation) -> Option<Antecedents> {
         let cdg = self.program_dep_map.control_dependency(loc.body)?;
@@ -136,7 +136,7 @@ impl<Q: TraceQuerier> BasicImplicationInvestigator<Q> {
                 })?;
 
         found.then(|| {
-            let constraint: &BasicConstraint = controller_step.as_ref();
+            let constraint: &SymExConstraint = controller_step.as_ref();
             if constraint.discr.is_symbolic() {
                 Antecedents::from_constraint(controller_step.index())
             } else if let Some(constraints) = constraint.discr.by.constraints() {

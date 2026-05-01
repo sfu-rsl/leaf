@@ -9,22 +9,22 @@ pub(super) use sym_place::{
 };
 
 use crate::backends::basic as backend;
-use backend::{BasicBackend, BasicPlaceValue, VariablesState};
+use backend::{SymExBackend, SymExPlaceValue, VariablesState};
 
-pub(crate) struct BasicMemoryHandler<'s> {
+pub(crate) struct SymExMemoryHandler<'s> {
     vars_state: &'s mut dyn VariablesState,
 }
 
-impl<'s> BasicMemoryHandler<'s> {
-    pub(super) fn new(backend: &'s mut BasicBackend) -> Self {
+impl<'s> SymExMemoryHandler<'s> {
+    pub(super) fn new(backend: &'s mut SymExBackend) -> Self {
         Self {
             vars_state: &mut backend.vars_state,
         }
     }
 }
 
-impl<'s> MemoryHandler for BasicMemoryHandler<'s> {
-    type Place = BasicPlaceValue;
+impl<'s> MemoryHandler for SymExMemoryHandler<'s> {
+    type Place = SymExPlaceValue;
 
     fn mark_live(self, _place: Self::Place) {
         // Nothing to do for now.

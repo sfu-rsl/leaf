@@ -8,19 +8,19 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicSymVariablesManager, Implied, PlaceValueRef, SymVariablesManager,
+    Implied, PlaceValueRef, SymExBackend, SymExSymVariablesManager, SymVariablesManager,
     VariablesState, expr::prelude::ConcreteValue,
 };
 
-use super::BasicValue;
+use super::SymExValue;
 
-pub(crate) struct BasicOperandHandler<'a> {
+pub(crate) struct SymExOperandHandler<'a> {
     vars_state: &'a mut dyn VariablesState,
-    sym_values: RRef<BasicSymVariablesManager>,
+    sym_values: RRef<SymExSymVariablesManager>,
 }
 
-impl<'a> BasicOperandHandler<'a> {
-    pub fn new(backend: &'a mut BasicBackend) -> Self {
+impl<'a> SymExOperandHandler<'a> {
+    pub fn new(backend: &'a mut SymExBackend) -> Self {
         Self {
             vars_state: &mut backend.vars_state,
             sym_values: backend.sym_values.clone(),
@@ -28,9 +28,9 @@ impl<'a> BasicOperandHandler<'a> {
     }
 }
 
-impl OperandHandler for BasicOperandHandler<'_> {
+impl OperandHandler for SymExOperandHandler<'_> {
     type Place = PlaceValueRef;
-    type Operand = BasicValue;
+    type Operand = SymExValue;
 
     fn copy_of(self, place: Self::Place) -> Self::Operand {
         self.vars_state.copy_place(&place)

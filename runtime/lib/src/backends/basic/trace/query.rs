@@ -8,33 +8,33 @@ use common::{
 use crate::utils::{HasIndex, Indexed, RefView};
 
 use super::{Step, backend};
-use backend::{BasicConstraint, BasicExeTraceRecorder, ExeTraceStorage, GenericTraceQuerier};
+use backend::{ExeTraceStorage, GenericTraceQuerier, SymExConstraint, SymExExeTraceRecorder};
 
 type TraceView<T> = RefView<Vec<T>>;
 
 // Let's avoid complexity by introducing generics, but rely on type aliases for the actual types.
 
-type BasicExeTraceRecord = <BasicExeTraceRecorder as ExeTraceStorage>::Record;
-type BasicConstraintTraceStep = Indexed<Step>;
+type SymExExeTraceRecord = <SymExExeTraceRecorder as ExeTraceStorage>::Record;
+type SymExConstraintTraceStep = Indexed<Step>;
 
-struct BasicTraceQuerier
+struct DefaultTraceQuerier
 where
-    BasicExeTraceRecord: HasIndex + ExeRecord,
-    BasicConstraintTraceStep: HasIndex + Borrow<Step>,
+    SymExExeTraceRecord: HasIndex + ExeRecord,
+    SymExConstraintTraceStep: HasIndex + Borrow<Step>,
 {
-    pub exe_records: TraceView<BasicExeTraceRecord>,
-    pub constraint_steps: TraceView<BasicConstraintTraceStep>,
-    pub constraints: TraceView<BasicConstraint>,
+    pub exe_records: TraceView<SymExExeTraceRecord>,
+    pub constraint_steps: TraceView<SymExConstraintTraceStep>,
+    pub constraints: TraceView<SymExConstraint>,
     pub sym_dependent_step_indices: TraceView<usize>,
 }
 
 pub(crate) fn default_trace_querier(
-    exe_records: TraceView<BasicExeTraceRecord>,
-    constraint_steps: TraceView<BasicConstraintTraceStep>,
-    constraints: TraceView<BasicConstraint>,
+    exe_records: TraceView<SymExExeTraceRecord>,
+    constraint_steps: TraceView<SymExConstraintTraceStep>,
+    constraints: TraceView<SymExConstraint>,
     sym_dependent_step_indices: TraceView<usize>,
 ) -> impl super::super::alias::TraceQuerier {
-    BasicTraceQuerier {
+    DefaultTraceQuerier {
         exe_records,
         constraint_steps,
         constraints,
@@ -51,9 +51,9 @@ trait ExeRecord {
     fn depth(&self) -> usize;
 }
 
-impl GenericTraceQuerier for BasicTraceQuerier {
-    type Record = BasicExeTraceRecord;
-    type Constraint = BasicConstraint;
+impl GenericTraceQuerier for DefaultTraceQuerier {
+    type Record = SymExExeTraceRecord;
+    type Constraint = SymExConstraint;
 
     fn any_sym_dependent_in_current_call(&self, body_id: InstanceKindId) -> bool {
         let records = self.exe_records.borrow();
@@ -142,12 +142,12 @@ impl GenericTraceQuerier for BasicTraceQuerier {
     }
 }
 
-impl BasicTraceQuerier {
+impl DefaultTraceQuerier {
     fn create_view<'a>(
         &'a self,
         record_index: usize,
         constraint_index: usize,
-    ) -> impl AsRef<BasicBlockIndex> + HasIndex + AsRef<BasicConstraint> + 'a {
+    ) -> impl AsRef<BasicBlockIndex> + HasIndex + AsRef<SymExConstraint> + 'a {
         let view = QuerierStepView {
             record: self.exe_records.borrow_map(move |rs| &rs[record_index]),
             constraint: self.constraints.borrow_map(move |cs| &cs[constraint_index]),
@@ -172,7 +172,7 @@ mod helpers {
 
     impl<R, C> AsRef<BasicBlockIndex> for QuerierStepView<R, C>
     where
-        R: Deref<Target = BasicExeTraceRecord>,
+        R: Deref<Target = SymExExeTraceRecord>,
     {
         fn as_ref(&self) -> &BasicBlockIndex {
             branch_rec_block_index(self.record.deref())
@@ -181,23 +181,23 @@ mod helpers {
 
     impl<R, C> HasIndex for QuerierStepView<R, C>
     where
-        R: Deref<Target = BasicExeTraceRecord>,
+        R: Deref<Target = SymExExeTraceRecord>,
     {
         fn index(&self) -> usize {
             self.record.index
         }
     }
 
-    impl<R, C> AsRef<BasicConstraint> for QuerierStepView<R, C>
+    impl<R, C> AsRef<SymExConstraint> for QuerierStepView<R, C>
     where
-        C: Deref<Target = BasicConstraint>,
+        C: Deref<Target = SymExConstraint>,
     {
-        fn as_ref(&self) -> &BasicConstraint {
+        fn as_ref(&self) -> &SymExConstraint {
             self.constraint.deref()
         }
     }
 
-    impl ExeRecord for BasicExeTraceRecord {
+    impl ExeRecord for SymExExeTraceRecord {
         fn is_call(&self, callee: InstanceKindId) -> bool {
             match self.borrow() {
                 ExeTraceRecord::Call { to, .. } if to.eq(&callee) => true,
@@ -222,7 +222,7 @@ mod helpers {
         }
     }
 
-    pub(super) fn branch_rec_block_index(record: &BasicExeTraceRecord) -> &BasicBlockIndex {
+    pub(super) fn branch_rec_block_index(record: &SymExExeTraceRecord) -> &BasicBlockIndex {
         match record.borrow() {
             ExeTraceRecord::Branch(BranchRecord {
                 location: BasicBlockLocation { ref index, .. },

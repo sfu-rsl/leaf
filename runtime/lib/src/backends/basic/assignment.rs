@@ -14,9 +14,9 @@ use crate::{
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicBackend, BasicValue, BasicValueExprBuilder, Implied, PlaceValueRef, Precondition,
-    TypeDatabase, TypeLayoutResolver, ValueRef, VariablesState, alias::BasicExprBuilder,
-    expr::prelude::*, implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
+    Implied, PlaceValueRef, Precondition, SymExBackend, SymExExprBuilder, SymExValue, TypeDatabase,
+    TypeLayoutResolver, ValueRef, VariablesState, alias::SymExValueExprBuilder, expr::prelude::*,
+    implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
     type_info::TypeLayoutResolverExt,
 };
 
@@ -50,28 +50,28 @@ macro_rules! services_from_backend {
 }
 pub(super) use services_from_backend;
 
-pub(crate) struct BasicAssignmentHandler<'s, 'a: 's, EB> {
+pub(crate) struct SymExAssignmentHandler<'s, 'a: 's, EB> {
     #[cfg(feature = "implicit_flow")]
     id: AssignmentId,
     dest: PlaceValueRef,
     services: MutAccess<'s, AssignmentServices<'a, EB>>,
 }
 
-impl BasicAssignmentHandler<'_, '_, BasicExprBuilder> {
+impl SymExAssignmentHandler<'_, '_, SymExExprBuilder> {
     pub(super) fn new<'a>(
         id: AssignmentId,
         dest: PlaceValueRef,
-        backend: &'a mut BasicBackend,
-    ) -> BasicAssignmentHandler<'a, 'a, BasicExprBuilder> {
-        BasicAssignmentHandler::with_services(id, dest, services_from_backend!(backend).into())
+        backend: &'a mut SymExBackend,
+    ) -> SymExAssignmentHandler<'a, 'a, SymExExprBuilder> {
+        SymExAssignmentHandler::with_services(id, dest, services_from_backend!(backend).into())
     }
 
     pub(super) fn with_services<'s, 'a, EB>(
         id: AssignmentId,
         dest: PlaceValueRef,
         services: MutAccess<'s, AssignmentServices<'a, EB>>,
-    ) -> BasicAssignmentHandler<'s, 'a, EB> {
-        BasicAssignmentHandler {
+    ) -> SymExAssignmentHandler<'s, 'a, EB> {
+        SymExAssignmentHandler {
             #[cfg(feature = "implicit_flow")]
             id,
             dest,
@@ -80,10 +80,10 @@ impl BasicAssignmentHandler<'_, '_, BasicExprBuilder> {
     }
 }
 
-impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_, '_, EB> {
+impl<EB: SymExValueExprBuilder> AssignmentHandler for SymExAssignmentHandler<'_, '_, EB> {
     type Place = PlaceValueRef;
     type DiscriminablePlace = DiscriminantPossiblePlace;
-    type Operand = BasicValue;
+    type Operand = SymExValue;
 
     fn use_of(mut self, operand: Self::Operand) {
         self.set(operand)
@@ -320,7 +320,7 @@ impl<EB: BasicValueExprBuilder> AssignmentHandler for BasicAssignmentHandler<'_,
     }
 }
 
-impl<'a, EB> BasicAssignmentHandler<'_, 'a, EB> {
+impl<'a, EB> SymExAssignmentHandler<'_, 'a, EB> {
     fn expr_builder(&self) -> impl DerefMut<Target = EB> + '_ {
         self.services.expr_builder.as_ref().borrow_mut()
     }
@@ -334,14 +334,14 @@ impl<'a, EB> BasicAssignmentHandler<'_, 'a, EB> {
         self.set(value.map_value(Value::to_value_ref));
     }
 
-    fn set(&mut self, mut value: BasicValue) {
+    fn set(&mut self, mut value: SymExValue) {
         #[cfg(feature = "implicit_flow")]
         self.add_antecedent(&mut value);
         self.set_no_ant(value);
     }
 
     #[inline]
-    fn set_no_ant(&mut self, value: BasicValue) {
+    fn set_no_ant(&mut self, value: SymExValue) {
         self.services.vars_state.set_place(&self.dest, value);
     }
 
@@ -356,7 +356,7 @@ impl<'a, EB> BasicAssignmentHandler<'_, 'a, EB> {
     }
 }
 
-impl<'s, EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, '_, EB> {
+impl<'s, EB: SymExValueExprBuilder> SymExAssignmentHandler<'_, '_, EB> {
     #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
     fn set_adt_value(
         &mut self,
@@ -461,7 +461,7 @@ impl<'s, EB: BasicValueExprBuilder> BasicAssignmentHandler<'_, '_, EB> {
         }
     }
 
-    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: BasicValue) -> BasicValue {
+    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: SymExValue) -> SymExValue {
         if !data_ptr.is_symbolic() {
             return data_ptr;
         }
@@ -514,7 +514,7 @@ pub(super) mod precondition {
 
     use super::*;
 
-    impl<'s, EB> BasicAssignmentHandler<'_, '_, EB> {
+    impl<'s, EB> SymExAssignmentHandler<'_, '_, EB> {
         fn current_func(&self) -> InstanceKindId {
             self.services.current_func
         }
@@ -523,7 +523,7 @@ pub(super) mod precondition {
             self.services.implication_investigator
         }
 
-        pub(super) fn add_antecedent(&self, value: &mut BasicValue) {
+        pub(super) fn add_antecedent(&self, value: &mut SymExValue) {
             add_antecedent(
                 self.implication_investigator(),
                 || self.dest.type_info().get_size(self.type_manager()).unwrap(),
@@ -675,7 +675,7 @@ pub(super) mod precondition {
         implication_investigator: &(impl ImplicationInvestigator + ?Sized),
         whole_size: impl FnOnce() -> TypeSize,
         assignment_id: (InstanceKindId, AssignmentId),
-        value: &mut BasicValue,
+        value: &mut SymExValue,
     ) {
         let Some(antecedent) =
             implication_investigator.antecedent_of_latest_assignment(assignment_id)

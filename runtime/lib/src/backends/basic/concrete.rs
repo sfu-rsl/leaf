@@ -5,7 +5,7 @@ use crate::{abs::ConstraintKind, utils::alias::RRef};
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicConstraint, BasicTraceManager, ConcreteValueRef, Implied, SymValueRef,
+    ConcreteValueRef, Implied, SymExConstraint, SymExTraceManager, SymValueRef,
     alias::ValueRefBinaryExprBuilder,
 };
 
@@ -19,13 +19,13 @@ pub(super) trait Concretizer {
     ) -> ConcreteValueRef;
 }
 
-pub(super) struct BasicConcretizer<EB: ValueRefBinaryExprBuilder> {
+pub(super) struct DefaultConcretizer<EB: ValueRefBinaryExprBuilder> {
     expr_builder: RRef<EB>,
-    trace_manager: RRef<BasicTraceManager>,
+    trace_manager: RRef<SymExTraceManager>,
 }
 
-impl<EB: ValueRefBinaryExprBuilder> BasicConcretizer<EB> {
-    pub fn new(expr_builder: RRef<EB>, trace_manager: RRef<BasicTraceManager>) -> Self {
+impl<EB: ValueRefBinaryExprBuilder> DefaultConcretizer<EB> {
+    pub fn new(expr_builder: RRef<EB>, trace_manager: RRef<SymExTraceManager>) -> Self {
         Self {
             expr_builder,
             trace_manager,
@@ -33,7 +33,7 @@ impl<EB: ValueRefBinaryExprBuilder> BasicConcretizer<EB> {
     }
 }
 
-impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
+impl<EB: ValueRefBinaryExprBuilder> Concretizer for DefaultConcretizer<EB> {
     fn stamp(
         &mut self,
         sym_value: SymValueRef,
@@ -82,7 +82,7 @@ impl<EB: ValueRefBinaryExprBuilder> Concretizer for BasicConcretizer<EB> {
         };
 
         // NOTE: We do not use equality constraint here because that is meant for switch cases.
-        let constraint = BasicConstraint {
+        let constraint = SymExConstraint {
             discr: Implied::by_unknown(eq_expr), // TODO
             kind: ConstraintKind::True,
         };

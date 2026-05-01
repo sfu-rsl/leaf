@@ -8,16 +8,16 @@ use crate::abs::SymVariable;
 
 use crate::backends::basic as backend;
 use backend::{
-    BasicValue, ConcreteValue, ConcreteValueRef, SymValue, SymValueRef, SymVarId,
+    ConcreteValue, ConcreteValueRef, SymExValue, SymValue, SymValueRef, SymVarId,
     SymVariablesManager, SymbolicVar, Value, expr::ConstValue,
 };
 
-pub(super) struct BasicSymVariablesManager {
+pub(super) struct DefaultSymVariablesManager {
     variables: HashMap<SymVarId, (SymValueRef, ConcreteValueRef)>,
     conc_constraints: HashMap<SymVarId, Constraint<SymValueRef, ConstValue>>,
 }
 
-impl BasicSymVariablesManager {
+impl DefaultSymVariablesManager {
     pub(crate) fn new() -> Self {
         Self {
             variables: HashMap::new(),
@@ -32,8 +32,14 @@ impl BasicSymVariablesManager {
     }
 }
 
-impl SymVariablesManager for BasicSymVariablesManager {
-    fn add_variable(&mut self, var: SymVariable<BasicValue>) -> SymValueRef {
+impl Default for DefaultSymVariablesManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl SymVariablesManager for DefaultSymVariablesManager {
+    fn add_variable(&mut self, var: SymVariable<SymExValue>) -> SymValueRef {
         let conc_val = var
             .conc_value
             .expect("Concrete value of symbolic variables is required.");

@@ -13,19 +13,15 @@ use common::type_info::rw::LoadedTypeDatabase;
 use cfg_if::cfg_if;
 
 use crate::pri::{
-    fluent::{
-        backend::{OperandHandler, RuntimeBackend},
-        InstanceManager,
-    },
+    fluent::{InstanceManager, backend::RuntimeBackend},
     refs::DefaultRefManager,
 };
 
-use super::{BasicBackendConfig, BasicPlaceBuilder};
+use super::{SymExBackendConfig, SymExPlaceBuilder};
 
-type BackendImpl = crate::backends::basic::BasicBackend;
+type BackendImpl = crate::backends::basic::SymExBackend;
 type PlaceInfoImpl = <BackendImpl as RuntimeBackend>::PlaceInfo;
-type OperandImpl =
-    <<BackendImpl as RuntimeBackend>::OperandHandler<'static> as OperandHandler>::Operand;
+type OperandImpl = <BackendImpl as RuntimeBackend>::Operand;
 
 static INIT: Once = Once::new();
 cfg_if! {
@@ -78,9 +74,9 @@ fn load_config() -> ::config::Config {
         .expect("Failed to read configurations")
 }
 
-pub struct BasicInstanceManager;
+pub struct SymExInstanceManager;
 
-impl BasicInstanceManager {
+impl SymExInstanceManager {
     #[inline]
     fn check_and_perform_on_backend<T>(
         backend: &mut Option<BackendImpl>,
@@ -95,12 +91,12 @@ impl BasicInstanceManager {
     }
 }
 
-impl InstanceManager for BasicInstanceManager {
+impl InstanceManager for SymExInstanceManager {
     type PlaceInfo = PlaceInfoImpl;
     type Place = <BackendImpl as RuntimeBackend>::Place;
     type Operand = OperandImpl;
     type Backend = BackendImpl;
-    type PlaceBuilder = BasicPlaceBuilder;
+    type PlaceBuilder = SymExPlaceBuilder;
     type PlaceRefManager = DefaultRefManager<PlaceInfoImpl>;
     type OperandRefManager = DefaultRefManager<OperandImpl>;
 
@@ -110,7 +106,7 @@ impl InstanceManager for BasicInstanceManager {
 
             log_info!("Initializing basic backend");
             let config = load_config();
-            let config = BasicBackendConfig::try_from(config).expect("Failed to load config");
+            let config = SymExBackendConfig::try_from(config).expect("Failed to load config");
 
             let types_db =
                 common::type_info::rw::read_types_db().expect("Failed to read type info");
@@ -134,7 +130,7 @@ impl InstanceManager for BasicInstanceManager {
                     *binding = Some(backend);
                 }
             }
-            log_info!("Basic backend initialized");
+            log_info!("SymEx backend initialized");
         });
     }
 

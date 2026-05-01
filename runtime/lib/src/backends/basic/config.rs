@@ -7,11 +7,11 @@ use common::{log_debug, log_warn};
 
 use crate::utils::{alias::check_sym_value_loss, file::FileGenConfig};
 
-impl TryFrom<::config::Config> for BasicBackendConfig {
+impl TryFrom<::config::Config> for SymExBackendConfig {
     type Error = ::config::ConfigError;
 
     fn try_from(value: ::config::Config) -> Result<Self, Self::Error> {
-        let config: BasicBackendConfig = value.try_deserialize()?;
+        let config: SymExBackendConfig = value.try_deserialize()?;
         log_debug!("Loaded configurations: {:?}", config);
 
         use ExternalCallStrategy::*;
@@ -35,7 +35,7 @@ impl TryFrom<::config::Config> for BasicBackendConfig {
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
-pub(crate) struct BasicBackendConfig {
+pub(crate) struct SymExBackendConfig {
     #[serde(default)]
     pub call: CallConfig,
 

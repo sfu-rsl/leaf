@@ -7,8 +7,9 @@ use common::type_info::TypeInfo;
 use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
     backends::basic::{
-        GenericVariablesState, TypeLayoutResolver, ValueRef,
-        alias::{BasicSymPlaceHandler, SymValueRefExprBuilder, TypeDatabase},
+        GenericVariablesState, SymExSymPlaceHandler, SymExTypeManager, TypeLayoutResolver,
+        ValueRef,
+        alias::SymValueRefExprBuilder,
         expr::{lazy::RawPointerRetriever, prelude::*},
         implication::{
             Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
@@ -30,7 +31,7 @@ use memory::*;
 type Local = LocalWithMetadata;
 type Place = PlaceWithMetadata;
 
-type SymPlaceHandlerObject = RRef<BasicSymPlaceHandler>;
+type SymPlaceHandlerObject = RRef<SymExSymPlaceHandler>;
 
 /* NOTE: Memory structure
  *
@@ -130,7 +131,7 @@ type SymPlaceHandlerObject = RRef<BasicSymPlaceHandler>;
 /// they will be sent to the `fallback` state to be handled.
 pub(in super::super) struct RawPointerVariableState<EB> {
     memory: memory::MemoryGate,
-    type_manager: Rc<dyn TypeDatabase>,
+    type_manager: Rc<SymExTypeManager>,
     sym_read_handler: SymPlaceHandlerObject,
     sym_write_handler: SymPlaceHandlerObject,
     sym_ref_handler: SymPlaceHandlerObject,
@@ -139,7 +140,7 @@ pub(in super::super) struct RawPointerVariableState<EB> {
 
 impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     pub fn new(
-        type_manager: Rc<dyn TypeDatabase>,
+        type_manager: Rc<SymExTypeManager>,
         sym_read_handler: SymPlaceHandlerObject,
         sym_write_handler: SymPlaceHandlerObject,
         expr_builder: RRef<EB>,

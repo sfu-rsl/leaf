@@ -13,12 +13,12 @@ use crate::{
 use crate::backends::basic as backend;
 use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, TypeLayoutResolver, ValueType};
 
-pub(crate) struct BasicTypeManager<D: TypeDatabase<'static>> {
+struct SymExTypeManager<D: TypeDatabase<'static>> {
     inner: D,
     core_types: CoreTypes<&'static TypeInfo>,
 }
 
-impl<D: TypeDatabase<'static>> BasicTypeManager<D> {
+impl<D: TypeDatabase<'static>> SymExTypeManager<D> {
     fn new(db: D) -> Self {
         let core_types = db.core_types().map(|id| db.get_type(&id));
         Self {
@@ -28,11 +28,13 @@ impl<D: TypeDatabase<'static>> BasicTypeManager<D> {
     }
 }
 
-pub(crate) fn default_type_manager<D: TypeDatabase<'static>>(db: D) -> BasicTypeManager<D> {
-    BasicTypeManager::new(db)
+pub(crate) fn default_type_manager<D: TypeDatabase<'static> + 'static>(
+    db: D,
+) -> impl backend::alias::TypeDatabase {
+    SymExTypeManager::new(db)
 }
 
-impl<D: TypeDatabase<'static>> TypeDatabase<'static> for BasicTypeManager<D> {
+impl<D: TypeDatabase<'static>> TypeDatabase<'static> for SymExTypeManager<D> {
     delegate! {
         to self.inner {
             fn opt_get_type(&self, key: &TypeId) -> Option<&'static TypeInfo>;
@@ -66,7 +68,7 @@ macro_rules! impl_float_type {
     };
 }
 
-impl<D: TypeDatabase<'static>> CoreTypeProvider<ValueType> for BasicTypeManager<D> {
+impl<D: TypeDatabase<'static>> CoreTypeProvider<ValueType> for SymExTypeManager<D> {
     fn bool(&self) -> ValueType {
         ValueType::Bool
     }
@@ -112,7 +114,7 @@ macro_rules! delegate_to_core_types {
     };
 }
 
-impl<'t, 'd, D: TypeDatabase<'static>> CoreTypeProvider<&'t TypeInfo> for BasicTypeManager<D> {
+impl<'t, 'd, D: TypeDatabase<'static>> CoreTypeProvider<&'t TypeInfo> for SymExTypeManager<D> {
     pass_core_type_names_to!(delegate_to_core_types);
 
     fn try_to_value_type(&self, ty: &'t TypeInfo) -> Option<ValueType> {
@@ -145,7 +147,7 @@ macro_rules! impl_type {
     };
 }
 
-impl<D: TypeDatabase<'static>> CoreTypeProvider<LazyTypeInfo> for BasicTypeManager<D>
+impl<D: TypeDatabase<'static>> CoreTypeProvider<LazyTypeInfo> for SymExTypeManager<D>
 where
     Self: for<'t> CoreTypeProvider<&'t TypeInfo> + CoreTypeProvider<ValueType>,
 {

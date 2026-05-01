@@ -9,8 +9,9 @@ use crate::{
 
 use crate::backends::basic::{self as backend};
 use backend::{
-    BasicBackend, BasicExprBuilder, BasicPlaceValue, BasicSymPlaceHandler, BasicValue,
-    BasicValueExprBuilder, TypeDatabase,
+    SymExBackend, SymExExprBuilder, SymExPlaceValue, SymExSymPlaceHandler, SymExValue,
+    TypeDatabase,
+    alias::SymExValueExprBuilder,
     assignment::{self, AssignmentServices},
     expr::prelude::{
         ConcatExpr, ConcreteValue, ConcreteValueRef, ConstValue, SymValueRef, UnevalValue, Value,
@@ -20,30 +21,30 @@ use backend::{
     state::SymPlaceSymEntity,
 };
 
-type AssignmentHandlerImpl<'a> = <BasicBackend as RuntimeBackend>::AssignmentHandler<'a>;
+type AssignmentHandlerImpl<'a> = <SymExBackend as RuntimeBackend>::AssignmentHandler<'a>;
 
-pub(crate) struct BasicRawMemoryHandler<'a, EB> {
+pub(crate) struct SymExRawMemoryHandler<'a, EB> {
     services: AssignmentServices<'a, EB>,
-    sym_size_handler: &'a mut BasicSymPlaceHandler,
+    sym_size_handler: &'a mut SymExSymPlaceHandler,
 }
 
-impl BasicRawMemoryHandler<'_, BasicExprBuilder> {
+impl SymExRawMemoryHandler<'_, SymExExprBuilder> {
     pub(super) fn new<'a>(
-        backend: &'a mut BasicBackend,
-    ) -> BasicRawMemoryHandler<'a, BasicExprBuilder> {
+        backend: &'a mut SymExBackend,
+    ) -> SymExRawMemoryHandler<'a, SymExExprBuilder> {
         let sym_size_handler = &mut backend.sym_place_handler;
         let services = assignment::services_from_backend!(backend);
 
-        BasicRawMemoryHandler {
+        SymExRawMemoryHandler {
             services,
             sym_size_handler,
         }
     }
 }
 
-impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemoryHandler<'a, EB> {
-    type Place = BasicPlaceValue;
-    type Operand = BasicValue;
+impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemoryHandler<'a, EB> {
+    type Place = SymExPlaceValue;
+    type Operand = SymExValue;
 
     fn place_from_ptr(
         self,
@@ -210,14 +211,14 @@ impl<'a, EB: BasicValueExprBuilder + 'static> RawMemoryHandler for BasicRawMemor
     }
 }
 
-impl<'a, EB> BasicRawMemoryHandler<'a, EB> {
+impl<'a, EB> SymExRawMemoryHandler<'a, EB> {
     fn place_from_ptr_inner(
         &self,
-        ptr: BasicValue,
+        ptr: SymExValue,
         conc_ptr: RawAddress,
         ptr_type_id: TypeId,
         usage: PlaceUsage,
-    ) -> BasicPlaceValue {
+    ) -> SymExPlaceValue {
         self.services
             .vars_state
             .ref_place_by_ptr(ptr, conc_ptr, ptr_type_id, usage)
@@ -233,7 +234,7 @@ impl<'a, EB> BasicRawMemoryHandler<'a, EB> {
             .unwrap_or_else(|| panic!("Pointer to unsized type is not expected: {}", ptr_type_id))
     }
 
-    fn check_count(&mut self, count: &BasicValue, conc_count: usize) {
+    fn check_count(&mut self, count: &SymExValue, conc_count: usize) {
         if count.is_symbolic() {
             let count = self.sym_size_handler.handle(
                 SymPlaceSymEntity::of_size(SymValueRef::new(count.value.clone())),
@@ -249,14 +250,14 @@ impl<'a, EB> BasicRawMemoryHandler<'a, EB> {
     }
 }
 
-impl<'a, EB: BasicValueExprBuilder + 'static> BasicRawMemoryHandler<'a, EB> {
+impl<'a, EB: SymExValueExprBuilder + 'static> SymExRawMemoryHandler<'a, EB> {
     fn ptr_at_offsets(
         &self,
-        ptr: &BasicValue,
+        ptr: &SymExValue,
         conc_ptr: RawAddress,
         count: Implied<usize>,
         size: TypeSize,
-    ) -> impl Iterator<Item = (BasicValue, RawAddress)> {
+    ) -> impl Iterator<Item = (SymExValue, RawAddress)> {
         let precondition = Precondition::merge([ptr.by.clone(), count.by.clone()]);
 
         let values: Box<dyn Iterator<Item = ValueRef>> = match ptr.as_ref() {
