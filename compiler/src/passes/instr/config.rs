@@ -146,6 +146,11 @@ pub(crate) enum AssignmentKind {
     Aggregate,
     ShallowInitBox,
     WrapUnsafeBinder,
+    IntrinsicBinaryOp,
+    IntrinsicUnaryOp,
+    IntrinsicMemoryOp,
+    AtomicBinaryOp,
+    AtomicMemoryOp,
 }
 
 filter_struct! { StorageLifetimeMarkerFilter {

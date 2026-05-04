@@ -194,6 +194,11 @@ define_filter_rule_group!(
         Aggregate => aggregate,
         ShallowInitBox => shallow_init_box,
         WrapUnsafeBinder => wrap_unsafe_binder,
+        IntrinsicBinaryOp => intrinsic_binary_op,
+        IntrinsicUnaryOp => intrinsic_unary_op,
+        IntrinsicMemoryOp => intrinsic_memory_op,
+        AtomicBinaryOp => atomic_binary_op,
+        AtomicMemoryOp => atomic_memory_op,
     }
 );
 type BakedAssignmentInfoFilterRules<'tcx> = BakedAssignmentFilterRules<'tcx>;
