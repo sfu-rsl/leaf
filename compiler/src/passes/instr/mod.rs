@@ -58,6 +58,7 @@ use self::{
         ctxtreqs,
     },
     decision::AtomicIntrinsicKind,
+    pri_utils::sym::intrinsics::LeafIntrinsicSymbol,
 };
 
 pub(crate) use config::InstrumentationRules;
@@ -277,6 +278,17 @@ fn make_config<'tcx>(storage: &mut dyn Storage, tcx: TyCtxt<'tcx>, def_id: DefId
                 wrap_unsafe_binder: top_level
                     .wrap_unsafe_binder
                     .then(|| rules.wrap_unsafe_binder),
+                intrinsic_binary_op: top_level
+                    .intrinsic_binary_op
+                    .then(|| rules.intrinsic_binary_op),
+                intrinsic_unary_op: top_level
+                    .intrinsic_unary_op
+                    .then(|| rules.intrinsic_unary_op),
+                intrinsic_memory_op: top_level
+                    .intrinsic_memory_op
+                    .then(|| rules.intrinsic_memory_op),
+                atomic_binary_op: top_level.atomic_binary_op.then(|| rules.atomic_binary_op),
+                atomic_memory_op: top_level.atomic_memory_op.then(|| rules.atomic_memory_op),
             }
         })(accept_assignment_rules(storage, &(tcx, def_id), true))
     };
@@ -843,14 +855,7 @@ where
         use decision::IntrinsicDecision::*;
         match decision::decide_intrinsic_call(def) {
             OneToOneAssign(func_name) => {
-                let mut call_adder = self.call_adder.before();
-                let dest_ref = call_adder.reference_place(params.destination);
-                let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
-                let args = Self::ref_args(&mut call_adder, params.args);
-                call_adder
-                    .before()
-                    .assign(self.assignment_id.unwrap(), dest_ref, dest_ty)
-                    .intrinsic_one_to_one_by(def_id, func_name, args.into_iter());
+                self.instrument_one_to_one_intrinsic_call(def_id, func_name, params);
             }
             Atomic(kind) => {
                 // Source: rustc_codegen_llvm/builder/struct.GenericBuilder.html#method.codegen_intrinsic_call
@@ -934,6 +939,42 @@ where
         }
     }
 
+    fn instrument_one_to_one_intrinsic_call(
+        &mut self,
+        def_id: DefId,
+        func_name: LeafIntrinsicSymbol,
+        params: CallParams<'_, 'tcx>,
+    ) {
+        let rules = &self.call_adder.config().assignment_filter;
+        let filter = match params.args.len() {
+            2 => rules.intrinsic_binary_op,
+            1 => rules.intrinsic_unary_op,
+            _ => unreachable!(
+                "One-to-one intrinsic calls are expected to have either 1 or 2 arguments."
+            ),
+        };
+
+        match filter {
+            Some(include_info) => {
+                let mut call_adder = self.call_adder.before();
+                let dest_ref = call_adder.reference_place(params.destination);
+                let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
+                let args = Self::ref_args(&mut call_adder, params.args);
+                let mut call_adder =
+                    call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
+
+                if include_info {
+                    call_adder.intrinsic_one_to_one_by(def_id, func_name, args.into_iter());
+                } else {
+                    call_adder.by_some();
+                }
+            }
+            None => {
+                // Filter out completely
+            }
+        }
+    }
+
     fn instrument_memory_intrinsic_call(
         &mut self,
         params: &CallParams<'_, 'tcx>,
@@ -958,9 +999,8 @@ where
         failure_ordering: Option<mir_ty::AtomicOrdering>,
         kind: AtomicIntrinsicKind,
     ) {
-        let mut call_adder = self.call_adder.before();
-        let ptr_arg = params.args.get(0);
-        let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
+        use AtomicIntrinsicKind::*;
+
         let convert_ordering = |ord: mir_ty::AtomicOrdering| match ord {
             mir_ty::AtomicOrdering::Relaxed => common::pri::AtomicOrdering::RELAXED,
             mir_ty::AtomicOrdering::Release => common::pri::AtomicOrdering::RELEASE,
@@ -970,38 +1010,78 @@ where
         };
         let ordering = convert_ordering(ordering);
         let failure_ordering = failure_ordering.map(convert_ordering);
-        let mut call_adder = call_adder.perform_atomic_op(ordering, ptr);
-        use AtomicIntrinsicKind::*;
-        match kind {
-            Load | Store | Exchange | CompareExchange { .. } | BinOp(..) => {
-                let dest_ref = call_adder.reference_place(params.destination);
-                let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
-                let mut call_adder =
-                    call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
-                match kind {
-                    Load => call_adder.load(),
-                    Store => {
-                        let val_ref = call_adder.reference_operand_spanned(&params.args[1]);
-                        call_adder.store(val_ref)
-                    }
-                    BinOp(binop) => {
-                        let src = call_adder.reference_operand_spanned(&params.args[1]);
-                        call_adder.binary_op(binop, src);
-                    }
-                    Exchange => {
-                        let src = call_adder.reference_operand_spanned(&params.args[1]);
-                        call_adder.exchange(src)
-                    }
-                    CompareExchange { weak } => {
-                        let old = call_adder.reference_operand_spanned(&params.args[1]);
-                        let src = call_adder.reference_operand_spanned(&params.args[2]);
-                        call_adder.compare_exchange(failure_ordering.unwrap(), weak, old, src)
-                    }
-                    _ => unreachable!(),
-                }
+
+        let rules = &self.call_adder.config().assignment_filter;
+        let filter = match kind {
+            Load | Store | Exchange | CompareExchange { .. } => rules.atomic_memory_op,
+            BinOp(..) => rules.atomic_binary_op,
+            Fence { .. } => {
+                // FIXME: Add config.
+                Some(true)
             }
-            Fence { single_thread } => call_adder.fence(single_thread),
         };
+
+        match filter {
+            Some(include_info) => {
+                let mut call_adder = self.call_adder.before();
+
+                match kind {
+                    Fence { single_thread } => {
+                        call_adder
+                            .perform_atomic_op(ordering, None)
+                            .fence(single_thread);
+                    }
+                    Load | Store | Exchange | CompareExchange { .. } | BinOp(..) => {
+                        let dest_ref = call_adder.reference_place(params.destination);
+                        let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
+                        let mut call_adder =
+                            call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
+
+                        if include_info {
+                            let ptr_arg = params.args.get(0).unwrap();
+                            let ptr = call_adder.reference_ptr_for_intrinsic(ptr_arg);
+                            let mut call_adder = call_adder.perform_atomic_op(ordering, Some(ptr));
+
+                            match kind {
+                                Load => call_adder.load(),
+                                Store => {
+                                    let val_ref =
+                                        call_adder.reference_operand_spanned(&params.args[1]);
+                                    call_adder.store(val_ref)
+                                }
+                                BinOp(binop) => {
+                                    let src = call_adder.reference_operand_spanned(&params.args[1]);
+                                    call_adder.binary_op(binop, src);
+                                }
+                                Exchange => {
+                                    let src = call_adder.reference_operand_spanned(&params.args[1]);
+                                    call_adder.exchange(src)
+                                }
+                                CompareExchange { weak } => {
+                                    let old = call_adder.reference_operand_spanned(&params.args[1]);
+                                    let src = call_adder.reference_operand_spanned(&params.args[2]);
+                                    call_adder.compare_exchange(
+                                        failure_ordering.unwrap(),
+                                        weak,
+                                        old,
+                                        src,
+                                    )
+                                }
+                                Fence { .. } => {
+                                    unreachable!()
+                                }
+                            }
+                        } else {
+                            call_adder.by_some()
+                        }
+                    }
+                };
+            }
+            None => {
+                // Filter out completely
+                return;
+            }
+        }
     }
 
     fn instrument_llvm_intrinsic_call(&mut self, params: CallParams<'_, 'tcx>) {
@@ -1335,50 +1415,69 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
 {
     use decision::MemoryIntrinsicKind::*;
 
-    let tcx = call_adder.tcx();
-    let mut call_adder = call_adder.before();
+    let filter = (&call_adder.config().assignment_filter).intrinsic_memory_op;
+    match filter {
+        Some(include_info) => {
+            let tcx = call_adder.tcx();
+            let mut call_adder = call_adder.before();
 
-    // FIXME: Destination is only used for load operation. But assignment_id is used for all.
-    // These dummy values can be avoided by breaking the context into smaller ones.
-    let dest_ref = destination.map_or(PlaceRef::INVALID, |d| call_adder.reference_place(d));
-    let dest_ty = destination.map_or(tcx.types.unit, |d| d.ty(&call_adder, tcx).ty);
-    let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
+            // FIXME: Destination is only used for load operation. But assignment_id is used for all.
+            // These dummy values can be avoided by breaking the context into smaller ones.
+            let dest_ref = destination.map_or(PlaceRef::INVALID, |d| call_adder.reference_place(d));
+            let dest_ty = destination.map_or(tcx.types.unit, |d| d.ty(&call_adder, tcx).ty);
+            let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
 
-    let ptr_arg = match (&kind, is_volatile) {
-        // `volatile_copy_memory`, `volatile_copy_nonoverlapping_memory` have dst first!
-        (Copy { .. }, true) => args.get(1),
-        _ => args.get(0),
-    };
-    let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
-    let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr);
+            if !include_info {
+                if destination.is_none() {
+                    // No information to report, so skip the instrumentation.
+                } else {
+                    call_adder.by_some();
+                }
+                return;
+            }
 
-    match kind {
-        Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
-        Store { is_ptr_aligned } => {
-            let val_ref = call_adder.reference_operand_spanned(&args[1]);
-            call_adder.store(val_ref, is_ptr_aligned)
+            let ptr_arg = match (&kind, is_volatile) {
+                // `volatile_copy_memory`, `volatile_copy_nonoverlapping_memory` have dst first!
+                (Copy { .. }, true) => args.get(1),
+                _ => args.get(0),
+            };
+            let ptr = ptr_arg.map(|a| call_adder.reference_ptr_for_intrinsic(a));
+            let mut call_adder = call_adder.perform_memory_op(is_volatile, ptr);
+
+            match kind {
+                Load { is_ptr_aligned } => call_adder.load(is_ptr_aligned),
+                Store { is_ptr_aligned } => {
+                    let val_ref = call_adder.reference_operand_spanned(&args[1]);
+                    call_adder.store(val_ref, is_ptr_aligned)
+                }
+                Copy { is_overlapping } => {
+                    let dest: &Spanned<Operand<'tcx>> =
+                        if is_volatile { &args[0] } else { &args[1] };
+                    let dst_ref = call_adder.reference_operand_spanned(dest);
+                    let count_ref = call_adder.reference_operand_spanned(&args[2]);
+                    call_adder.copy(
+                        dst_ref,
+                        &dest.node,
+                        count_ref,
+                        &args[2].node,
+                        is_overlapping,
+                    )
+                }
+                Set => {
+                    let val_ref = call_adder.reference_operand_spanned(&args[1]);
+                    let count_ref = call_adder.reference_operand_spanned(&args[2]);
+                    call_adder.set(val_ref, count_ref, &args[2].node);
+                }
+                Swap => {
+                    let second: &Spanned<Operand<'tcx>> = &args[1];
+                    let second_ref = call_adder.reference_operand_spanned(second);
+                    call_adder.swap(second_ref, &second.node);
+                }
+            }
         }
-        Copy { is_overlapping } => {
-            let dest: &Spanned<Operand<'tcx>> = if is_volatile { &args[0] } else { &args[1] };
-            let dst_ref = call_adder.reference_operand_spanned(dest);
-            let count_ref = call_adder.reference_operand_spanned(&args[2]);
-            call_adder.copy(
-                dst_ref,
-                &dest.node,
-                count_ref,
-                &args[2].node,
-                is_overlapping,
-            )
-        }
-        Set => {
-            let val_ref = call_adder.reference_operand_spanned(&args[1]);
-            let count_ref = call_adder.reference_operand_spanned(&args[2]);
-            call_adder.set(val_ref, count_ref, &args[2].node);
-        }
-        Swap => {
-            let second: &Spanned<Operand<'tcx>> = &args[1];
-            let second_ref = call_adder.reference_operand_spanned(second);
-            call_adder.swap(second_ref, &second.node);
+        None => {
+            // Filter out completely
+            return;
         }
     }
 }
