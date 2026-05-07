@@ -606,71 +606,71 @@ pub mod macros {
 
     #[cfg_attr(not(core_build), macro_export)]
     macro_rules! list_func_decls {
-        (modifier: $modifier:path,(u128: $u128_ty:ty,char: $char_ty:ty, &str: $str_ty:ty, &[u8]: $byte_str_ty:ty,slice: $slice_ty:path,type_id: $type_id_ty:ty,primitive_type: $primitive_type_ty:ty,binary_op: $binary_op_ty:ty,unary_op: $unary_op_ty:ty,atomic_ord: $atomic_ord_ty:ty,atomic_bin_op: $atomic_bin_op_ty:ty,dbg_info: $dbg_info_ty:ty,tag: $tag_ty:ty$(,)?)) => {
+        (modifier: $modifier: path,(u128: $u128_ty: ty,char: $char_ty: ty, &str: $str_ty: ty, &[u8]: $byte_str_ty: ty,slice: $slice_ty: path,type_id: $type_id_ty: ty,primitive_type: $primitive_type_ty: ty,binary_op: $binary_op_ty: ty,unary_op: $unary_op_ty: ty,atomic_ord: $atomic_ord_ty: ty,atomic_bin_op: $atomic_bin_op_ty: ty,dbg_info: $dbg_info_ty: ty,tag: $tag_ty: ty$(,)?)) => {
             $modifier!{
                 fn init_runtime_lib();
             }$modifier!{
                 fn shutdown_runtime_lib();
             }$modifier!{
-                #[allow(unused_parens)]fn debug_info(info:($dbg_info_ty));
+                #[allow(unused_parens)]fn debug_info(info: ($dbg_info_ty));
             }$modifier!{
-                #[allow(unused_parens)]fn push_tag(tag:($tag_ty));
+                #[allow(unused_parens)]fn push_tag(tag: ($tag_ty));
             }$modifier!{
                 fn pop_tag();
             }$modifier!{
                 fn ref_place_return_value()->PlaceRef;
             }$modifier!{
-                fn ref_place_argument(local_index:LocalIndex)->PlaceRef;
+                fn ref_place_argument(local_index: LocalIndex)->PlaceRef;
             }$modifier!{
-                fn ref_place_local(local_index:LocalIndex)->PlaceRef;
+                fn ref_place_local(local_index: LocalIndex)->PlaceRef;
             }$modifier!{
                 fn ref_place_some()->PlaceRef;
             }$modifier!{
-                fn ref_place_deref(place:PlaceRef)->PlaceRef;
+                fn ref_place_deref(place: PlaceRef)->PlaceRef;
             }$modifier!{
-                fn ref_place_field(place:PlaceRef,field:FieldIndex)->PlaceRef;
+                fn ref_place_field(place: PlaceRef,field: FieldIndex)->PlaceRef;
             }$modifier!{
-                fn ref_place_index(place:PlaceRef,index_place:PlaceRef)->PlaceRef;
+                fn ref_place_index(place: PlaceRef,index_place: PlaceRef)->PlaceRef;
             }$modifier!{
-                fn ref_place_constant_index(place:PlaceRef,offset:u64,min_length:u64,from_end:bool)->PlaceRef;
+                fn ref_place_constant_index(place: PlaceRef,offset: u64,min_length: u64,from_end: bool)->PlaceRef;
             }$modifier!{
-                fn ref_place_subslice(place:PlaceRef,from:u64,to:u64,from_end:bool)->PlaceRef;
+                fn ref_place_subslice(place: PlaceRef,from: u64,to: u64,from_end: bool)->PlaceRef;
             }$modifier!{
-                fn ref_place_downcast(place:PlaceRef,variant_index:u32)->PlaceRef;
+                fn ref_place_downcast(place: PlaceRef,variant_index: u32)->PlaceRef;
             }$modifier!{
-                fn ref_place_opaque_cast(place:PlaceRef)->PlaceRef;
+                fn ref_place_opaque_cast(place: PlaceRef)->PlaceRef;
             }$modifier!{
-                fn ref_place_unwrap_unsafe_binder(place:PlaceRef)->PlaceRef;
+                fn ref_place_unwrap_unsafe_binder(place: PlaceRef)->PlaceRef;
             }$modifier!{
-                fn ref_place_some_proj(place:PlaceRef)->PlaceRef;
+                fn ref_place_some_proj(place: PlaceRef)->PlaceRef;
             }$modifier!{
-                fn place_with_address(place:PlaceRef,raw_ptr:RawAddress)->PlaceRef;
+                fn place_with_address(place: PlaceRef,raw_ptr: RawAddress)->PlaceRef;
             }$modifier!{
-                #[allow(unused_parens)]fn place_with_type_id(place:PlaceRef,type_id:($type_id_ty))->PlaceRef;
+                #[allow(unused_parens)]fn place_with_type_id(place: PlaceRef,type_id: ($type_id_ty))->PlaceRef;
             }$modifier!{
-                #[allow(unused_parens)]fn place_with_primitive_type(place:PlaceRef,ty:($primitive_type_ty))->PlaceRef;
+                #[allow(unused_parens)]fn place_with_primitive_type(place: PlaceRef,ty: ($primitive_type_ty))->PlaceRef;
             }$modifier!{
-                fn place_with_size(place:PlaceRef,byte_size:TypeSize)->PlaceRef;
+                fn place_with_size(place: PlaceRef,byte_size: TypeSize)->PlaceRef;
             }$modifier!{
-                fn ref_operand_copy(place:PlaceRef)->OperandRef;
+                fn ref_operand_copy(place: PlaceRef)->OperandRef;
             }$modifier!{
-                fn ref_operand_move(place:PlaceRef)->OperandRef;
+                fn ref_operand_move(place: PlaceRef)->OperandRef;
             }$modifier!{
-                fn ref_operand_const_bool(value:bool)->OperandRef;
+                fn ref_operand_const_bool(value: bool)->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn ref_operand_const_int(bit_rep:u64,ty:($primitive_type_ty))->OperandRef;
+                #[allow(unused_parens)]fn ref_operand_const_int(bit_rep: u64,ty: ($primitive_type_ty))->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn ref_operand_const_int_arb(bit_rep:u128,bit_size:TypeSize,is_signed:bool)->OperandRef;
+                #[allow(unused_parens)]fn ref_operand_const_int_arb(bit_rep: u128,bit_size: TypeSize,is_signed: bool)->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn ref_operand_const_float(bit_rep:($u128_ty),e_bits:u64,s_bits:u64)->OperandRef;
+                #[allow(unused_parens)]fn ref_operand_const_float(bit_rep: ($u128_ty),e_bits: u64,s_bits: u64)->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn ref_operand_const_char(value:($char_ty))->OperandRef;
+                #[allow(unused_parens)]fn ref_operand_const_char(value: ($char_ty))->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn ref_operand_const_str(value:($str_ty))->OperandRef;
+                #[allow(unused_parens)]fn ref_operand_const_str(value: ($str_ty))->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn ref_operand_const_byte_str(value:($byte_str_ty))->OperandRef;
+                #[allow(unused_parens)]fn ref_operand_const_byte_str(value: ($byte_str_ty))->OperandRef;
             }$modifier!{
-                fn ref_operand_const_addr(value:RawAddress)->OperandRef;
+                fn ref_operand_const_addr(value: RawAddress)->OperandRef;
             }$modifier!{
                 fn ref_operand_const_zst()->OperandRef;
             }$modifier!{
@@ -678,115 +678,115 @@ pub mod macros {
             }$modifier!{
                 fn ref_operand_some()->OperandRef;
             }$modifier!{
-                fn new_sym_value_bool(conc_val:bool)->OperandRef;
+                fn new_sym_value_bool(conc_val: bool)->OperandRef;
             }$modifier!{
-                fn new_sym_value_char(conc_val:char)->OperandRef;
+                fn new_sym_value_char(conc_val: char)->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn new_sym_value_int(conc_val_bit_rep:($u128_ty),bit_size:u64,is_signed:bool)->OperandRef;
+                #[allow(unused_parens)]fn new_sym_value_int(conc_val_bit_rep: ($u128_ty),bit_size: u64,is_signed: bool)->OperandRef;
             }$modifier!{
-                #[allow(unused_parens)]fn new_sym_value_float(conc_val_bit_rep:($u128_ty),e_bits:u64,s_bits:u64)->OperandRef;
+                #[allow(unused_parens)]fn new_sym_value_float(conc_val_bit_rep: ($u128_ty),e_bits: u64,s_bits: u64)->OperandRef;
             }$modifier!{
-                fn assign_use(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
+                fn assign_use(id: AssignmentId,dest: PlaceRef,operand: OperandRef);
             }$modifier!{
-                fn assign_repeat(id:AssignmentId,dest:PlaceRef,operand:OperandRef,count:usize);
+                fn assign_repeat(id: AssignmentId,dest: PlaceRef,operand: OperandRef,count: usize);
             }$modifier!{
-                fn assign_ref(id:AssignmentId,dest:PlaceRef,place:PlaceRef,is_mutable:bool);
+                fn assign_ref(id: AssignmentId,dest: PlaceRef,place: PlaceRef,is_mutable: bool);
             }$modifier!{
-                fn assign_thread_local_ref(id:AssignmentId,dest:PlaceRef);
+                fn assign_thread_local_ref(id: AssignmentId,dest: PlaceRef);
             }$modifier!{
-                fn assign_raw_ptr_of(id:AssignmentId,dest:PlaceRef,place:PlaceRef,is_mutable:bool);
+                fn assign_raw_ptr_of(id: AssignmentId,dest: PlaceRef,place: PlaceRef,is_mutable: bool);
             }$modifier!{
-                fn assign_cast_char(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
+                fn assign_cast_char(id: AssignmentId,dest: PlaceRef,operand: OperandRef);
             }$modifier!{
-                fn assign_cast_integer(id:AssignmentId,dest:PlaceRef,operand:OperandRef,bit_size:u64,is_signed:bool);
+                fn assign_cast_integer(id: AssignmentId,dest: PlaceRef,operand: OperandRef,bit_size: u64,is_signed: bool);
             }$modifier!{
-                fn assign_cast_float(id:AssignmentId,dest:PlaceRef,operand:OperandRef,e_bits:u64,s_bits:u64);
+                fn assign_cast_float(id: AssignmentId,dest: PlaceRef,operand: OperandRef,e_bits: u64,s_bits: u64);
             }$modifier!{
-                fn assign_cast_expose_prov(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
+                fn assign_cast_expose_prov(id: AssignmentId,dest: PlaceRef,operand: OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn assign_cast_with_exposed_prov(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
+                #[allow(unused_parens)]fn assign_cast_with_exposed_prov(id: AssignmentId,dest: PlaceRef,operand: OperandRef,dst_type_id: ($type_id_ty));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_cast_to_another_ptr(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
+                #[allow(unused_parens)]fn assign_cast_to_another_ptr(id: AssignmentId,dest: PlaceRef,operand: OperandRef,dst_type_id: ($type_id_ty));
             }$modifier!{
-                fn assign_cast_unsize(id:AssignmentId,dest:PlaceRef,operand:OperandRef);
+                fn assign_cast_unsize(id: AssignmentId,dest: PlaceRef,operand: OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn assign_cast_transmute(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
+                #[allow(unused_parens)]fn assign_cast_transmute(id: AssignmentId,dest: PlaceRef,operand: OperandRef,dst_type_id: ($type_id_ty));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_cast_subtype(id:AssignmentId,dest:PlaceRef,operand:OperandRef,dst_type_id:($type_id_ty));
+                #[allow(unused_parens)]fn assign_cast_subtype(id: AssignmentId,dest: PlaceRef,operand: OperandRef,dst_type_id: ($type_id_ty));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_binary_op(id:AssignmentId,dest:PlaceRef,operator:($binary_op_ty),first:OperandRef,second:OperandRef,);
+                #[allow(unused_parens)]fn assign_binary_op(id: AssignmentId,dest: PlaceRef,operator: ($binary_op_ty),first: OperandRef,second: OperandRef,);
             }$modifier!{
-                #[allow(unused_parens)]fn assign_unary_op(id:AssignmentId,dest:PlaceRef,operator:($unary_op_ty),operand:OperandRef);
+                #[allow(unused_parens)]fn assign_unary_op(id: AssignmentId,dest: PlaceRef,operator: ($unary_op_ty),operand: OperandRef);
             }$modifier!{
-                fn set_discriminant(id:AssignmentId,dest:PlaceRef,variant_index:u32);
+                fn set_discriminant(id: AssignmentId,dest: PlaceRef,variant_index: u32);
             }$modifier!{
-                fn assign_discriminant(id:AssignmentId,dest:PlaceRef,place:PlaceRef);
+                fn assign_discriminant(id: AssignmentId,dest: PlaceRef,place: PlaceRef);
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_array(id:AssignmentId,dest:PlaceRef,items:($slice_ty!(OperandRef)));
+                #[allow(unused_parens)]fn assign_aggregate_array(id: AssignmentId,dest: PlaceRef,items: ($slice_ty!(OperandRef)));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_tuple(id:AssignmentId,dest:PlaceRef,fields:($slice_ty!(OperandRef)));
+                #[allow(unused_parens)]fn assign_aggregate_tuple(id: AssignmentId,dest: PlaceRef,fields: ($slice_ty!(OperandRef)));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_struct(id:AssignmentId,dest:PlaceRef,fields:($slice_ty!(OperandRef)));
+                #[allow(unused_parens)]fn assign_aggregate_struct(id: AssignmentId,dest: PlaceRef,fields: ($slice_ty!(OperandRef)));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_enum(id:AssignmentId,dest:PlaceRef,fields:($slice_ty!(OperandRef)),variant:VariantIndex,);
+                #[allow(unused_parens)]fn assign_aggregate_enum(id: AssignmentId,dest: PlaceRef,fields: ($slice_ty!(OperandRef)),variant: VariantIndex,);
             }$modifier!{
-                fn assign_aggregate_union(id:AssignmentId,dest:PlaceRef,active_field:FieldIndex,value:OperandRef);
+                fn assign_aggregate_union(id: AssignmentId,dest: PlaceRef,active_field: FieldIndex,value: OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_closure(id:AssignmentId,dest:PlaceRef,upvars:($slice_ty!(OperandRef)));
+                #[allow(unused_parens)]fn assign_aggregate_closure(id: AssignmentId,dest: PlaceRef,upvars: ($slice_ty!(OperandRef)));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_coroutine(id:AssignmentId,dest:PlaceRef,upvars:($slice_ty!(OperandRef)));
+                #[allow(unused_parens)]fn assign_aggregate_coroutine(id: AssignmentId,dest: PlaceRef,upvars: ($slice_ty!(OperandRef)));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_aggregate_coroutine_closure(id:AssignmentId,dest:PlaceRef,upvars:($slice_ty!(OperandRef)));
+                #[allow(unused_parens)]fn assign_aggregate_coroutine_closure(id: AssignmentId,dest: PlaceRef,upvars: ($slice_ty!(OperandRef)));
             }$modifier!{
-                fn assign_aggregate_raw_ptr(id:AssignmentId,dest:PlaceRef,data_ptr:OperandRef,metadata:OperandRef,is_mutable:bool);
+                fn assign_aggregate_raw_ptr(id: AssignmentId,dest: PlaceRef,data_ptr: OperandRef,metadata: OperandRef,is_mutable: bool);
             }$modifier!{
-                #[allow(unused_parens)]fn assign_shallow_init_box(id:AssignmentId,dest:PlaceRef,operand:OperandRef,boxed_type_id:($type_id_ty));
+                #[allow(unused_parens)]fn assign_shallow_init_box(id: AssignmentId,dest: PlaceRef,operand: OperandRef,boxed_type_id: ($type_id_ty));
             }$modifier!{
-                #[allow(unused_parens)]fn assign_wrap_unsafe_binder(id:AssignmentId,dest:PlaceRef,operand:OperandRef,binder_type_id:($type_id_ty));
+                #[allow(unused_parens)]fn assign_wrap_unsafe_binder(id: AssignmentId,dest: PlaceRef,operand: OperandRef,binder_type_id: ($type_id_ty));
             }$modifier!{
-                fn assign_some(id:AssignmentId,dest:PlaceRef);
+                fn assign_some(id: AssignmentId,dest: PlaceRef);
             }$modifier!{
-                fn mark_storage_live(place:PlaceRef);
+                fn mark_storage_live(place: PlaceRef);
             }$modifier!{
-                fn mark_storage_dead(place:PlaceRef);
+                fn mark_storage_dead(place: PlaceRef);
             }$modifier!{
-                fn take_branch(node_loc:BasicBlockIndex,case_index:SwitchCaseIndex);
+                fn take_branch(node_loc: BasicBlockIndex,case_index: SwitchCaseIndex);
             }$modifier!{
-                fn take_branch_ow(node_loc:BasicBlockIndex);
+                fn take_branch_ow(node_loc: BasicBlockIndex);
             }$modifier!{
-                fn take_branch_false(node_loc:BasicBlockIndex,discr:OperandRef);
+                fn take_branch_false(node_loc: BasicBlockIndex,discr: OperandRef);
             }$modifier!{
-                fn take_branch_ow_bool(node_loc:BasicBlockIndex,discr:OperandRef);
+                fn take_branch_ow_bool(node_loc: BasicBlockIndex,discr: OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn take_branch_int(node_loc:BasicBlockIndex,case_index:SwitchCaseIndex,discr:OperandRef,value_bit_rep:u32,ty:($primitive_type_ty),);
+                #[allow(unused_parens)]fn take_branch_int(node_loc: BasicBlockIndex,case_index: SwitchCaseIndex,discr: OperandRef,value_bit_rep: u32,ty: ($primitive_type_ty),);
             }$modifier!{
-                #[allow(unused_parens)]fn take_branch_ow_int(node_loc:BasicBlockIndex,discr:OperandRef,non_values:($slice_ty!(u32)),ty:($primitive_type_ty),);
+                #[allow(unused_parens)]fn take_branch_ow_int(node_loc: BasicBlockIndex,discr: OperandRef,non_values: ($slice_ty!(u32)),ty: ($primitive_type_ty),);
             }$modifier!{
-                #[allow(unused_parens)]fn take_branch_int_lg(node_loc:BasicBlockIndex,case_index:SwitchCaseIndex,discr:OperandRef,value_bit_rep:($u128_ty),ty:($primitive_type_ty),);
+                #[allow(unused_parens)]fn take_branch_int_lg(node_loc: BasicBlockIndex,case_index: SwitchCaseIndex,discr: OperandRef,value_bit_rep: ($u128_ty),ty: ($primitive_type_ty),);
             }$modifier!{
-                #[allow(unused_parens)]fn take_branch_ow_int_lg(node_loc:BasicBlockIndex,discr:OperandRef,non_values:($slice_ty!($u128_ty)),ty:($primitive_type_ty),);
+                #[allow(unused_parens)]fn take_branch_ow_int_lg(node_loc: BasicBlockIndex,discr: OperandRef,non_values: ($slice_ty!($u128_ty)),ty: ($primitive_type_ty),);
             }$modifier!{
-                #[allow(unused_parens)]fn take_branch_char(node_loc:BasicBlockIndex,case_index:SwitchCaseIndex,discr:OperandRef,value:(($char_ty)));
+                #[allow(unused_parens)]fn take_branch_char(node_loc: BasicBlockIndex,case_index: SwitchCaseIndex,discr: OperandRef,value: (($char_ty)));
             }$modifier!{
-                #[allow(unused_parens)]fn take_branch_ow_char(node_loc:BasicBlockIndex,discr:OperandRef,non_values:($slice_ty!($char_ty)));
+                #[allow(unused_parens)]fn take_branch_ow_char(node_loc: BasicBlockIndex,discr: OperandRef,non_values: ($slice_ty!($char_ty)));
             }$modifier!{
-                fn assert_bounds_check(info:AssertionInfo,len:OperandRef,index:OperandRef);
+                fn assert_bounds_check(info: AssertionInfo,len: OperandRef,index: OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn assert_overflow(info:AssertionInfo,operator:($binary_op_ty),first:OperandRef,second:OperandRef,);
+                #[allow(unused_parens)]fn assert_overflow(info: AssertionInfo,operator: ($binary_op_ty),first: OperandRef,second: OperandRef,);
             }$modifier!{
-                fn assert_overflow_neg(info:AssertionInfo,operand:OperandRef);
+                fn assert_overflow_neg(info: AssertionInfo,operand: OperandRef);
             }$modifier!{
-                fn assert_div_by_zero(info:AssertionInfo,operand:OperandRef);
+                fn assert_div_by_zero(info: AssertionInfo,operand: OperandRef);
             }$modifier!{
-                fn assert_rem_by_zero(info:AssertionInfo,operand:OperandRef);
+                fn assert_rem_by_zero(info: AssertionInfo,operand: OperandRef);
             }$modifier!{
-                fn assert_misaligned_ptr_deref(info:AssertionInfo,required:OperandRef,found:OperandRef,);
+                fn assert_misaligned_ptr_deref(info: AssertionInfo,required: OperandRef,found: OperandRef,);
             }$modifier!{
-                fn assert_null_ptr_deref(info:AssertionInfo);
+                fn assert_null_ptr_deref(info: AssertionInfo);
             }$modifier!{
-                fn assert_invalid_enum_ctn(info:AssertionInfo,discr:OperandRef);
+                fn assert_invalid_enum_ctn(info: AssertionInfo,discr: OperandRef);
             }$modifier!{
-                fn before_call_control(def:CalleeDef,call_site:BasicBlockIndex);
+                fn before_call_control(call_site: BasicBlockIndex,callee_id: InstanceKindId);
             }$modifier!{
                 fn before_call_control_precise(call_site: BasicBlockIndex,callee_id: InstanceKindId,static_addr: RawAddress,);
             }$modifier!{
@@ -808,9 +808,9 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn enter_func_data_tupled_args(arg_places: ($slice_ty!(PlaceRef)),ret_val_place: PlaceRef);
             }$modifier!{
-                fn after_call_func(id:AssignmentId,dest:PlaceRef);
+                fn return_from_func(ret_point: BasicBlockIndex);
             }$modifier!{
-                fn before_drop_control(def:CalleeDef,call_site:BasicBlockIndex);
+                fn override_return_value(operand: OperandRef);
             }$modifier!{
                 fn after_call_func(id: AssignmentId,dest: PlaceRef);
             }$modifier!{
@@ -826,70 +826,70 @@ pub mod macros {
             }$modifier!{
                 fn after_drop();
             }$modifier!{
-                fn intrinsic_assign_identity(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_identity(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_rotate_left(id:AssignmentId,dest:PlaceRef,x:OperandRef,shift:OperandRef);
+                fn intrinsic_assign_rotate_left(id: AssignmentId,dest: PlaceRef,x: OperandRef,shift: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_rotate_right(id:AssignmentId,dest:PlaceRef,x:OperandRef,shift:OperandRef);
+                fn intrinsic_assign_rotate_right(id: AssignmentId,dest: PlaceRef,x: OperandRef,shift: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_saturating_add(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
+                fn intrinsic_assign_saturating_add(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_saturating_sub(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
+                fn intrinsic_assign_saturating_sub(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_disjoint_bitor(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
+                fn intrinsic_assign_disjoint_bitor(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_exact_div(id:AssignmentId,dest:PlaceRef,first:OperandRef,second:OperandRef);
+                fn intrinsic_assign_exact_div(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_bitreverse(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_bitreverse(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_cttz_nonzero(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_cttz_nonzero(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_cttz(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_cttz(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_ctpop(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_ctpop(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_ctlz_nonzero(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_ctlz_nonzero(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_ctlz(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_ctlz(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                fn intrinsic_assign_bswap(id:AssignmentId,dest:PlaceRef,x:OperandRef);
+                fn intrinsic_assign_bswap(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),operator:($atomic_bin_op_ty),src:OperandRef,prev_dest:PlaceRef,);
+                #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),operator: ($atomic_bin_op_ty),src: OperandRef,prev_dest: PlaceRef,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering:($atomic_ord_ty),single_thread:bool,);
+                #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering: ($atomic_ord_ty),single_thread: bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_load(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),dest:PlaceRef,is_volatile:bool,is_aligned:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_load(id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,is_volatile: bool,is_aligned: bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_store(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,is_volatile:bool,is_aligned:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_store(id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),val: OperandRef,is_volatile: bool,is_aligned: bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_copy(id:AssignmentId,src_ptr:OperandRef,conc_src_ptr:RawAddress,ptr_type_id:($type_id_ty),dst_ptr:OperandRef,conc_dst_ptr:RawAddress,count:OperandRef,conc_count:usize,is_volatile:bool,is_overlapping:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_copy(id: AssignmentId,src_ptr: OperandRef,conc_src_ptr: RawAddress,ptr_type_id: ($type_id_ty),dst_ptr: OperandRef,conc_dst_ptr: RawAddress,count: OperandRef,conc_count: usize,is_volatile: bool,is_overlapping: bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_set(id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,count:OperandRef,conc_count:usize,is_volatile:bool,);
+                #[allow(unused_parens)]fn intrinsic_memory_set(id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),val: OperandRef,count: OperandRef,conc_count: usize,is_volatile: bool,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_memory_swap(id:AssignmentId,first_ptr:OperandRef,conc_first_ptr:RawAddress,ptr_type_id:($type_id_ty),second_ptr:OperandRef,conc_second_ptr:RawAddress,);
+                #[allow(unused_parens)]fn intrinsic_memory_swap(id: AssignmentId,first_ptr: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),second_ptr: OperandRef,conc_second_ptr: RawAddress,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_load(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),dest:PlaceRef,);
+                #[allow(unused_parens)]fn intrinsic_atomic_load(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_store(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,);
+                #[allow(unused_parens)]fn intrinsic_atomic_store(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),val: OperandRef,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_xchg(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),val:OperandRef,prev_dest:PlaceRef,);
+                #[allow(unused_parens)]fn intrinsic_atomic_xchg(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),val: OperandRef,prev_dest: PlaceRef,);
             }$modifier!{
-                #[allow(unused_parens)]fn intrinsic_atomic_cxchg(ordering:($atomic_ord_ty),id:AssignmentId,ptr:OperandRef,conc_ptr:RawAddress,ptr_type_id:($type_id_ty),failure_ordering:($atomic_ord_ty),weak:bool,old:OperandRef,src:OperandRef,prev_dest:PlaceRef,);
+                #[allow(unused_parens)]fn intrinsic_atomic_cxchg(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),failure_ordering: ($atomic_ord_ty),weak: bool,old: OperandRef,src: OperandRef,prev_dest: PlaceRef,);
             }
         };
-        (modifier: $modifier:path) => {
+        (modifier: $modifier: path) => {
             $crate::leaf::common::pri::macros::list_func_decls!{
-                modifier: $modifier,(u128:(),char:(), &str:(), &[u8]:(),slice:crate::leaf::common::utils::identity,type_id:(),primitive_type:(),binary_op:(),unary_op:(),atomic_ord:(),atomic_bin_op:(),dbg_info:(),tag:(),)
+                modifier: $modifier,(u128: (),char: (), &str: (), &[u8]: (),slice: crate::leaf::common::utils::identity,type_id: (),primitive_type: (),binary_op: (),unary_op: (),atomic_ord: (),atomic_bin_op: (),dbg_info: (),tag: (),)
             }
         };
-        (modifier: $modifier:path,(from Self)) => {
+        (modifier: $modifier: path,(from Self)) => {
             $crate::leaf::common::pri::macros::list_func_decls!{
-                modifier: $modifier,(u128:Self::U128,char:Self::Char, &str:Self::ConstStr, &[u8]:Self::ConstByteStr,slice: $crate::leaf::common::pri::macros::self_slice_of,type_id:Self::TypeId,primitive_type:Self::PrimitiveType,binary_op:Self::BinaryOp,unary_op:Self::UnaryOp,atomic_ord:Self::AtomicOrdering,atomic_bin_op:Self::AtomicBinaryOp,dbg_info:Self::DebugInfo,tag:Self::Tag,)
+                modifier: $modifier,(u128: Self::U128,char: Self::Char, &str: Self::ConstStr, &[u8]: Self::ConstByteStr,slice: $crate::leaf::common::pri::macros::self_slice_of,type_id: Self::TypeId,primitive_type: Self::PrimitiveType,binary_op: Self::BinaryOp,unary_op: Self::UnaryOp,atomic_ord: Self::AtomicOrdering,atomic_bin_op: Self::AtomicBinaryOp,dbg_info: Self::DebugInfo,tag: Self::Tag,)
             }
         };
-        (modifier: $modifier:path,(from common::ffi)) => {
+        (modifier: $modifier: path,(from common::ffi)) => {
             $crate::leaf::common::pri::macros::list_func_decls!{
-                modifier: $modifier,(u128:U128Pack,char:CharPack, &str:ConstStrPack, &[u8]:ConstByteStrPack,slice: $crate::leaf::common::pri::macros::slice_pack_of,type_id:U128Pack<TypeId>,primitive_type:common::pri::PrimitiveType,binary_op:common::pri::BinaryOp,unary_op:common::pri::UnaryOp,atomic_ord:common::pri::AtomicOrdering,atomic_bin_op:common::pri::AtomicBinaryOp,dbg_info:common::ffi::DebugInfo,tag:ConstStrPack,)
+                modifier: $modifier,(u128: U128Pack,char: CharPack, &str: ConstStrPack, &[u8]: ConstByteStrPack,slice: $crate::leaf::common::pri::macros::slice_pack_of,type_id: U128Pack<TypeId>,primitive_type: common::pri::PrimitiveType,binary_op: common::pri::BinaryOp,unary_op: common::pri::UnaryOp,atomic_ord: common::pri::AtomicOrdering,atomic_bin_op: common::pri::AtomicBinaryOp,dbg_info: common::ffi::DebugInfo,tag: ConstStrPack,)
             }
         };
     }
