@@ -294,9 +294,7 @@ where
             );
             blocks.push(block);
             place_ref = new_ref;
-        }
-
-        {
+        } else {
             let type_id_local = {
                 let (block, id_local) = self.make_type_id_of_bb(ty);
                 blocks.push(block);
