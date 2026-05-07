@@ -1059,19 +1059,21 @@ mod implementation {
 
     impl PartialEq<CalleeDef> for FuncDef {
         fn eq(&self, other: &CalleeDef) -> bool {
-            if self.static_addr == other.static_addr {
-                return true;
+            if let Some((this, other)) = self.raw.as_ref().zip(other.raw.as_ref()) {
+                if this.static_addr == other.static_addr {
+                    true
+                } else if this
+                    .as_dyn_method
+                    .zip(other.as_dyn_method)
+                    .is_some_and(|(s, o)| s == o)
+                {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                self.body_id == other.callee_id
             }
-
-            if self
-                .as_dyn_method
-                .zip(other.as_virtual)
-                .is_some_and(|(s, o)| s == o)
-            {
-                return true;
-            }
-
-            false
         }
     }
 

@@ -104,7 +104,7 @@ impl<B> BasicBlockLocation<B> {
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[repr(transparent)]
-pub struct DynRawMetadata(NonNull<RawAddress>);
+pub struct DynRawMetadata(NonNull<()>);
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 impl core::fmt::Pointer for DynRawMetadata {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
@@ -119,6 +119,14 @@ impl core::fmt::Pointer for DynRawMetadata {
 pub struct CalleeDef {
     pub static_addr: RawAddress,
     pub as_virtual: Option<(DynRawMetadata, u64)>,
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DynCompInstanceId {
+    pub body_id: InstanceKindId,
+    pub method_id: DefId,
 }
 
 // FIXME: Possibly large data structure.

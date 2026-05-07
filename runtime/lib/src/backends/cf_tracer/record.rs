@@ -157,7 +157,7 @@ impl<C> PhasedCallTraceRecorder for Recorder<C> {
                 LEVEL,
                 SPAN_FUNCTION,
                 { FIELD_BODY } = body_id_to_str!(entered_func.body_id),
-                { FIELD_ADDRESS } = entered_func.static_addr as usize,
+                { FIELD_ADDRESS } = entered_func.raw.map(|r|r.static_addr.addr()),
             ),
         });
 

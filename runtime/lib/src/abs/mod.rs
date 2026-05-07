@@ -14,6 +14,7 @@ pub(crate) use common::types::*;
 
 use core::num::NonZeroU64;
 use core::panic;
+use core::ptr::NonNull;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -352,16 +353,29 @@ impl TryFrom<CastKind> for ValueType {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Deref, dm::Into)]
-pub(crate) struct FuncDef(pub common::pri::FuncDef);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Into)]
+pub(crate) struct FuncDef {
+    pub body_id: InstanceKindId,
+    pub raw: Option<FuncRawAddr>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Into)]
+pub(crate) struct FuncRawAddr {
+    pub static_addr: NonNull<()>,
+    pub as_dyn_method: Option<(DynRawMetadata, u64)>,
+}
+
 impl Into<InstanceKindId> for FuncDef {
     fn into(self) -> InstanceKindId {
-        self.0.into()
+        self.body_id
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Deref)]
-pub(crate) struct CalleeDef(pub common::pri::CalleeDef);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From)]
+pub(crate) struct CalleeDef {
+    pub callee_id: InstanceKindId,
+    pub raw: Option<FuncRawAddr>,
+}
 
 pub(crate) trait HasTags {
     fn tags(&self) -> &[Tag];

@@ -214,7 +214,9 @@ define_filter_rule_group!(
     CallFlow match CallFlowPartKind {
         CallControl => call_control,
         CallInput => call_input,
+        CallAddress => call_address,
         FunctionData => func_data,
+        FunctionAddress => func_address,
     }
 );
 
@@ -222,6 +224,7 @@ define_filter_rule_group!(
     Drop match DropPartKind {
         CallControl => control,
         CallInput => input,
+        CallAddress => call_address,
     }
 );
 
