@@ -74,7 +74,7 @@ pub(crate) mod sym {
 
         common::pri::pass_func_names_to!(symbols_in_pri, all_comma_separated);
 
-        pub(crate) const ALL_MAINS: [LeafSymbol; 128] =
+        pub(crate) const ALL_MAINS: [LeafSymbol; 134] =
             common::pri::pass_func_names_to!(bracket, all_comma_separated);
 
         pub(crate) mod intrinsics {
@@ -184,7 +184,7 @@ pub(crate) mod sym {
     }
     pub(crate) use mains::*;
 
-    mod compiler_helpers {
+    pub(super) mod helpers {
         use super::*;
 
         macro_rules! make_pass_compiler_helpers_to_macro {
@@ -217,10 +217,15 @@ pub(crate) mod sym {
                 switch_info,
                 assertion_info,
 
-                callee_def_static,
-                callee_def_maybe_virtual,
-                func_def_static,
-                func_def_dyn_method,
+                before_call_control,
+                before_call_control_precise,
+                before_call_control_precise_maybe_virtual,
+                before_drop_control,
+                before_drop_control_precise,
+                before_drop_control_precise_maybe_virtual,
+                enter_func,
+                enter_func_precise,
+                enter_func_precise_dyn_comp,
 
                 const_binary_op_of,
                 const_unary_op_of,
@@ -272,9 +277,9 @@ pub(crate) mod sym {
 
         pass_compiler_helpers_to!(symbols_in_compiler_helpers);
 
-        pub(crate) const ALL_HELPERS: [LS; 32] = pass_compiler_helpers_to!(bracket);
+        pub(crate) const ALL_HELPERS: [LS; 37] = pass_compiler_helpers_to!(bracket);
     }
-    pub(crate) use compiler_helpers::*;
+    pub(super) use helpers::pass_compiler_helpers_to;
 
     impl TryFrom<String> for LeafSymbol {
         type Error = String;
@@ -282,7 +287,7 @@ pub(crate) mod sym {
         fn try_from(s: String) -> Result<Self, Self::Error> {
             ALL_MAINS
                 .iter()
-                .chain(ALL_HELPERS.iter())
+                .chain(helpers::ALL_HELPERS.iter())
                 .find(|sym| sym.0 == s)
                 .copied()
                 .ok_or(s)
@@ -498,7 +503,7 @@ pub(super) fn filter_helper_items<'tcx>(
     tcx: TyCtxt<'tcx>,
     all_pri_items: &[DefId],
 ) -> HashMap<LeafSymbol, DefId> {
-    filter_pri_items(tcx, all_pri_items, sym::CH_MODULE_MARKER)
+    filter_pri_items(tcx, all_pri_items, sym::helpers::CH_MODULE_MARKER)
         .filter_associate_with_symbol(tcx)
         .collect()
 }
@@ -519,10 +524,10 @@ pub(super) fn collect_helper_types<'tcx>(helper_def_ids: &HashMap<LeafSymbol, De
         |name: LeafSymbol| -> TypeHolder { TypeHolder(*helper_def_ids.get(&name).unwrap()) };
 
     PriTypes {
-        place_ref: get_type_holder(sym::PLACE_REF_TYPE_HOLDER),
-        operand_ref: get_type_holder(sym::OPERAND_REF_TYPE_HOLDER),
-        binary_op: get_type_holder(sym::BINARY_OP_TYPE_HOLDER),
-        unary_op: get_type_holder(sym::UNARY_OP_TYPE_HOLDER),
+        place_ref: get_type_holder(sym::helpers::PLACE_REF_TYPE_HOLDER),
+        operand_ref: get_type_holder(sym::helpers::OPERAND_REF_TYPE_HOLDER),
+        binary_op: get_type_holder(sym::helpers::BINARY_OP_TYPE_HOLDER),
+        unary_op: get_type_holder(sym::helpers::UNARY_OP_TYPE_HOLDER),
     }
 }
 
@@ -543,7 +548,7 @@ pub(super) fn collect_helper_funcs<'tcx>(
     macro_rules! create {
         ($($name: ident),*$(,)?) => {
             PriHelperFunctions {
-                $($name: get_func_info(sym::$name)),*,
+                $($name: get_func_info(sym::helpers::$name)),*,
                 all_helpers: helper_def_ids,
             }
         };

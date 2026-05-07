@@ -228,9 +228,15 @@ where
 impl Display for super::FuncDef {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "fn({})", self.body_id)?;
-        write!(f, "@{:p}", self.static_addr as *const ())?;
-        if let Some((dyn_metadata, identifier)) = self.as_dyn_method {
-            write!(f, "+ dyn@{:p}#{:x}", dyn_metadata, identifier)?;
+        if let Some(super::FuncRawAddr {
+            static_addr,
+            as_dyn_method,
+        }) = self.raw
+        {
+            write!(f, "@{:p}", static_addr)?;
+            if let Some((dyn_metadata, identifier)) = as_dyn_method {
+                write!(f, "+ dyn@{:p}#{:x}", dyn_metadata, identifier)?;
+            }
         }
         Ok(())
     }
@@ -238,9 +244,16 @@ impl Display for super::FuncDef {
 
 impl Display for super::CalleeDef {
     fn fmt(&self, f: &mut Formatter) -> Result {
-        write!(f, "fn@{:p}", self.static_addr as *const ())?;
-        if let Some((dyn_metadata, identifier)) = self.as_virtual {
-            write!(f, "(? dyn@{:p}#{:x})", dyn_metadata, identifier)?;
+        write!(f, "fn({})", self.callee_id)?;
+        if let Some(super::FuncRawAddr {
+            static_addr,
+            as_dyn_method,
+        }) = self.raw
+        {
+            write!(f, "@{:p}", static_addr)?;
+            if let Some((dyn_metadata, identifier)) = as_dyn_method {
+                write!(f, "(? dyn@{:p}#{:x})", dyn_metadata, identifier)?;
+            }
         }
         Ok(())
     }

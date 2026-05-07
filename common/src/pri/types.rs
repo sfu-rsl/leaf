@@ -1,6 +1,7 @@
 pub use super::super::types::{
     Alignment, AssignmentId, BasicBlockIndex, BasicBlockLocation, CalleeDef, DefId, DynRawMetadata,
-    FieldIndex, FuncDef, LocalIndex, RawAddress, SwitchCaseIndex, TypeId, TypeSize, VariantIndex,
+    FieldIndex, FuncDef, InstanceKindId, LocalIndex, RawAddress, SwitchCaseIndex, TypeId, TypeSize,
+    VariantIndex,
 };
 pub use super::refs::{OperandRef, PlaceRef, Ref};
 

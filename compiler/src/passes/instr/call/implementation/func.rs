@@ -155,28 +155,24 @@ where
     {
         let mut blocks = vec![];
 
-        let def_local = {
-            let func = if !no_def {
-                func.clone()
-            } else {
-                operand::func(
-                    self.tcx(),
-                    *self.pri_helper_funcs().special_func_placeholder,
-                    iter::empty(),
-                )
-            };
-            let BlocksAndResult(def_blocks, def_local) =
-                definition_of_callee(self.tcx(), self, func, first_arg);
-            blocks.extend(def_blocks);
-            def_local
+        let func = if !no_def {
+            func.clone()
+        } else {
+            operand::func(
+                self.tcx(),
+                *self.pri_helper_funcs().special_func_placeholder,
+                iter::empty(),
+            )
         };
 
-        blocks.push(self.make_bb_for_call(
-            sym::before_call_control,
-            vec![
-                operand::move_for_local(def_local),
-                self.original_bb_index_as_arg(),
-            ],
+        blocks.push(utils::before_call_control::<false>(
+            self.tcx(),
+            self,
+            self.current_typing_env(),
+            func,
+            first_arg,
+            self.original_bb_index_as_arg(),
+            self.config().call_flow_filter.call_address,
         ));
 
         self.insert_blocks(blocks);
@@ -228,19 +224,13 @@ where
     }
 
     fn enter_func(&mut self) {
-        let mut blocks = vec![];
-
-        let def_local = {
-            let BlocksAndResult(def_blocks, def_local) =
-                utils::definition_of_func(self.tcx(), self, self.current_typing_env());
-            blocks.extend(def_blocks);
-            def_local
-        };
-
-        blocks
-            .push(self.make_bb_for_call(sym::enter_func, vec![operand::move_for_local(def_local)]));
-
-        self.insert_blocks(blocks);
+        let block = utils::enter_func(
+            self.tcx(),
+            self,
+            self.current_typing_env(),
+            self.config().call_flow_filter.func_address,
+        );
+        self.insert_blocks([block]);
     }
 
     fn enter_func_data(&mut self)
@@ -334,19 +324,14 @@ where
     {
         let mut blocks = vec![];
 
-        let def_local = {
-            let BlocksAndResult(def_blocks, def_local) =
-                definition_of_callee(self.tcx(), self, drop_in_place_fn, None);
-            blocks.extend(def_blocks);
-            def_local
-        };
-
-        blocks.push(self.make_bb_for_call(
-            sym::before_drop_control,
-            vec![
-                operand::move_for_local(def_local),
-                self.original_bb_index_as_arg(),
-            ],
+        blocks.push(utils::before_call_control::<true>(
+            self.tcx(),
+            self,
+            self.current_typing_env(),
+            drop_in_place_fn,
+            None,
+            self.original_bb_index_as_arg(),
+            self.config().call_flow_filter.call_address,
         ));
 
         self.insert_blocks(blocks);
@@ -397,10 +382,10 @@ where
 
 mod utils {
     use rustc_middle::{
-        mir::{Body, Local, Operand, Place, Rvalue, Statement},
+        mir::{BasicBlockData, Body, Local, Operand, Place, Rvalue, Statement},
         ty::{
-            AssocItem, ClosureArgs, ExistentialPredicateStableCmpExt, InstanceKind, PolyFnSig,
-            TraitRef, Ty, TyCtxt, TyKind, TypingEnv,
+            AssocItem, ClosureArgs, ExistentialPredicateStableCmpExt, Instance, InstanceKind,
+            PolyFnSig, TraitRef, Ty, TyCtxt, TyKind, TypingEnv,
         },
     };
     use rustc_span::def_id::DefId;
@@ -413,7 +398,7 @@ mod utils {
 
     use crate::{
         passes::instr::{MirSourceExt, decision::rules::accept_dyn_def_filter_rules},
-        utils::mir::{BodyExt, InstanceKindExt},
+        utils::mir::InstanceKindExt,
     };
 
     pub(super) use super::super::utils::{
@@ -645,7 +630,7 @@ mod utils {
             .is_some_and(|id| tcx.is_fn_trait(id))
     }
 
-    pub fn definition_of_func<'tcx>(
+    pub fn enter_func<'tcx>(
         tcx: TyCtxt<'tcx>,
         call_adder: &mut (
                  impl BodyLocalManager<'tcx>
@@ -655,8 +640,36 @@ mod utils {
                  + StorageProvider
              ),
         typing_env: TypingEnv<'tcx>,
-    ) -> BlocksAndResult<'tcx> {
+        is_precise: bool,
+    ) -> BasicBlockData<'tcx> {
         let instance_kind = call_adder.body().source.instance;
+        let base_args = instance_kind_id_operand_triple(tcx, instance_kind).to_vec();
+
+        if is_precise {
+            enter_func_precisely(tcx, call_adder, typing_env, base_args)
+        } else {
+            let (block, _) = call_adder.make_bb_for_helper_call_with_all(
+                call_adder.pri_helper_funcs().enter_func,
+                [],
+                base_args,
+                None,
+            );
+            block
+        }
+    }
+
+    pub fn enter_func_precisely<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        call_adder: &mut (
+                 impl BodyLocalManager<'tcx>
+                 + BodyProvider<'tcx>
+                 + MirCallAdder<'tcx>
+                 + PriItemsProvider<'tcx>
+                 + StorageProvider
+             ),
+        typing_env: TypingEnv<'tcx>,
+        base_args: Vec<Operand<'tcx>>,
+    ) -> BasicBlockData<'tcx> {
         let fn_def_ty = body_func_ty(tcx, call_adder.body());
         let TyKind::FnDef(def_id, generic_args) = *fn_def_ty.kind() else {
             unreachable!(
@@ -677,43 +690,39 @@ mod utils {
                     "Dyn-compatible method will be defined as static: {:?}",
                     def_id
                 );
-                def_of_static_func(tcx, call_adder, instance_kind, fn_value)
+                enter_static_func_precisely(tcx, call_adder, base_args, fn_value)
             } else {
-                def_of_dyn_compatible_method(
+                enter_dyn_compatible_func_precisely(
                     tcx,
                     call_adder,
-                    instance_kind,
+                    base_args,
                     fn_value,
                     trait_ref,
                     trait_item.def_id,
                 )
             }
         } else {
-            def_of_static_func(tcx, call_adder, instance_kind, fn_value)
+            enter_static_func_precisely(tcx, call_adder, base_args, fn_value)
         }
     }
 
-    fn def_of_static_func<'tcx>(
+    fn enter_static_func_precisely<'tcx>(
         tcx: TyCtxt<'tcx>,
         call_adder: &mut (impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>),
-        instance_kind: InstanceKind<'tcx>,
+        base_args: Vec<Operand<'tcx>>,
         fn_value: Operand<'tcx>,
-    ) -> BlocksAndResult<'tcx> {
+    ) -> BasicBlockData<'tcx> {
         let (fn_ptr_ty, fn_ptr_local, ptr_assignment) =
             to_fn_ptr(tcx, call_adder, fn_value.clone());
 
-        let (mut block, id_local) = call_adder.make_bb_for_helper_call_with_all(
-            call_adder.pri_helper_funcs().func_def_static,
+        let (mut block, _) = call_adder.make_bb_for_helper_call_with_all(
+            call_adder.pri_helper_funcs().enter_func_precise,
             vec![fn_ptr_ty.into()],
-            [
-                vec![operand::move_for_local(fn_ptr_local)],
-                instance_kind_id_operand_triple(tcx, instance_kind).into(),
-            ]
-            .concat(),
+            [base_args, vec![operand::move_for_local(fn_ptr_local)]].concat(),
             None,
         );
         block.statements.push(ptr_assignment);
-        BlocksAndResult::from((block, id_local))
+        block
     }
 
     fn as_dyn_compatible_method<'tcx>(
@@ -731,7 +740,7 @@ mod utils {
         is_vtable_safe_method(tcx, trait_ref.def_id, item).then_some((trait_ref, item))
     }
 
-    fn def_of_dyn_compatible_method<'tcx>(
+    fn enter_dyn_compatible_func_precisely<'tcx>(
         tcx: TyCtxt<'tcx>,
         call_adder: &mut (
                  impl BodyLocalManager<'tcx>
@@ -739,11 +748,11 @@ mod utils {
                  + MirCallAdder<'tcx>
                  + PriItemsProvider<'tcx>
              ),
-        instance_kind: InstanceKind<'tcx>,
+        base_args: Vec<Operand<'tcx>>,
         fn_value: Operand<'tcx>,
         trait_ref: TraitRef<'tcx>,
         method_id: DefId,
-    ) -> BlocksAndResult<'tcx> {
+    ) -> BasicBlockData<'tcx> {
         let (fn_ptr_ty, fn_ptr_local, ptr_assignment) =
             to_fn_ptr(tcx, call_adder, fn_value.clone());
         let self_ty = trait_ref.self_ty();
@@ -751,22 +760,22 @@ mod utils {
 
         let identifier = identifier_of_method(tcx, method_id);
 
-        let (mut block, id_local) = call_adder.make_bb_for_helper_call_with_all(
-            call_adder.pri_helper_funcs().func_def_dyn_method,
+        let (mut block, _) = call_adder.make_bb_for_helper_call_with_all(
+            call_adder.pri_helper_funcs().enter_func_precise_dyn_comp,
             vec![fn_ptr_ty.into(), self_ty.into(), dyn_ty.into()],
             [
+                base_args,
                 vec![
                     operand::move_for_local(fn_ptr_local),
                     operand::const_from_uint(tcx, identifier),
                 ],
-                instance_kind_id_operand_triple(tcx, instance_kind).into(),
             ]
             .concat(),
             None,
         );
         block.statements.push(ptr_assignment);
 
-        (block, id_local).into()
+        block
     }
 
     /* dyn Tr<U, V, A1 = X, A2 = Y, ...>
@@ -827,12 +836,60 @@ mod utils {
         )
     }
 
-    pub fn definition_of_callee<'tcx>(
+    pub fn before_call_control<'tcx, const FOR_DROP: bool>(
         tcx: TyCtxt<'tcx>,
         call_adder: &mut (impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>),
+        typing_env: TypingEnv<'tcx>,
         fn_value: Operand<'tcx>,
         first_arg: Option<&Operand<'tcx>>,
-    ) -> BlocksAndResult<'tcx> {
+        call_site_arg: Operand<'tcx>,
+        is_precise: bool,
+    ) -> BasicBlockData<'tcx> {
+        let instance_kind_id_args = {
+            let fn_ty = fn_value.ty(call_adder, tcx);
+            let instance_kind = match fn_ty.kind() {
+                TyKind::FnDef(def_id, generic_args) => {
+                    Instance::try_resolve(tcx, typing_env, *def_id, generic_args)
+                        .ok()
+                        .flatten()
+                }
+                TyKind::FnPtr(..) => None,
+                _ => {
+                    unreachable!("Unexpected type of callee: {:?}: {:?}", fn_value, fn_ty);
+                }
+            };
+            if let Some(instance_kind) = instance_kind {
+                instance_kind_id_operand_triple(tcx, instance_kind.def)
+            } else {
+                unknown_instance_kind_id_operand_triple(tcx)
+            }
+        };
+        let base_args = [[call_site_arg].to_vec(), instance_kind_id_args.to_vec()].concat();
+
+        if is_precise {
+            before_call_precisely::<FOR_DROP>(tcx, call_adder, base_args, fn_value, first_arg)
+        } else {
+            let (block, _) = call_adder.make_bb_for_helper_call_with_all(
+                if !FOR_DROP {
+                    call_adder.pri_helper_funcs().before_call_control
+                } else {
+                    call_adder.pri_helper_funcs().before_drop_control
+                },
+                [],
+                base_args,
+                Default::default(),
+            );
+            block
+        }
+    }
+
+    pub fn before_call_precisely<'tcx, const FOR_DROP: bool>(
+        tcx: TyCtxt<'tcx>,
+        call_adder: &mut (impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>),
+        base_args: Vec<Operand<'tcx>>,
+        fn_value: Operand<'tcx>,
+        first_arg: Option<&Operand<'tcx>>,
+    ) -> BasicBlockData<'tcx> {
         let fn_ty = fn_value.ty(call_adder, tcx);
 
         match fn_ty.kind() {
@@ -848,50 +905,59 @@ mod utils {
                         panic!("Expected receiver for a dyn-compatible method: {:?}", fn_ty)
                     });
                     let self_ty = generic_args.type_at(0);
-                    def_of_possibly_virtual_callee(
+                    before_call_possibly_virtual_callee::<FOR_DROP>(
                         tcx,
                         call_adder,
+                        base_args,
                         fn_value,
                         item.def_id,
                         self_ty,
                         receiver,
                     )
                 } else {
-                    def_of_static_callee(tcx, call_adder, fn_value)
+                    before_call_static_callee::<FOR_DROP>(tcx, call_adder, base_args, fn_value)
                 }
             }
-            TyKind::FnPtr(..) => def_of_static_callee(tcx, call_adder, fn_value),
+            TyKind::FnPtr(..) => {
+                before_call_static_callee::<FOR_DROP>(tcx, call_adder, base_args, fn_value)
+            }
             _ => {
                 unreachable!("Unexpected type of callee: {:?}: {:?}", fn_value, fn_ty);
             }
         }
     }
 
-    fn def_of_static_callee<'tcx>(
+    fn before_call_static_callee<'tcx, const FOR_DROP: bool>(
         tcx: TyCtxt<'tcx>,
         call_adder: &mut (impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>),
+        base_args: Vec<Operand<'tcx>>,
         fn_value: Operand<'tcx>,
-    ) -> BlocksAndResult<'tcx> {
+    ) -> BasicBlockData<'tcx> {
         let (fn_ptr_ty, fn_ptr_local, ptr_assignment) = to_fn_ptr(tcx, call_adder, fn_value);
 
-        let (mut block, id_local) = call_adder.make_bb_for_helper_call_with_all(
-            call_adder.pri_helper_funcs().callee_def_static,
+        let (mut block, _) = call_adder.make_bb_for_helper_call_with_all(
+            if !FOR_DROP {
+                call_adder.pri_helper_funcs().before_call_control_precise
+            } else {
+                call_adder.pri_helper_funcs().before_drop_control_precise
+            },
             vec![fn_ptr_ty.into()],
-            vec![operand::move_for_local(fn_ptr_local)],
+            [base_args, vec![operand::move_for_local(fn_ptr_local)]].concat(),
             None,
         );
         block.statements.push(ptr_assignment);
-        BlocksAndResult::from((block, id_local))
+        block
     }
 
-    fn def_of_possibly_virtual_callee<'tcx>(
+    fn before_call_possibly_virtual_callee<'tcx, const FOR_DROP: bool>(
         tcx: TyCtxt<'tcx>,
         call_adder: &mut (impl BodyLocalManager<'tcx> + MirCallAdder<'tcx> + PriItemsProvider<'tcx>),
+        base_args: Vec<Operand<'tcx>>,
         fn_value: Operand<'tcx>,
         method_id: DefId,
         self_ty: Ty<'tcx>,
         receiver: &Operand<'tcx>,
-    ) -> BlocksAndResult<'tcx> {
+    ) -> BasicBlockData<'tcx> {
         let (fn_ptr_ty, fn_ptr_local, ptr_assignment) = to_fn_ptr(tcx, call_adder, fn_value);
 
         let receiver_ty = receiver.ty(call_adder, tcx);
@@ -922,19 +988,31 @@ mod utils {
         };
         let identifier = identifier_of_method(tcx, method_id);
 
-        let (mut block, id_local) = call_adder.make_bb_for_helper_call_with_all(
-            call_adder.pri_helper_funcs().callee_def_maybe_virtual,
+        let (mut block, _) = call_adder.make_bb_for_helper_call_with_all(
+            if !FOR_DROP {
+                call_adder
+                    .pri_helper_funcs()
+                    .before_call_control_precise_maybe_virtual
+            } else {
+                call_adder
+                    .pri_helper_funcs()
+                    .before_drop_control_precise_maybe_virtual
+            },
             vec![fn_ptr_ty.into(), self_ty.into(), receiver_ty.into()],
-            vec![
-                operand::move_for_local(fn_ptr_local),
-                operand::move_for_local(receiver_ref_local),
-                operand::const_from_uint(tcx, identifier),
-            ],
+            [
+                base_args,
+                vec![
+                    operand::move_for_local(fn_ptr_local),
+                    operand::move_for_local(receiver_ref_local),
+                    operand::const_from_uint(tcx, identifier),
+                ],
+            ]
+            .concat(),
             Default::default(),
         );
         block.statements.push(ptr_assignment);
         block.statements.extend(receiver_ref_stmts);
-        (block, id_local).into()
+        block
     }
 
     fn as_possibly_dynamic_method_call<'tcx>(
@@ -1035,6 +1113,15 @@ mod utils {
             operand::const_from_uint(tcx, def_id.krate.as_u32()),
             operand::const_from_uint(tcx, def_id.index.as_u32()),
         )
+    }
+
+    fn unknown_instance_kind_id_operand_triple<'tcx>(tcx: TyCtxt<'tcx>) -> [Operand<'tcx>; 3] {
+        let instance_kind = common::types::InstanceKindId::INVALID;
+        [
+            operand::const_from_uint(tcx, instance_kind.0),
+            operand::const_from_uint(tcx, instance_kind.1.0),
+            operand::const_from_uint(tcx, instance_kind.1.1),
+        ]
     }
 
     pub fn is_fn_trait_call_func<'tcx>(tcx: TyCtxt<'tcx>, def_id: DefId) -> bool {

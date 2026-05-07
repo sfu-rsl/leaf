@@ -114,93 +114,6 @@ pub const fn assertion_info(
     }
 }
 
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub fn callee_def_static<F: FnPtr>(func_addr: F) -> CalleeDef {
-    CalleeDef {
-        static_addr: func_addr.addr(),
-        as_virtual: None,
-    }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub fn callee_def_maybe_virtual<F: FnPtr, Pointee: ?Sized, R: Receiver<Target = Pointee>>(
-    func_addr: F,
-    receiver: &R,
-    identifier: u64,
-) -> CalleeDef
-where
-    <Pointee as core::ptr::Pointee>::Metadata: 'static,
-{
-    CalleeDef {
-        static_addr: func_addr.addr(),
-        as_virtual: {
-            if const { is_dyn::<Pointee>() } {
-                Some((
-                    unsafe {
-                        // NOTE: UB happens if it is not really a dyn type.
-                        let metadata = metadata_from_receiver::<Pointee, R>(receiver);
-                        transmute_unchecked(metadata)
-                    },
-                    identifier,
-                ))
-            } else {
-                None
-            }
-        },
-    }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub fn func_def_static<F: FnPtr>(
-    addr: F,
-    instance_kind_discr: InstanceKindDiscr,
-    crate_id: u32,
-    body_id: u32,
-) -> FuncDef {
-    FuncDef {
-        static_addr: addr.addr(),
-        as_dyn_method: None,
-        body_id: InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
-    }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub fn func_def_dyn_method<F: FnPtr, TSelf: core::ptr::Thin, Dyn: ?Sized>(
-    static_addr: F,
-    identifier: u64,
-    instance_kind_discr: InstanceKindDiscr,
-    crate_id: u32,
-    body_id: u32,
-) -> FuncDef
-where
-    *const TSelf: CoerceUnsized<*const Dyn>,
-    <Dyn as core::ptr::Pointee>::Metadata: 'static,
-{
-    FuncDef {
-        static_addr: static_addr.addr(),
-        as_dyn_method: Some((
-            {
-                // NOTE: UB happens if the following assumption does not hold.
-                if const { !is_dyn::<Dyn>() } {
-                    loop {}
-                }
-
-                unsafe {
-                    let ptr = transmute::<usize, *const TSelf>(0) as *const Dyn;
-                    let metadata = intrinsics::ptr_metadata(ptr);
-                    transmute_unchecked(metadata)
-                }
-            },
-            identifier,
-        )),
-        body_id: InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
-    }
-}
-
 /* Possible receiver types based on: https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility
  * - &Self (i.e. &self)
  * - &mut Self (i.e &mut self)
@@ -246,6 +159,266 @@ where
             intrinsics::type_id::<usize>(),
         )
     }
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_call_control(
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+) {
+    before_call_control_gen(
+        super::before_call_control,
+        call_site,
+        instance_kind_discr,
+        crate_id,
+        body_id,
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_call_control_precise<F: FnPtr>(
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+) {
+    before_call_control_precise_gen(
+        super::before_call_control_precise,
+        call_site,
+        instance_kind_discr,
+        crate_id,
+        body_id,
+        static_addr,
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_call_control_precise_maybe_virtual<
+    F: FnPtr,
+    Pointee: ?Sized,
+    R: Receiver<Target = Pointee>,
+>(
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+    receiver: &R,
+    identifier: u64,
+) where
+    <Pointee as core::ptr::Pointee>::Metadata: 'static,
+{
+    before_call_control_precise_maybe_virtual_gen(
+        super::before_call_control_precise,
+        super::before_call_control_precise_virtual,
+        call_site,
+        instance_kind_discr,
+        crate_id,
+        body_id,
+        static_addr,
+        receiver,
+        identifier,
+    );
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_drop_control(
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+) {
+    before_call_control_gen(
+        super::before_drop_control,
+        call_site,
+        instance_kind_discr,
+        crate_id,
+        body_id,
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_drop_control_precise<F: FnPtr>(
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+) {
+    before_call_control_precise_gen(
+        super::before_drop_control_precise,
+        call_site,
+        instance_kind_discr,
+        crate_id,
+        body_id,
+        static_addr,
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_drop_control_precise_maybe_virtual<
+    F: FnPtr,
+    Pointee: ?Sized,
+    R: Receiver<Target = Pointee>,
+>(
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+    receiver: &R,
+    identifier: u64,
+) where
+    <Pointee as core::ptr::Pointee>::Metadata: 'static,
+{
+    before_call_control_precise_maybe_virtual_gen(
+        super::before_drop_control_precise,
+        super::before_drop_control_precise_virtual,
+        call_site,
+        instance_kind_discr,
+        crate_id,
+        body_id,
+        static_addr,
+        receiver,
+        identifier,
+    );
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+fn before_call_control_gen(
+    pri_fn: fn(BasicBlockIndex, InstanceKindId),
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+) {
+    pri_fn(
+        call_site,
+        InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+fn before_call_control_precise_gen<F: FnPtr>(
+    pri_fn: fn(BasicBlockIndex, InstanceKindId, RawAddress),
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+) {
+    pri_fn(
+        call_site,
+        InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
+        static_addr.addr(),
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn before_call_control_precise_maybe_virtual_gen<
+    F: FnPtr,
+    Pointee: ?Sized,
+    R: Receiver<Target = Pointee>,
+>(
+    pri_fn_precise: fn(BasicBlockIndex, InstanceKindId, RawAddress),
+    pri_fn_precise_virtual: fn(BasicBlockIndex, InstanceKindId, RawAddress, (DynRawMetadata, u64)),
+    call_site: BasicBlockIndex,
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+    receiver: &R,
+    identifier: u64,
+) where
+    <Pointee as core::ptr::Pointee>::Metadata: 'static,
+{
+    if const { is_dyn::<Pointee>() } {
+        let metadata = unsafe {
+            // NOTE: UB happens if it is not really a dyn type.
+            let metadata = metadata_from_receiver::<Pointee, R>(receiver);
+            transmute_unchecked(metadata)
+        };
+        pri_fn_precise_virtual(
+            call_site,
+            InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
+            static_addr.addr(),
+            (metadata, identifier),
+        )
+    } else {
+        pri_fn_precise(
+            call_site,
+            InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
+            static_addr.addr(),
+        )
+    }
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn enter_func(instance_kind_discr: InstanceKindDiscr, crate_id: u32, body_id: u32) {
+    super::enter_func(InstanceKindId(
+        instance_kind_discr,
+        DefId(crate_id, body_id),
+    ))
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn enter_func_precise<F: FnPtr>(
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+) {
+    super::enter_func_precise(
+        InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
+        static_addr.addr(),
+    )
+}
+
+#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
+#[inline(always)]
+pub fn enter_func_precise_dyn_comp<F: FnPtr, TSelf: core::ptr::Thin, Dyn: ?Sized>(
+    instance_kind_discr: InstanceKindDiscr,
+    crate_id: u32,
+    body_id: u32,
+    static_addr: F,
+    dyn_identifier: u64,
+) where
+    *const TSelf: CoerceUnsized<*const Dyn>,
+    <Dyn as core::ptr::Pointee>::Metadata: 'static,
+{
+    super::enter_func_precise_dyn_comp(
+        InstanceKindId(instance_kind_discr, DefId(crate_id, body_id)),
+        static_addr.addr(),
+        {
+            let metadata = {
+                // NOTE: UB happens if the following assumption does not hold.
+                if const { !is_dyn::<Dyn>() } {
+                    loop {}
+                }
+
+                unsafe {
+                    let ptr = transmute::<usize, *const TSelf>(0) as *const Dyn;
+                    let metadata = intrinsics::ptr_metadata(ptr);
+                    transmute_unchecked(metadata)
+                }
+            };
+            (metadata, dyn_identifier)
+        },
+    )
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]

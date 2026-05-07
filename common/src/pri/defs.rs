@@ -299,11 +299,28 @@ pub mod macros {
           { fn assert_invalid_enum_ctn(info: AssertionInfo, discr: OperandRef) }
 
           // ----- Calling -----
-          { fn before_call_control(def: CalleeDef, call_site: BasicBlockIndex) }
+          { fn before_call_control(call_site: BasicBlockIndex, callee_id: InstanceKindId) }
+          { fn before_call_control_precise(
+              call_site: BasicBlockIndex,
+              callee_id: InstanceKindId,
+              static_addr: RawAddress,
+          ) }
+          { fn before_call_control_precise_virtual(
+              call_site: BasicBlockIndex,
+              callee_id: InstanceKindId,
+              static_addr: RawAddress,
+              dyn_id: (DynRawMetadata, u64),
+          ) }
           #[allow(unused_parens)]
           { fn before_call_data(func: OperandRef, args: ($slice_ty!(OperandRef)), are_args_tupled: bool) }
           { fn before_call_some() }
-          { fn enter_func(def: FuncDef) }
+          { fn enter_func(body_id: InstanceKindId) }
+          { fn enter_func_precise(body_id: InstanceKindId, static_addr: RawAddress) }
+          { fn enter_func_precise_dyn_comp(
+              body_id: InstanceKindId,
+              static_addr: RawAddress,
+              dyn_id: (DynRawMetadata, u64),
+          ) }
           #[allow(unused_parens)]
           { fn enter_func_data(arg_places: ($slice_ty!(PlaceRef)), ret_val_place: PlaceRef) }
           #[allow(unused_parens)]
@@ -320,7 +337,18 @@ pub mod macros {
           { fn after_call_func(id: AssignmentId, dest: PlaceRef) }
 
           // ----- Drop ------
-          { fn before_drop_control(def: CalleeDef, call_site: BasicBlockIndex) }
+          { fn before_drop_control(call_site: BasicBlockIndex, callee_id: InstanceKindId) }
+          { fn before_drop_control_precise(
+              call_site: BasicBlockIndex,
+              callee_id: InstanceKindId,
+              static_addr: RawAddress,
+          ) }
+          { fn before_drop_control_precise_virtual(
+              call_site: BasicBlockIndex,
+              callee_id: InstanceKindId,
+              static_addr: RawAddress,
+              dyn_id: (DynRawMetadata, u64),
+          ) }
           { fn before_drop_data(func: OperandRef, arg: OperandRef, place: PlaceRef) }
           { fn before_drop_some() }
           { fn after_drop() }
@@ -760,27 +788,39 @@ pub mod macros {
             }$modifier!{
                 fn before_call_control(def:CalleeDef,call_site:BasicBlockIndex);
             }$modifier!{
-                #[allow(unused_parens)]fn before_call_data(func:OperandRef,args:($slice_ty!(OperandRef)),are_args_tupled:bool);
+                fn before_call_control_precise(call_site: BasicBlockIndex,callee_id: InstanceKindId,static_addr: RawAddress,);
+            }$modifier!{
+                fn before_call_control_precise_virtual(call_site: BasicBlockIndex,callee_id: InstanceKindId,static_addr: RawAddress,dyn_id: (DynRawMetadata,u64),);
+            }$modifier!{
+                #[allow(unused_parens)]fn before_call_data(func: OperandRef,args: ($slice_ty!(OperandRef)),are_args_tupled: bool);
             }$modifier!{
                 fn before_call_some();
             }$modifier!{
-                fn enter_func(def:FuncDef);
+                fn enter_func(body_id: InstanceKindId);
             }$modifier!{
-                #[allow(unused_parens)]fn enter_func_data(arg_places:($slice_ty!(PlaceRef)),ret_val_place:PlaceRef);
+                fn enter_func_precise(body_id: InstanceKindId,static_addr: RawAddress);
             }$modifier!{
-                #[allow(unused_parens)]fn enter_func_data_untupled_args(arg_places:($slice_ty!(PlaceRef)),ret_val_place:PlaceRef,tupled_arg_index:LocalIndex,tuple_type_id:TypeId,);
+                fn enter_func_precise_dyn_comp(body_id: InstanceKindId,static_addr: RawAddress,dyn_id: (DynRawMetadata,u64),);
             }$modifier!{
-                #[allow(unused_parens)]fn enter_func_data_tupled_args(arg_places:($slice_ty!(PlaceRef)),ret_val_place:PlaceRef);
+                #[allow(unused_parens)]fn enter_func_data(arg_places: ($slice_ty!(PlaceRef)),ret_val_place: PlaceRef);
             }$modifier!{
-                fn return_from_func(ret_point:BasicBlockIndex);
+                #[allow(unused_parens)]fn enter_func_data_untupled_args(arg_places: ($slice_ty!(PlaceRef)),ret_val_place: PlaceRef,tupled_arg_index: LocalIndex,tuple_type_id: TypeId,);
             }$modifier!{
-                fn override_return_value(operand:OperandRef);
+                #[allow(unused_parens)]fn enter_func_data_tupled_args(arg_places: ($slice_ty!(PlaceRef)),ret_val_place: PlaceRef);
             }$modifier!{
                 fn after_call_func(id:AssignmentId,dest:PlaceRef);
             }$modifier!{
                 fn before_drop_control(def:CalleeDef,call_site:BasicBlockIndex);
             }$modifier!{
-                fn before_drop_data(func:OperandRef,arg:OperandRef,place:PlaceRef);
+                fn after_call_func(id: AssignmentId,dest: PlaceRef);
+            }$modifier!{
+                fn before_drop_control(call_site: BasicBlockIndex,callee_id: InstanceKindId);
+            }$modifier!{
+                fn before_drop_control_precise(call_site: BasicBlockIndex,callee_id: InstanceKindId,static_addr: RawAddress,);
+            }$modifier!{
+                fn before_drop_control_precise_virtual(call_site: BasicBlockIndex,callee_id: InstanceKindId,static_addr: RawAddress,dyn_id: (DynRawMetadata,u64),);
+            }$modifier!{
+                fn before_drop_data(func: OperandRef,arg: OperandRef,place: PlaceRef);
             }$modifier!{
                 fn before_drop_some();
             }$modifier!{

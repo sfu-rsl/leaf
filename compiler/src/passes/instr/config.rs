@@ -172,7 +172,11 @@ filter_struct! { CallFlowFilter {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum CallFlowPartKind {
     CallControl,
+    #[serde(alias = "call_addr")]
+    CallAddress,
     CallInput,
+    #[serde(alias = "func_addr")]
+    FunctionAddress,
     #[serde(alias = "func_data")]
     FunctionData,
 }
@@ -185,6 +189,8 @@ filter_struct! { DropFilter {
 #[serde(rename_all = "snake_case")]
 pub(crate) enum DropPartKind {
     CallControl,
+    #[serde(alias = "call_addr")]
+    CallAddress,
     CallInput,
 }
 

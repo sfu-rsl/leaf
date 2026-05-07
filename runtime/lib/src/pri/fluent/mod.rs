@@ -2,19 +2,18 @@
 
 pub(crate) mod backend;
 
-use std::primitive;
-
 use common::pri::{
-    AssertionInfo, AssignmentId, BasicBlockIndex, CalleeDef, FieldIndex, FuncDef, LocalIndex,
-    OperandRef, PlaceRef, ProgramRuntimeInterface, RawAddress, SwitchCaseIndex, SwitchInfo, TypeId,
-    TypeSize, VariantIndex, refs::encoding as ref_enc,
+    AssertionInfo, AssignmentId, BasicBlockIndex, DynRawMetadata, FieldIndex, InstanceKindId,
+    LocalIndex, OperandRef, PlaceRef, ProgramRuntimeInterface, RawAddress, SwitchCaseIndex,
+    SwitchInfo, TypeId, TypeSize, VariantIndex, refs::encoding as ref_enc,
 };
 use common::{log_debug, log_info};
 use leaf_macros::trait_log_fn;
 
+use crate::abs::FuncRawAddr;
 use crate::abs::{
-    self, AssertKind, CastKind, Constant, FloatType, IntType, Local, PlaceUsage, PrimitiveType,
-    SymVariable, ValueType, backend::Shutdown,
+    self, AssertKind, CalleeDef, CastKind, Constant, FloatType, FuncDef, IntType, Local,
+    PlaceUsage, PrimitiveType, SymVariable, ValueType, backend::Shutdown,
 };
 
 use super::refs::RefManager;
@@ -708,8 +707,59 @@ where
     }
 
     #[tracing::instrument(target = "pri::call", level = "debug")]
-    fn before_call_control(def: CalleeDef, call_site: BasicBlockIndex) {
-        Self::func_control(|h| h.before_call(def.into(), call_site));
+    fn before_call_control(call_site: BasicBlockIndex, callee_id: InstanceKindId) {
+        Self::func_control(|h| {
+            h.before_call(
+                CalleeDef {
+                    callee_id,
+                    raw: None,
+                },
+                call_site,
+            )
+        });
+    }
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn before_call_control_precise(
+        call_site: BasicBlockIndex,
+        callee_id: InstanceKindId,
+        static_addr: RawAddress,
+    ) {
+        Self::func_control(|h| {
+            h.before_call(
+                CalleeDef {
+                    callee_id,
+                    raw: Some(FuncRawAddr {
+                        static_addr: unsafe {
+                            core::ptr::NonNull::new_unchecked(static_addr as *mut ())
+                        },
+                        as_dyn_method: None,
+                    }),
+                },
+                call_site,
+            )
+        });
+    }
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn before_call_control_precise_virtual(
+        call_site: BasicBlockIndex,
+        callee_id: InstanceKindId,
+        static_addr: RawAddress,
+        dyn_id: (DynRawMetadata, u64),
+    ) {
+        Self::func_control(|h| {
+            h.before_call(
+                CalleeDef {
+                    callee_id,
+                    raw: Some(FuncRawAddr {
+                        static_addr: unsafe {
+                            core::ptr::NonNull::new_unchecked(static_addr as *mut ())
+                        },
+                        as_dyn_method: Some(dyn_id),
+                    }),
+                },
+                call_site,
+            )
+        });
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn before_call_data(func: OperandRef, args: &[OperandRef], are_args_tupled: bool) {
@@ -726,8 +776,40 @@ where
     }
 
     #[tracing::instrument(target = "pri::call", level = "debug")]
-    fn enter_func(def: FuncDef) {
-        Self::func_control(|h| h.enter(def.into()));
+    fn enter_func(body_id: InstanceKindId) {
+        Self::func_control(|h| h.enter(FuncDef { body_id, raw: None }));
+    }
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn enter_func_precise(body_id: InstanceKindId, static_addr: RawAddress) {
+        Self::func_control(|h| {
+            h.enter(FuncDef {
+                body_id,
+                raw: Some(FuncRawAddr {
+                    static_addr: unsafe {
+                        core::ptr::NonNull::new_unchecked(static_addr as *mut ())
+                    },
+                    as_dyn_method: None,
+                }),
+            })
+        });
+    }
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn enter_func_precise_dyn_comp(
+        body_id: InstanceKindId,
+        static_addr: RawAddress,
+        dyn_id: (DynRawMetadata, u64),
+    ) {
+        Self::func_control(|h| {
+            h.enter(FuncDef {
+                body_id,
+                raw: Some(FuncRawAddr {
+                    static_addr: unsafe {
+                        core::ptr::NonNull::new_unchecked(static_addr as *mut ())
+                    },
+                    as_dyn_method: Some(dyn_id),
+                }),
+            })
+        });
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn enter_func_data(arg_places: &[PlaceRef], ret_val_place: PlaceRef) {
@@ -771,9 +853,60 @@ where
         Self::func_control(|h| h.after_call(id, dest_place))
     }
 
-    #[tracing::instrument(target = "pri::drop", level = "debug")]
-    fn before_drop_control(def: CalleeDef, call_site: BasicBlockIndex) {
-        Self::dropping(|h| h.before_drop(def.into(), call_site));
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn before_drop_control(call_site: BasicBlockIndex, callee_id: InstanceKindId) {
+        Self::dropping(|h| {
+            h.before_drop(
+                CalleeDef {
+                    callee_id,
+                    raw: None,
+                },
+                call_site,
+            )
+        });
+    }
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn before_drop_control_precise(
+        call_site: BasicBlockIndex,
+        callee_id: InstanceKindId,
+        static_addr: RawAddress,
+    ) {
+        Self::dropping(|h| {
+            h.before_drop(
+                CalleeDef {
+                    callee_id,
+                    raw: Some(FuncRawAddr {
+                        static_addr: unsafe {
+                            core::ptr::NonNull::new_unchecked(static_addr as *mut ())
+                        },
+                        as_dyn_method: None,
+                    }),
+                },
+                call_site,
+            )
+        });
+    }
+    #[tracing::instrument(target = "pri::call", level = "debug")]
+    fn before_drop_control_precise_virtual(
+        call_site: BasicBlockIndex,
+        callee_id: InstanceKindId,
+        static_addr: RawAddress,
+        dyn_id: (DynRawMetadata, u64),
+    ) {
+        Self::dropping(|h| {
+            h.before_drop(
+                CalleeDef {
+                    callee_id,
+                    raw: Some(FuncRawAddr {
+                        static_addr: unsafe {
+                            core::ptr::NonNull::new_unchecked(static_addr as *mut ())
+                        },
+                        as_dyn_method: Some(dyn_id),
+                    }),
+                },
+                call_site,
+            )
+        });
     }
     #[tracing::instrument(target = "pri::drop", level = "debug")]
     fn before_drop_data(func: OperandRef, arg: OperandRef, place: PlaceRef) {
