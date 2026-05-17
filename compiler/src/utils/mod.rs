@@ -31,7 +31,7 @@ pub(crate) mod mir {
     use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
     use rustc_middle::{
         mir::{Body, Local, Location, Statement, Terminator},
-        ty::{InstanceKind, TyCtxt, TypingEnv, TypingMode},
+        ty::{GenericArgsRef, Instance, InstanceKind, TyCtxt, TypingEnv, TypingMode},
     };
     use rustc_span::def_id::{DefId, LocalDefId};
 
@@ -43,6 +43,12 @@ pub(crate) mod mir {
         fn typing_env_in_body(self, def_id: DefId) -> TypingEnv<'tcx>;
         fn typing_mode_for_body(self, def_id: LocalDefId) -> TypingMode<'tcx>;
         fn pretty_mir(self, body: &Body<'tcx>) -> String;
+        fn try_resolve_instance_raw(
+            self,
+            typing_env: TypingEnv<'tcx>,
+            def_id: DefId,
+            args: GenericArgsRef<'tcx>,
+        ) -> Option<Instance<'tcx>>;
     }
 
     impl<'tcx> TyCtxtExt<'tcx> for TyCtxt<'tcx> {
@@ -127,6 +133,24 @@ pub(crate) mod mir {
                 .write_mir_fn(body, &mut buffer)
                 .unwrap();
             String::from_utf8(buffer).unwrap()
+        }
+
+        fn try_resolve_instance_raw(
+            self,
+            typing_env: TypingEnv<'tcx>,
+            def_id: DefId,
+            args: GenericArgsRef<'tcx>,
+        ) -> Option<Instance<'tcx>> {
+            let erased =
+                self.erase_and_anonymize_regions(typing_env.as_query_input((def_id, args)));
+            if self
+                .try_normalize_erasing_regions(erased.typing_env, erased.value.1)
+                .is_err()
+            {
+                return None;
+            }
+
+            self.resolve_instance_raw(erased).ok().flatten()
         }
     }
 
