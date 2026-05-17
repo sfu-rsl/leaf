@@ -135,9 +135,10 @@ fn visit_body<'tcx>(
         };
 
         let mut insert_to_calls = |def_id, generic_args, dbg| {
-            if let Ok(Some(instance_kind)) = tcx.resolve_instance_raw(
-                tcx.typing_env_in_body(body.source.def_id())
-                    .as_query_input((def_id, generic_args)),
+            if let Some(instance_kind) = tcx.try_resolve_instance_raw(
+                tcx.typing_env_in_body(body.source.def_id()),
+                def_id,
+                generic_args,
             ) {
                 calls.push((index.as_u32(), instance_kind.def.to_plain_id(), dbg));
             }

@@ -384,8 +384,8 @@ mod utils {
     use rustc_middle::{
         mir::{BasicBlockData, Body, Local, Operand, Place, Rvalue, Statement},
         ty::{
-            AssocItem, ClosureArgs, ExistentialPredicateStableCmpExt, Instance, InstanceKind,
-            PolyFnSig, TraitRef, Ty, TyCtxt, TyKind, TypingEnv,
+            AssocItem, ClosureArgs, ExistentialPredicateStableCmpExt, GenericArgsRef, Instance,
+            InstanceKind, PolyFnSig, TraitRef, Ty, TyCtxt, TyKind, TypingEnv,
         },
     };
     use rustc_span::def_id::DefId;
@@ -398,7 +398,7 @@ mod utils {
 
     use crate::{
         passes::instr::{MirSourceExt, decision::rules::accept_dyn_def_filter_rules},
-        utils::mir::InstanceKindExt,
+        utils::mir::{InstanceKindExt, TyCtxtExt},
     };
 
     pub(super) use super::super::utils::{
@@ -849,9 +849,7 @@ mod utils {
             let fn_ty = fn_value.ty(call_adder, tcx);
             let instance_kind = match fn_ty.kind() {
                 TyKind::FnDef(def_id, generic_args) => {
-                    Instance::try_resolve(tcx, typing_env, *def_id, generic_args)
-                        .ok()
-                        .flatten()
+                    tcx.try_resolve_instance_raw(typing_env, *def_id, generic_args)
                 }
                 TyKind::FnPtr(..) => None,
                 _ => {
