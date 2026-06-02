@@ -125,7 +125,7 @@ where
     }
     #[tracing::instrument(target = "pri::place", level = "debug", ret)]
     fn ref_place_index(place: PlaceRef, index_place: PlaceRef) -> PlaceRef {
-        let index = Self::take_place_info_to_read(index_place);
+        let index = Self::take_place_info_to(PlaceUsage::Copy, index_place);
         Self::transform_place_info(place, |p, place| p.project_on(place).at_index(index))
     }
     #[tracing::instrument(target = "pri::place", level = "debug", ret)]
@@ -174,6 +174,7 @@ where
     fn place_with_type_id(place: PlaceRef, type_id: Self::TypeId) -> PlaceRef {
         Self::transform_place_info(place, |h, p| h.metadata(p).set_type_id(type_id))
     }
+    #[tracing::instrument(target = "pri::place", level = "debug", ret)]
     fn place_with_primitive_type(place: PlaceRef, ty: Self::PrimitiveType) -> PlaceRef {
         Self::place_with_type(place, ty)
     }
@@ -184,12 +185,12 @@ where
 
     #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
     fn ref_operand_copy(place: PlaceRef) -> OperandRef {
-        let place = Self::take_place_info_to_read(place);
+        let place = Self::take_place_info_to(PlaceUsage::Copy, place);
         Self::push_operand(|o| o.copy_of(place))
     }
     #[tracing::instrument(target = "pri::operand", level = "debug", ret)]
     fn ref_operand_move(place: PlaceRef) -> OperandRef {
-        let place = Self::take_place_info_to_read(place);
+        let place = Self::take_place_info_to(PlaceUsage::Move, place);
         Self::push_operand(|o| o.move_of(place))
     }
 
@@ -309,14 +310,14 @@ where
     }
     fn assign_ref(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
         // FIXME: Mutability does not necessarily mean writing.
-        let place = Self::take_place_info_to_ref(place);
+        let place = Self::take_place_info_to(PlaceUsage::Ref, place);
         Self::assign_to(id, dest, |h| h.ref_to(place, is_mutable))
     }
     fn assign_thread_local_ref(id: AssignmentId, dest: PlaceRef /* TODO: #365 */) {
         Self::assign_to(id, dest, |h| h.thread_local_ref_to())
     }
     fn assign_raw_ptr_of(id: AssignmentId, dest: PlaceRef, place: PlaceRef, is_mutable: bool) {
-        let place = Self::take_place_info_to_ref(place);
+        let place = Self::take_place_info_to(PlaceUsage::Ref, place);
         Self::assign_to(id, dest, |h| h.address_of(place, is_mutable))
     }
 
@@ -428,7 +429,7 @@ where
     }
     fn assign_discriminant(id: AssignmentId, dest: PlaceRef, place: PlaceRef) {
         let place_info = Self::take_back_place_info(place);
-        let place = Self::get_backend_place(abs::PlaceUsage::Read, |h| h.tag_of(place_info));
+        let place = Self::get_backend_place(abs::PlaceUsage::Copy, |h| h.tag_of(place_info));
         Self::assign_to(id, dest, |h| h.discriminant_from(place))
     }
 
@@ -513,12 +514,12 @@ where
 
     fn mark_storage_live(place: PlaceRef) {
         let place_info = Self::take_back_place_info(place);
-        let place = Self::get_backend_place(abs::PlaceUsage::Write, |h| h.from_info(place_info));
+        let place = Self::get_backend_place(abs::PlaceUsage::Mark, |h| h.from_info(place_info));
         Self::memory(|h| h.mark_live(place));
     }
     fn mark_storage_dead(place: PlaceRef) {
         let place_info = Self::take_back_place_info(place);
-        let place = Self::get_backend_place(abs::PlaceUsage::Write, |h| h.from_info(place_info));
+        let place = Self::get_backend_place(abs::PlaceUsage::Mark, |h| h.from_info(place_info));
         Self::memory(|h| h.mark_dead(place));
     }
 
@@ -849,11 +850,11 @@ where
     }
     #[tracing::instrument(target = "pri::call", level = "debug")]
     fn after_call_func(id: AssignmentId, dest: PlaceRef) {
-        let dest_place = Self::take_place_info_to_write(dest);
+        let dest_place = Self::take_place_info_to(PlaceUsage::Write, dest);
         Self::func_control(|h| h.after_call(id, dest_place))
     }
 
-    #[tracing::instrument(target = "pri::call", level = "debug")]
+    #[tracing::instrument(target = "pri::drop", level = "debug")]
     fn before_drop_control(call_site: BasicBlockIndex, callee_id: InstanceKindId) {
         Self::dropping(|h| {
             h.before_drop(
@@ -865,7 +866,7 @@ where
             )
         });
     }
-    #[tracing::instrument(target = "pri::call", level = "debug")]
+    #[tracing::instrument(target = "pri::drop", level = "debug")]
     fn before_drop_control_precise(
         call_site: BasicBlockIndex,
         callee_id: InstanceKindId,
@@ -886,7 +887,7 @@ where
             )
         });
     }
-    #[tracing::instrument(target = "pri::call", level = "debug")]
+    #[tracing::instrument(target = "pri::drop", level = "debug")]
     fn before_drop_control_precise_virtual(
         call_site: BasicBlockIndex,
         callee_id: InstanceKindId,
@@ -912,7 +913,21 @@ where
     fn before_drop_data(func: OperandRef, arg: OperandRef, place: PlaceRef) {
         let func = Self::take_back_operand(func);
         let arg = Self::take_back_operand(arg);
-        let place = Self::take_place_info_to_write(place);
+        let place = Self::take_place_info_to(PlaceUsage::Drop, place);
+        Self::dropping(move |h| h.take_data_before_drop(func, arg, place));
+    }
+    #[tracing::instrument(target = "pri::drop", level = "debug")]
+    fn before_drop_in_place_data(
+        func: OperandRef,
+        ptr: OperandRef,
+        conc_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+    ) {
+        let func = Self::take_back_operand(func);
+        let arg = Self::take_back_operand(ptr);
+        let place = Self::raw_memory(|h| {
+            h.place_from_ptr(arg.clone(), conc_ptr, ptr_type_id, PlaceUsage::Drop)
+        });
         Self::dropping(move |h| h.take_data_before_drop(func, arg, place));
     }
     #[tracing::instrument(target = "pri::drop", level = "debug")]
@@ -1357,19 +1372,12 @@ impl<IM: InstanceManager> FluentPri<IM> {
             .unwrap_or_else(|| IM::perform_on_place_ref_manager(|rm| rm.take(reference)))
     }
     #[inline]
-    fn take_place_info_to_read(reference: PlaceRef) -> <IM::Backend as RuntimeBackend>::Place {
+    fn take_place_info_to(
+        usage: PlaceUsage,
+        reference: PlaceRef,
+    ) -> <IM::Backend as RuntimeBackend>::Place {
         let place_info = Self::take_back_place_info(reference);
-        Self::get_backend_place(PlaceUsage::Read, |h| h.from_info(place_info))
-    }
-    #[inline]
-    fn take_place_info_to_write(reference: PlaceRef) -> <IM::Backend as RuntimeBackend>::Place {
-        let place_info = Self::take_back_place_info(reference);
-        Self::get_backend_place(PlaceUsage::Write, |h| h.from_info(place_info))
-    }
-    #[inline]
-    fn take_place_info_to_ref(reference: PlaceRef) -> <IM::Backend as RuntimeBackend>::Place {
-        let place_info = Self::take_back_place_info(reference);
-        Self::get_backend_place(PlaceUsage::Ref, |h| h.from_info(place_info))
+        Self::get_backend_place(usage, |h| h.from_info(place_info))
     }
     #[inline]
     fn get_backend_place<T>(
@@ -1385,7 +1393,7 @@ impl<IM: InstanceManager> FluentPri<IM> {
         dest_ref: PlaceRef,
         assign_action: impl FnOnce(<IM::Backend as RuntimeBackend>::AssignmentHandler<'_>) -> T,
     ) -> T {
-        let dest = Self::take_place_info_to_write(dest_ref);
+        let dest = Self::take_place_info_to(PlaceUsage::Write, dest_ref);
         Self::assign_to_place(id, dest, assign_action)
     }
 
@@ -1428,7 +1436,7 @@ where
     ) {
         let src_ptr = Self::take_back_operand(ptr);
         let src_place = Self::raw_memory(|h| {
-            h.place_from_ptr(src_ptr.clone(), conc_ptr, ptr_type_id, PlaceUsage::Read)
+            h.place_from_ptr(src_ptr.clone(), conc_ptr, ptr_type_id, PlaceUsage::Copy)
         });
         let src_pointee_value =
             Self::take_back_operand(Self::push_operand(|h| h.copy_of(src_place)));
@@ -1494,7 +1502,7 @@ where
     ) {
         let ptr = Self::take_back_operand(ptr);
         let ptr_place = Self::raw_memory(|h| {
-            h.place_from_ptr(ptr.clone(), conc_ptr, ptr_type_id, PlaceUsage::Read)
+            h.place_from_ptr(ptr.clone(), conc_ptr, ptr_type_id, PlaceUsage::Copy)
         });
         let current = Self::take_back_operand(Self::push_operand(|h| h.copy_of(ptr_place)));
 
@@ -1515,9 +1523,9 @@ where
     ) {
         let arg_places = arg_places
             .iter()
-            .map(|p| Self::take_place_info_to_read(*p))
+            .map(|p| Self::take_place_info_to(PlaceUsage::Write, *p))
             .collect::<Vec<_>>();
-        let ret_val_place = Self::take_place_info_to_write(ret_val_place);
+        let ret_val_place = Self::take_place_info_to(PlaceUsage::Move, ret_val_place);
         Self::func_control(|h| h.emplace_arguments(arg_places, ret_val_place, tupling));
     }
 
@@ -1566,12 +1574,12 @@ impl<IM: InstanceManager> ref_enc::operand::OperandRefInlinedDecoder<IM::Operand
     for FluentPri<IM>
 {
     fn copy_of(place_ref: PlaceRef) -> IM::Operand {
-        let place = Self::take_place_info_to_read(place_ref);
+        let place = Self::take_place_info_to(PlaceUsage::Copy, place_ref);
         IM::perform_on_backend(|r| r.operand().copy_of(place))
     }
 
     fn move_of(place_ref: PlaceRef) -> IM::Operand {
-        let place = Self::take_place_info_to_read(place_ref);
+        let place = Self::take_place_info_to(PlaceUsage::Move, place_ref);
         IM::perform_on_backend(|r: &mut <IM as InstanceManager>::Backend| {
             r.operand().move_of(place)
         })

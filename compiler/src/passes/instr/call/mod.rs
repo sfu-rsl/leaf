@@ -202,6 +202,8 @@ pub(crate) trait FunctionHandler<'tcx> {
 pub(crate) trait DropHandler<'tcx> {
     fn before_call_drop(&mut self, place: &Place<'tcx>);
 
+    fn before_call_drop_in_place(&mut self, func: &Operand<'tcx>, to_drop: &Spanned<Operand<'tcx>>);
+
     fn after_call_drop(&mut self);
 }
 
