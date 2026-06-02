@@ -131,8 +131,11 @@ pub(crate) trait CallFlowManager {
     type Value;
     type ReturnToken;
     type FinalizationToken;
+    type StackStorage;
 
     fn current_func(&self) -> FuncDef;
+
+    fn current_storage(&mut self) -> &mut Self::StackStorage;
 
     fn prepare_for_call(&mut self);
 
@@ -363,9 +366,9 @@ mod implementation {
 
     use super::*;
 
-    pub(crate) struct DefaultCallFlowManager<P, V, BC> {
+    pub(crate) struct DefaultCallFlowManager<P, V, BC, S = ()> {
         /// Stacked storage that holds data living during the function execution.
-        stack: Vec<StackInfo<P, V>>,
+        stack: Vec<StackInfo<P, V, S>>,
 
         /// Non-stacked storage that holds data living during call transfers or
         /// between consecutive operations in the function.
@@ -377,7 +380,7 @@ mod implementation {
         log_span: tracing::span::EnteredSpan,
     }
 
-    struct StackInfo<P, V> {
+    struct StackInfo<P, V, S> {
         // (Control Domain)
         /// The current function being executed in this frame.
         def: FuncDef,
@@ -398,6 +401,8 @@ mod implementation {
         overridden_return_val: Option<V>,
         /// This call was unexpected, i.e., the caller did not ask for preparation for it. (due to uninstrumented call)
         is_unexpected: bool,
+        /// Arbitrary additional storage for the user.
+        user_storage: S,
     }
 
     // FIXME: The fields here are probably exclusive. May be replaced with an enum.
@@ -465,7 +470,7 @@ mod implementation {
         are_tupled: bool,
     }
 
-    impl<P, V, BC> DefaultCallFlowManager<P, V, BC> {
+    impl<P, V, BC, S> DefaultCallFlowManager<P, V, BC, S> {
         pub(crate) fn new(breakage_callback: BC) -> Self {
             Self {
                 stack: vec![],
@@ -476,13 +481,13 @@ mod implementation {
         }
     }
 
-    impl<P, V, BC: Default> Default for DefaultCallFlowManager<P, V, BC> {
+    impl<P, V, BC: Default, S> Default for DefaultCallFlowManager<P, V, BC, S> {
         fn default() -> Self {
             Self::new(BC::default())
         }
     }
 
-    impl<P, V, BC> DefaultCallFlowManager<P, V, BC> {
+    impl<P, V, BC, S> DefaultCallFlowManager<P, V, BC, S> {
         fn prepare_for_call_partial(
             &mut self,
             expected_func: Option<CalleeDef>,
@@ -525,7 +530,7 @@ mod implementation {
             }
         }
 
-        fn top_frame(&mut self) -> &mut StackInfo<P, V> {
+        fn top_frame(&mut self) -> &mut StackInfo<P, V, S> {
             self.stack
                 .last_mut()
                 .expect("Call stack should not be empty")
@@ -558,7 +563,7 @@ mod implementation {
         use super::super::tupling::*;
         use super::*;
 
-        impl<P, V, BC> DefaultCallFlowManager<P, V, BC> {
+        impl<P, V, BC, S> DefaultCallFlowManager<P, V, BC, S> {
             pub(super) fn resolve_tupling(
                 &mut self,
                 args: &mut PassedArgs<V>,
@@ -648,8 +653,8 @@ mod implementation {
         }
     }
 
-    pub(crate) struct ReturnToken<P, V> {
-        popped_frame: StackInfo<P, V>,
+    pub(crate) struct ReturnToken<P, V, S> {
+        popped_frame: StackInfo<P, V, S>,
     }
 
     #[derive(dm::From)]
@@ -667,13 +672,18 @@ mod implementation {
         }
     }
 
-    impl<P, V: Debug, BC> CallFlowManager for DefaultCallFlowManager<P, V, BC> {
+    impl<P, V: Debug, BC, S: Default> CallFlowManager for DefaultCallFlowManager<P, V, BC, S> {
         type Value = V;
-        type ReturnToken = ReturnToken<P, V>;
+        type ReturnToken = ReturnToken<P, V, S>;
         type FinalizationToken = FinalizationToken<V>;
+        type StackStorage = S;
 
         fn current_func(&self) -> FuncDef {
             self.current_func()
+        }
+
+        fn current_storage(&mut self) -> &mut Self::StackStorage {
+            &mut self.top_frame().user_storage
         }
 
         fn prepare_for_call(&mut self) {
@@ -742,6 +752,7 @@ mod implementation {
                 overridden_return_val: None,
                 is_unexpected: matches!(entrance.0, CallFlowSanity::Unknown(None))
                     && !self.stack.is_empty(),
+                user_storage: S::default(),
             });
 
             self.ephemeral.entrance = Some(entrance);
@@ -834,7 +845,7 @@ mod implementation {
         }
     }
 
-    impl<P, V: Debug, BC> CallControlFlowManager for DefaultCallFlowManager<P, V, BC> {
+    impl<P, V: Debug, BC, S: Default> CallControlFlowManager for DefaultCallFlowManager<P, V, BC, S> {
         fn prepare_for_calling(&mut self, def: CalleeDef) {
             self.prepare_for_call_partial(Some(def), None);
         }
@@ -845,7 +856,7 @@ mod implementation {
         "Is the instrumentation incomplete or incorrect?",
     );
 
-    impl<P, V: Debug, BC> CallDataFlowManager for DefaultCallFlowManager<P, V, BC>
+    impl<P, V: Debug, BC, S: Default> CallDataFlowManager for DefaultCallFlowManager<P, V, BC, S>
     where
         BC: CallFlowBreakageCallback<P, V>,
     {
@@ -1097,7 +1108,7 @@ mod implementation {
             Return,
         }
 
-        impl<V, P, BC> DefaultCallFlowManager<V, P, BC> {
+        impl<V, P, BC, S> DefaultCallFlowManager<V, P, BC, S> {
             #[inline(always)]
             pub(super) fn log_span_reset(&mut self) {
                 if !tracing::enabled!(target: TAG_STACK, tracing::Level::DEBUG) {

@@ -34,3 +34,4 @@ fn init<L: utils::logging::LeafTracingSubLayerFactory>() {
 
 pub type SymExPri = pri::fluent::FluentPri<backends::symex::SymExInstanceManager>;
 pub type CftPri = pri::fluent::FluentPri<backends::cf_tracer::CftInstanceManager>;
+pub type MdSanPri = pri::fluent::FluentPri<backends::mdsan::MdSanInstanceManager>;

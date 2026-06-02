@@ -289,6 +289,46 @@ pub(crate) mod noop {
         }
     }
 
+    pub(crate) struct NoOpConstraintHandler<O>(PhantomData<O>);
+
+    impl<O> Default for NoOpConstraintHandler<O> {
+        fn default() -> Self {
+            Self(Default::default())
+        }
+    }
+
+    #[derive(Default)]
+    pub(crate) struct NoOpSwitchHandler;
+
+    impl<O> ConstraintHandler for NoOpConstraintHandler<O> {
+        type Operand = O;
+
+        type SwitchHandler = NoOpSwitchHandler;
+
+        fn switch(self, _discriminant: Option<Self::Operand>) -> Self::SwitchHandler {
+            Default::default()
+        }
+
+        fn assert(
+            self,
+            _cond: Self::Operand,
+            _expected: bool,
+            _assert_kind: AssertKind<Self::Operand>,
+        ) {
+            Default::default()
+        }
+    }
+
+    impl SwitchHandler for NoOpSwitchHandler {
+        fn take(self, _case_index: SwitchCaseIndex, _value: Option<Constant>) {
+            Default::default()
+        }
+
+        fn take_otherwise(self, _non_values: Option<Vec<Constant>>) {
+            Default::default()
+        }
+    }
+
     #[derive(Default)]
     pub(crate) struct NoOpAnnotationHandler;
 

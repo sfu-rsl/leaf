@@ -1,11 +1,11 @@
 [package]
-name = "runtime_cf_tracer"
+name = "runtime_mdsan"
 version = { workspace = true }
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "leafrt_cf_tracer"
+name = "leafrt_mdsan"
 crate-type = ["cdylib"]
 
 [dependencies]

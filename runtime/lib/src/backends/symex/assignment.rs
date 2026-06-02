@@ -9,15 +9,15 @@ use crate::{
         expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
     },
     pri::fluent::backend::AssignmentHandler,
+    type_info::{TypeLayoutResolver, TypeLayoutResolverExt},
     utils::{MutAccess, alias::RRef},
 };
 
 use super::alias::backend;
 use backend::{
     Implied, PlaceValueRef, Precondition, SymExBackend, SymExExprBuilder, SymExValue, TypeDatabase,
-    TypeLayoutResolver, ValueRef, VariablesState, alias::SymExValueExprBuilder, expr::prelude::*,
+    ValueRef, VariablesState, alias::SymExValueExprBuilder, expr::prelude::*,
     implication::PreconditionConstruct, place::DiscriminantPossiblePlace,
-    type_info::TypeLayoutResolverExt,
 };
 
 #[cfg(feature = "implicit_flow")]
@@ -506,9 +506,8 @@ pub(super) mod precondition {
     use crate::utils::RangeIntersection;
 
     use backend::{
-        TypeLayoutResolver, TypeSize,
+        TypeSize,
         implication::{PreconditionConstraints, PreconditionQuery},
-        type_info::TypeLayoutResolverExt,
     };
 
     use super::*;
