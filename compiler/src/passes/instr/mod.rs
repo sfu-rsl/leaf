@@ -776,6 +776,14 @@ where
             Some(def_id) if let Some(intrinsic) = tcx.intrinsic(def_id) => {
                 self.instrument_intrinsic_call((def_id, intrinsic), params)
             }
+            Some(def_id)
+                if tcx
+                    .lang_items()
+                    .drop_in_place_fn()
+                    .is_some_and(|id| id == def_id) =>
+            {
+                self.instrument_drop_in_place_call(params)
+            }
             _ => self.instrument_regular_call(params),
         }
     }
@@ -1087,6 +1095,26 @@ where
     fn instrument_llvm_intrinsic_call(&mut self, params: CallParams<'_, 'tcx>) {
         // Currently, we do not support for LLVM intrinsics.
         self.instrument_unsupported_call(params);
+    }
+
+    fn instrument_drop_in_place_call(
+        &mut self,
+        CallParams {
+            func,
+            args,
+            destination: _,
+            target,
+            fn_span: _,
+        }: CallParams<'_, 'tcx>,
+    ) {
+        let mut call_adder = self.call_adder.before();
+        assert_eq!(args.len(), 1);
+        call_adder.before_call_drop_in_place(func, &args[0]);
+
+        if target.is_some() {
+            let mut call_adder = call_adder.after();
+            call_adder.after_call_drop();
+        }
     }
 
     fn instrument_regular_call(&mut self, params: CallParams<'_, 'tcx>) {

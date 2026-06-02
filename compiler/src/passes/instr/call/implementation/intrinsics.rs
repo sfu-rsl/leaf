@@ -392,16 +392,35 @@ where
     where
         C: PointerInfoProvider<'tcx>,
     {
-        let (conc_ptr_assignment, conc_ptr_local) =
-            self.make_conc_ptr_assignment(self.context.ptr_value().clone());
+        self.make_ptr_triple_args(
+            self.context.ptr_operand_ref(),
+            self.context.ptr_value().clone(),
+            self.context.ptr_ty(),
+        )
+    }
 
-        let (ptr_type_id_block, ptr_type_id_local) = self.make_type_id_of_bb(self.context.ptr_ty());
+    /// Makes three arguments of for a pointer to be passed to PRI:
+    /// the operand reference to the pointer,
+    /// the concrete value of the pointer,
+    /// and the type id of the pointer.
+    ///
+    /// # Returns
+    /// The type id block, the concrete pointer assignment, and the three arguments as operand array.
+    pub fn make_ptr_triple_args(
+        &mut self,
+        operand_ref: OperandRef,
+        ptr_value: Operand<'tcx>,
+        ptr_ty: Ty<'tcx>,
+    ) -> (BasicBlockData<'tcx>, Statement<'tcx>, [Operand<'tcx>; 3]) {
+        let (conc_ptr_assignment, conc_ptr_local) = self.make_conc_ptr_assignment(ptr_value);
+
+        let (ptr_type_id_block, ptr_type_id_local) = self.make_type_id_of_bb(ptr_ty);
 
         (
             ptr_type_id_block,
             conc_ptr_assignment,
             [
-                operand::move_for_local(self.context.ptr_operand_ref().into()),
+                operand::move_for_local(operand_ref.into()),
                 operand::move_for_local(conc_ptr_local),
                 operand::move_for_local(ptr_type_id_local),
             ],

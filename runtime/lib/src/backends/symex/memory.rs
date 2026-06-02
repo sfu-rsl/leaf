@@ -88,7 +88,7 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
                     src_at_i,
                     conc_src_at_i,
                     ptr_type_id,
-                    PlaceUsage::Read,
+                    PlaceUsage::Copy,
                 );
                 self.services.vars_state.copy_place(&src_place_at_i)
             })
@@ -188,12 +188,12 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
         let first_value = self
             .services
             .vars_state
-            .copy_place(&place_from_first!(PlaceUsage::Read));
+            .copy_place(&place_from_first!(PlaceUsage::Copy));
 
         let second_value = self
             .services
             .vars_state
-            .copy_place(&place_from_second!(PlaceUsage::Read));
+            .copy_place(&place_from_second!(PlaceUsage::Copy));
 
         macro_rules! assign {
             ($place:expr, $value:expr) => {

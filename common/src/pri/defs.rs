@@ -350,6 +350,7 @@ pub mod macros {
               dyn_id: (DynRawMetadata, u64),
           ) }
           { fn before_drop_data(func: OperandRef, arg: OperandRef, place: PlaceRef) }
+          { fn before_drop_in_place_data(func: OperandRef, ptr: OperandRef, conc_ptr: RawAddress, ptr_type_id: TypeId) }
           { fn before_drop_some() }
           { fn after_drop() }
 
@@ -821,6 +822,8 @@ pub mod macros {
                 fn before_drop_control_precise_virtual(call_site: BasicBlockIndex,callee_id: InstanceKindId,static_addr: RawAddress,dyn_id: (DynRawMetadata,u64),);
             }$modifier!{
                 fn before_drop_data(func: OperandRef,arg: OperandRef,place: PlaceRef);
+            }$modifier!{
+                fn before_drop_in_place_data(func: OperandRef,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: TypeId);
             }$modifier!{
                 fn before_drop_some();
             }$modifier!{

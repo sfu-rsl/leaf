@@ -312,9 +312,10 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
 
     fn sym_place_handler_for<'a>(&'a self, usage: PlaceUsage) -> &'a SymPlaceHandlerObject {
         match usage {
-            PlaceUsage::Read => &self.sym_read_handler,
+            PlaceUsage::Copy | PlaceUsage::Move => &self.sym_read_handler,
             PlaceUsage::Write => &self.sym_write_handler,
             PlaceUsage::Ref => &self.sym_ref_handler,
+            PlaceUsage::Drop | PlaceUsage::Mark => &self.sym_write_handler, // These two won't be symbolic
         }
     }
 

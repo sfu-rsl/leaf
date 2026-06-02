@@ -6,7 +6,10 @@ use core::{assert_matches::debug_assert_matches, iter};
 
 use crate::{
     passes::instr::{
-        call::{PlaceReferencer, context::ConfigProvider},
+        call::{
+            PlaceReferencer,
+            context::{ConfigProvider, PointerInfoProvider},
+        },
         ctxtreqs::ForPlaceRef,
     },
     utils::mir::BodyExt,
@@ -121,6 +124,35 @@ where
 
         if self.config().drop_filter.input {
             self.before_drop_data(&func, place.clone());
+            added = true;
+        }
+
+        if !added {
+            self.before_drop_some();
+        }
+    }
+
+    fn before_call_drop_in_place(
+        &mut self,
+        func: &Operand<'tcx>,
+        to_drop: &Spanned<Operand<'tcx>>,
+    ) {
+        debug_assert_matches!(
+            self.context.insertion_loc(),
+            InsertionLocation::Before(..),
+            "Inserting before_drop after a block is not expected."
+        );
+
+        self.debug_info(&format!("{}", func.ty(self, self.tcx())));
+
+        let mut added = false;
+        if self.config().drop_filter.control {
+            self.before_drop_control(func.clone());
+            added = true;
+        }
+
+        if self.config().drop_filter.input {
+            self.before_drop_in_place_data(&func, to_drop);
             added = true;
         }
 
@@ -369,6 +401,43 @@ where
                 operand::move_for_local(place_ref.into()),
             ],
         );
+        blocks.push(block);
+
+        self.insert_blocks(blocks);
+    }
+
+    fn before_drop_in_place_data(
+        &mut self,
+        drop_in_place_fn: &Operand<'tcx>,
+        to_drop: &Spanned<Operand<'tcx>>,
+    ) where
+        C: ForDropping<'tcx>,
+    {
+        let mut blocks = vec![];
+
+        let func_ref = self.reference_operand(drop_in_place_fn);
+
+        let ptr_pack = self.reference_ptr_for_intrinsic(to_drop);
+        let (ptr_type_id_block, conc_ptr_assignment, [ptr_ref, ptr_value, ptr_type_id]) = self
+            .make_ptr_triple_args(
+                ptr_pack.ptr_operand_ref(),
+                ptr_pack.ptr_value().clone(),
+                ptr_pack.ptr_ty(),
+            );
+        blocks.push(ptr_type_id_block);
+
+        let mut block = self.make_bb_for_call(
+            sym::before_drop_in_place_data,
+            vec![
+                operand::move_for_local(func_ref.into()),
+                ptr_ref,
+                ptr_value,
+                ptr_type_id,
+            ],
+        );
+
+        block.statements.push(conc_ptr_assignment);
+
         blocks.push(block);
 
         self.insert_blocks(blocks);

@@ -253,9 +253,12 @@ impl<L, P, M> From<Place<L, P>> for PlaceWithMetadata<L, P, M> {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum PlaceUsage {
-    Read,
+    Copy,
+    Move,
     Write,
     Ref,
+    Drop,
+    Mark,
 }
 
 #[derive(Clone, Copy, Debug)]
