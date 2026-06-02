@@ -1,4 +1,7 @@
-pub use common::{type_info::*, types::VariantIndex};
+pub use common::{
+    type_info::*,
+    types::{FieldIndex, PointerOffset, VariantIndex},
+};
 
 pub(crate) trait TypeInfoExt {
     fn as_single_variant(&self) -> Option<&VariantInfo>;
@@ -134,3 +137,87 @@ impl FieldsShapeInfoExt for FieldsShapeInfo {
             .unwrap_or_else(|| panic!("Expected the fields shape to be a struct found {:?}", self))
     }
 }
+
+pub(crate) trait TypeLayoutResolver<'t> {
+    fn resolve_array_elements(
+        &self,
+        type_id: TypeId,
+    ) -> (TypeId, impl Iterator<Item = (PointerOffset, TypeSize)> + 't);
+
+    /// # Remarks
+    /// The items will be emitted in the order of the field offsets.
+    fn resolve_adt_fields(
+        &self,
+        type_id: TypeId,
+        variant: Option<VariantIndex>,
+    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't;
+}
+
+struct LayoutResolver<'a, D: ?Sized>(&'a D);
+
+// https://doc.rust-lang.org/reference/type-layout.html
+impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutResolver<'a, D> {
+    fn resolve_array_elements(
+        &self,
+        type_id: TypeId,
+    ) -> (TypeId, impl Iterator<Item = (PointerOffset, TypeSize)> + 't) {
+        let ty = self.0.get_type(&type_id).expect_array();
+        let item_ty = self.0.get_type(&ty.item_ty);
+        let item_size = item_ty.size().unwrap();
+        (
+            item_ty.id,
+            (0..ty.len).into_iter().map(move |i| {
+                let offset = item_size * i;
+                (offset, item_size)
+            }),
+        )
+    }
+
+    fn resolve_adt_fields(
+        &self,
+        type_id: TypeId,
+        variant: Option<crate::abs::VariantIndex>,
+    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't {
+        let ty = self.0.get_type(&type_id);
+        let variant = match variant {
+            Some(variant) => ty.get_variant(variant).unwrap(),
+            None => ty.expect_single_variant(),
+        };
+
+        use FieldsShapeInfo::*;
+        match &variant.fields {
+            Struct(shape) | Union(shape) => {
+                let fields = shape.fields_in_offset_order();
+                if cfg!(debug_assertions) {
+                    if matches!(&variant.fields, Union(..)) {
+                        assert!(
+                            fields.clone().into_iter().all(|(_, f)| f.offset == 0),
+                            "Union fields must have zero offset"
+                        );
+                    }
+                }
+
+                // We collect them to break the borrow
+                let field_sizes = fields
+                    .clone()
+                    .map(|(_, f)| self.0.get_size(&f.ty).unwrap())
+                    .collect::<Vec<_>>();
+                fields
+                    .zip(field_sizes.into_iter())
+                    .map(|((index, f), size)| (index, f.ty, f.offset, size))
+            }
+            NoFields | Array(..) => panic!(
+                "Unexpected shape for fields of an ADT: {:?}",
+                variant.fields
+            ),
+        }
+    }
+}
+
+pub(super) trait TypeLayoutResolverExt<'t>: TypeDatabase<'t> {
+    fn layouts<'a>(&'a self) -> impl TypeLayoutResolver<'t> + 'a {
+        LayoutResolver(self)
+    }
+}
+
+impl<'t, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolverExt<'t> for D {}

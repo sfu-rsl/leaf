@@ -6,14 +6,14 @@ use common::type_info::TypeInfo;
 
 use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
-    type_info::TypeInfoExt,
+    type_info::{TypeInfoExt, TypeLayoutResolver, TypeLayoutResolverExt},
     utils::{InPlaceSelfHierarchical, alias::RRef, byte_offset_from},
 };
 
 use super::{SymPlaceHandler, backend};
 
 use backend::{
-    GenericVariablesState, SymExSymPlaceHandler, SymExTypeManager, TypeLayoutResolver, ValueRef,
+    GenericVariablesState, SymExSymPlaceHandler, SymExTypeManager, ValueRef,
     alias::SymValueRefExprBuilder,
     expr::{lazy::RawPointerRetriever, prelude::*},
     implication::{
@@ -21,7 +21,6 @@ use backend::{
     },
     place::{LocalWithMetadata, PlaceWithMetadata, Projection},
     state::{SymPlaceSymEntity, sym_place::strategies::DerefBypassSymPlaceHandler},
-    type_info::TypeLayoutResolverExt,
 };
 
 mod memory;

@@ -17,9 +17,9 @@ use crate::pri::{
     refs::DefaultRefManager,
 };
 
-use super::{SymExBackend, SymExBackendConfig, SymExPlaceBuilder};
+use super::{MdSanBackend, MdSanPlaceBuilder};
 
-type BackendImpl = SymExBackend;
+type BackendImpl = MdSanBackend;
 type PlaceInfoImpl = <BackendImpl as RuntimeBackend>::PlaceInfo;
 type OperandImpl = <BackendImpl as RuntimeBackend>::Operand;
 
@@ -74,9 +74,9 @@ fn load_config() -> ::config::Config {
         .expect("Failed to read configurations")
 }
 
-pub struct SymExInstanceManager;
+pub struct MdSanInstanceManager;
 
-impl SymExInstanceManager {
+impl MdSanInstanceManager {
     #[inline]
     fn check_and_perform_on_backend<T>(
         backend: &mut Option<BackendImpl>,
@@ -91,12 +91,12 @@ impl SymExInstanceManager {
     }
 }
 
-impl InstanceManager for SymExInstanceManager {
+impl InstanceManager for MdSanInstanceManager {
     type PlaceInfo = PlaceInfoImpl;
     type Place = <BackendImpl as RuntimeBackend>::Place;
     type Operand = OperandImpl;
     type Backend = BackendImpl;
-    type PlaceBuilder = SymExPlaceBuilder;
+    type PlaceBuilder = MdSanPlaceBuilder;
     type PlaceRefManager = DefaultRefManager<PlaceInfoImpl>;
     type OperandRefManager = DefaultRefManager<OperandImpl>;
 
@@ -104,9 +104,9 @@ impl InstanceManager for SymExInstanceManager {
         INIT.call_once(|| {
             crate::init::<crate::utils::logging::IdentityFactory>();
 
-            log_info!("Initializing symbolic execution backend");
-            let config = load_config();
-            let config = SymExBackendConfig::try_from(config).expect("Failed to load config");
+            log_info!("Initializing md san backend");
+            // let config = load_config();
+            // let config = MdSanBackendConfig::try_from(config).expect("Failed to load config");
 
             let types_db =
                 common::type_info::rw::read_types_db().expect("Failed to read type info");
@@ -118,7 +118,7 @@ impl InstanceManager for SymExInstanceManager {
                     let types_db = PROGRAM_TYPES.get_or_init(move || types_db);
                 }
             }
-            let backend = BackendImpl::new(config, types_db);
+            let backend = BackendImpl::new(types_db);
             cfg_if! {
                 if #[cfg(feature = "runtime_access_raw_ptr")] {
                     unsafe { BACKEND = Some(backend); }
@@ -130,7 +130,7 @@ impl InstanceManager for SymExInstanceManager {
                     *binding = Some(backend);
                 }
             }
-            log_info!("SymEx backend initialized");
+            log_info!("MdSan backend initialized");
         });
     }
 

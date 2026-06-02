@@ -84,4 +84,7 @@ mod instantiations {
 
     use crate::CftPri;
     impl_pri_for_late_init_pri_of!(CftPri);
+
+    use crate::MdSanPri;
+    impl_pri_for_late_init_pri_of!(MdSanPri);
 }

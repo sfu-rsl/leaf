@@ -385,18 +385,3 @@ trait ImplicationInvestigator {
         assignment_id: (InstanceKindId, AssignmentId),
     ) -> Option<EnumAntecedentsResult>;
 }
-
-trait TypeLayoutResolver<'t> {
-    fn resolve_array_elements(
-        &self,
-        type_id: TypeId,
-    ) -> (TypeId, impl Iterator<Item = (PointerOffset, TypeSize)> + 't);
-
-    /// # Remarks
-    /// The items will be emitted in the order of the field offsets.
-    fn resolve_adt_fields(
-        &self,
-        type_id: TypeId,
-        variant: Option<VariantIndex>,
-    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't;
-}
