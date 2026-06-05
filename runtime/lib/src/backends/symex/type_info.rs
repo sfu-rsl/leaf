@@ -1,14 +1,8 @@
 use delegate::delegate;
 
-use common::{
-    pri::FieldIndex,
-    type_info::{CoreTypes, FieldsShapeInfo, TypeInfo, pass_core_type_names_to},
-};
+use common::type_info::{CoreTypes, MetadataValue, TypeInfo, pass_core_type_names_to};
 
-use crate::{
-    abs::{IntType, PointerOffset, TypeSize, backend::TypeDatabase},
-    type_info::{TypeInfoExt, TypeLayoutResolver},
-};
+use crate::abs::{IntType, backend::TypeDatabase};
 
 use super::alias::backend;
 use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, ValueType};
@@ -39,6 +33,7 @@ impl<D: TypeDatabase<'static>> TypeDatabase<'static> for SymExTypeManager<D> {
         to self.inner {
             fn opt_get_type(&self, key: &TypeId) -> Option<&'static TypeInfo>;
             fn core_types(&self) -> &CoreTypes<TypeId>;
+            fn get_metadata(&self, key: &str) -> Option<&MetadataValue>;
         }
     }
 }

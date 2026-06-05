@@ -17,6 +17,7 @@ use common::{
     type_info::{self, *},
 };
 
+use crate::passes::StorageExt;
 use crate::utils::file::TyCtxtFileExt;
 
 use super::{CompilationPass, Storage};
@@ -34,7 +35,7 @@ impl CompilationPass for TypeInfoExporter {
     fn visit_tcx_at_codegen_after(
         &mut self,
         tcx: rustc_middle::ty::TyCtxt,
-        _storage: &mut dyn Storage,
+        storage: &mut dyn Storage,
     ) {
         log_info!("Exporting type info");
 
@@ -60,6 +61,7 @@ impl CompilationPass for TypeInfoExporter {
                 let path = type_info::rw::write_types_db_in(
                     type_map.values(),
                     get_core_types(tcx).map(|t| type_id(tcx, t)),
+                    take_metadata_for_types_db(storage),
                     &out_dir,
                 )?;
                 for out_dir in out_dirs {
@@ -73,6 +75,25 @@ impl CompilationPass for TypeInfoExporter {
         };
         write().expect("Failed to write type info");
     }
+}
+
+const KEY_TYPE_DB_METADATA: &str = "type_db_metadata";
+
+pub(crate) fn add_metadata_to_types_db(
+    storage: &mut dyn Storage,
+    key: String,
+    metadata: MetadataValue,
+) {
+    storage
+        .get_or_default::<HashMap<String, MetadataValue>>(KEY_TYPE_DB_METADATA.to_owned())
+        .insert(key, metadata);
+}
+
+fn take_metadata_for_types_db(storage: &mut dyn Storage) -> HashMap<String, MetadataValue> {
+    storage
+        .get_or_default::<HashMap<String, MetadataValue>>(KEY_TYPE_DB_METADATA.to_owned())
+        .drain()
+        .collect()
 }
 
 fn capture_all_types<'s>(tcx: TyCtxt) -> HashMap<TypeId, TypeInfo> {

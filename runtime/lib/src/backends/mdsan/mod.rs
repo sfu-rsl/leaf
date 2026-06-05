@@ -56,7 +56,7 @@ pub(crate) struct MdSanBackend {
 
 impl MdSanBackend {
     pub(crate) fn new(types_db: impl crate::type_info::TypeDatabase<'static> + 'static) -> Self {
-        let type_manager_ref = Rc::new(types_db);
+        let type_manager_ref = Rc::new(type_info::MdSanTypeDb::new(types_db));
         let type_manager = type_manager_ref.clone();
 
         let vars_state_factory =
@@ -217,13 +217,9 @@ trait MdMemoryState {
 }
 
 trait MdTypeProvider {
-    fn is_md_type(&self, ty: &common::type_info::TypeInfo) -> bool;
+    fn is_md_container_type(&self, type_id: &TypeId) -> bool;
 
-    fn is_md_container_type2(&self, type_id: TypeId) -> bool;
-
-    fn is_md_type2(&self, type_id: TypeId) -> bool;
-
-    fn is_md_wrapped_type(&self, type_id: TypeId) -> bool;
+    fn is_md_type(&self, type_id: &TypeId) -> bool;
 }
 
 trait PlaceInspector {
