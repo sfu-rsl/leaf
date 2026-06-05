@@ -4,7 +4,7 @@ use derive_more as dm;
 
 use common::{log_debug, log_trace, log_warn};
 
-use crate::abs::{CalleeDef, FuncDef};
+use crate::abs::{CalleeDef, FuncDef, PlaceUsage};
 
 // FIXME: Completely separate data and control flow for data agnostic backends.
 
@@ -306,7 +306,7 @@ pub(crate) trait CallFlowBreakageCallback<P, V> {
 }
 
 pub(crate) mod tupling {
-    use crate::abs::{FieldIndex, LocalIndex};
+    use crate::abs::{FieldIndex, LocalIndex, PlaceUsage};
 
     use super::*;
     type LazyTuplingHelper<'h, 'f, P, V> =
@@ -334,14 +334,14 @@ pub(crate) mod tupling {
     }
 
     pub(crate) trait TuplingHelper<P, V>: CallShadowMemory<P, Value = V> {
-        fn make_tupled_arg_pseudo_place(&mut self) -> P;
+        fn make_tupled_arg_pseudo_place(&mut self, usage: PlaceUsage) -> P;
 
         /// Returns the number of fields in the tuple.
         fn num_fields(&mut self) -> FieldIndex;
 
         /// Takes a place and returns a place with projection to the field.
         /// It should make a valid place to be used with the memory.
-        fn field_place(&mut self, base: &P, field: FieldIndex) -> P;
+        fn field_place(&mut self, base: &P, field: FieldIndex, usage: PlaceUsage) -> P;
     }
 
     /// # Remarks
@@ -608,16 +608,18 @@ mod implementation {
                 tupled_value: V,
                 helper: &mut (impl TuplingHelper<P, V> + ?Sized),
             ) -> Vec<V> {
-                let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place();
-
                 // Write the value to the pseudo place in memory, then read the fields
-                let num_fields = helper.num_fields();
+                let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place(PlaceUsage::Write);
                 helper.set_place(&tupled_pseudo_place, tupled_value);
+
+                let num_fields = helper.num_fields();
+                let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place(PlaceUsage::Move);
                 // Read the fields (values inside the tuple) one by one.
                 (0..num_fields)
                     .into_iter()
                     .map(|i| {
-                        let field_place = helper.field_place(&tupled_pseudo_place, i);
+                        let field_place =
+                            helper.field_place(&tupled_pseudo_place, i, PlaceUsage::Move);
                         helper.take_place(&field_place)
                     })
                     .collect()
@@ -627,7 +629,7 @@ mod implementation {
                 separate_values: Vec<V>,
                 helper: &mut (impl TuplingHelper<P, V> + ?Sized),
             ) -> V {
-                let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place();
+                let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place(PlaceUsage::Write);
 
                 // Write the values to the field pseudo places in an isolated state, then read the tuple
                 debug_assert_eq!(separate_values.len(), helper.num_fields() as usize);
@@ -635,10 +637,15 @@ mod implementation {
                     .into_iter()
                     .enumerate()
                     .for_each(|(i, value)| {
-                        let field_place = helper.field_place(&tupled_pseudo_place, i as FieldIndex);
+                        let field_place = helper.field_place(
+                            &tupled_pseudo_place,
+                            i as FieldIndex,
+                            PlaceUsage::Write,
+                        );
                         helper.set_place(&field_place, value)
                     });
                 // Read the whole tuple.
+                let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place(PlaceUsage::Move);
                 helper.take_place(&tupled_pseudo_place)
             }
         }

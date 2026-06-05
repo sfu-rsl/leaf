@@ -98,7 +98,6 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
             self.type_manager,
             self.variables_state_factory,
         );
-        self.variables_state.add_layer();
 
         self.flow_manager.emplace_args(
             SignaturePlaces {
@@ -122,7 +121,6 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
         let token = self.flow_manager.start_return();
         self.flow_manager
             .grab_return_value(token, self.variables_state);
-        self.variables_state.drop_layer();
     }
 
     fn after_call(self, _assignment_id: AssignmentId, result_dest: Self::Place) {
@@ -165,16 +163,7 @@ impl DropHandler for MdSanCallHandler<'_> {
             .latest_dropped_place
             .take()
             .expect("Inconsistent instrumentation.");
-
-        if let MdSanPlaceValue::ToDropMdWrapped { wrapped_addr } = dropped_place {
-            log_info!("Dropping MD instance at address: {:?}", wrapped_addr);
-            let result = self
-                .variables_state
-                .update_place(&wrapped_addr, MdState::Dropped);
-            if !result {
-                log_info!("MD instance at address {:?} did not exist", wrapped_addr);
-            }
-        }
+        self.variables_state.mark_place_dropped(&dropped_place);
     }
 }
 
@@ -184,7 +173,8 @@ mod tupling {
     use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo};
 
     use crate::{
-        abs::{FieldIndex, RawAddress, TypeId},
+        abs::{FieldIndex, Local, PlaceUsage, RawAddress, TypeId, place::HasMetadata},
+        backends::mdsan::MdSanPlaceInfo,
         call::tupling::TuplingHelper,
         type_info::{FieldsShapeInfoExt, TypeInfoExt},
     };
@@ -212,8 +202,16 @@ mod tupling {
     }
 
     impl TuplingHelper<MdSanPlaceValue, MdSanValue> for TuplingHelperImpl<'_> {
-        fn make_tupled_arg_pseudo_place(&mut self) -> MdSanPlaceValue {
-            MdSanPlaceValue::NonRelevant {} // TODO
+        fn make_tupled_arg_pseudo_place(&mut self, usage: PlaceUsage) -> MdSanPlaceValue {
+            self.temp_vars_state.ref_place(
+                {
+                    let mut place_info = MdSanPlaceInfo::from(Local::Argument(0));
+                    place_info.metadata_mut().set_address(1 as RawAddress);
+                    place_info.metadata_mut().set_type_id(self.tuple_type);
+                    place_info
+                },
+                usage,
+            )
         }
 
         fn num_fields(&mut self) -> FieldIndex {
@@ -226,8 +224,19 @@ mod tupling {
                 .len() as FieldIndex
         }
 
-        fn field_place(&mut self, base: &MdSanPlaceValue, field: FieldIndex) -> MdSanPlaceValue {
-            MdSanPlaceValue::NonRelevant {} // TODO
+        fn field_place(
+            &mut self,
+            base: &MdSanPlaceValue,
+            field: FieldIndex,
+            _usage: PlaceUsage,
+        ) -> MdSanPlaceValue {
+            let field_info = &self.fields_info().fields()[field as usize];
+            let field_ty = field_info.ty;
+            base.project_field(
+                field_info.offset,
+                || self.type_manager.get_size(&field_ty).unwrap(),
+                || field_ty,
+            )
         }
     }
 
@@ -249,7 +258,7 @@ mod tupling {
             self.type_manager.get_type(&self.tuple_type)
         }
 
-        pub(crate) fn fields_info(&mut self) -> &StructShape {
+        pub(crate) fn fields_info(&'_ mut self) -> &StructShape {
             if self.fields_info.is_none() {
                 let type_info = self.type_info();
                 let info = match type_info.expect_single_variant().fields {
@@ -275,7 +284,7 @@ mod tupling {
                         MdSanPlaceValue::AccessedMdWrapped { .. }
                         | MdSanPlaceValue::ToCarryMdContainer { .. }
                         | MdSanPlaceValue::LifetimeMarkedMd { .. }
-                        | MdSanPlaceValue::ToDropMdWrapped { .. }
+                        | MdSanPlaceValue::ToDropMaybeMdWrapped { .. }
                         | MdSanPlaceValue::NonRelevant {} => unreachable!(),
                     })
                     .collect::<Vec<_>>()
@@ -494,26 +503,10 @@ impl CallShadowMemory<MdSanPlaceValue> for MdSanVariablesState {
     type Value = MdSanValue;
 
     fn take_place(&mut self, place: &MdSanPlaceValue) -> Self::Value {
-        match place {
-            MdSanPlaceValue::ToCarryMdContainer { mem_region } => {
-                MdMemoryState::take_place(self, mem_region)
-            }
-            MdSanPlaceValue::NonRelevant {} => MdSanValue::non_rel(),
-            MdSanPlaceValue::AccessedMdWrapped { .. }
-            | MdSanPlaceValue::ToDropMdWrapped { .. }
-            | MdSanPlaceValue::LifetimeMarkedMd { .. }
-            | MdSanPlaceValue::LazyDestination(..) => unreachable!(),
-        }
+        MdMemoryState::take_place(self, place)
     }
 
     fn set_place(&mut self, place: &MdSanPlaceValue, value: Self::Value) {
-        match place {
-            MdSanPlaceValue::LazyDestination(place) => MdMemoryState::set_place(self, place, value),
-            MdSanPlaceValue::ToCarryMdContainer { .. }
-            | MdSanPlaceValue::NonRelevant {}
-            | MdSanPlaceValue::AccessedMdWrapped { .. }
-            | MdSanPlaceValue::ToDropMdWrapped { .. }
-            | MdSanPlaceValue::LifetimeMarkedMd { .. } => {}
-        }
+        MdMemoryState::set_place(self, place, value)
     }
 }

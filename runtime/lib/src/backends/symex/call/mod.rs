@@ -207,7 +207,7 @@ mod tupling {
     use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo};
 
     use crate::{
-        abs::{FieldIndex, RawAddress},
+        abs::{FieldIndex, PlaceUsage, RawAddress},
         call::tupling::TuplingHelper,
         type_info::{FieldsShapeInfoExt, TypeInfoExt},
     };
@@ -238,7 +238,7 @@ mod tupling {
     }
 
     impl TuplingHelper<DeterPlaceValueRef, SymExValue> for TuplingHelperImpl<'_> {
-        fn make_tupled_arg_pseudo_place(&mut self) -> DeterPlaceValueRef {
+        fn make_tupled_arg_pseudo_place(&mut self, _usage: PlaceUsage) -> DeterPlaceValueRef {
             DeterPlaceValueRef::new(
                 DeterministicPlaceValue::from_addr_type_info(
                     RawAddress::default(),
@@ -262,6 +262,7 @@ mod tupling {
             &mut self,
             base: &DeterPlaceValueRef,
             field: FieldIndex,
+            _usage: PlaceUsage,
         ) -> DeterPlaceValueRef {
             let field_info = &self.fields_info().fields()[field as usize];
             DeterPlaceValueRef::new(
