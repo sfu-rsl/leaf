@@ -1,18 +1,16 @@
 use core::iter;
 
-use crate::backends::mdsan::state::WritablePlace;
-use crate::backends::mdsan::{MdMemoryState, PlaceInspector};
-use crate::pri::fluent::backend::AssignmentHandler;
-use crate::type_info::{TypeLayoutResolver, TypeLayoutResolverExt};
 use crate::{
-    abs::{AssignmentId, FieldIndex},
+    abs::{AssignmentId, FieldIndex, TypeId},
+    pri::fluent::backend::AssignmentHandler,
+    type_info::{TypeLayoutResolver, TypeLayoutResolverExt},
     utils::MutAccess,
 };
 
 use super::alias::backend;
 use backend::{
-    MdSanBackend, MdSanPlaceInspector, MdSanPlaceValue, MdSanTypeManager, MdSanValue,
-    MdSanVariablesState,
+    MdMemoryState, MdSanBackend, MdSanPlaceInspector, MdSanPlaceValue, MdSanTypeManager,
+    MdSanValue, MdSanVariablesState, PlaceInspector,
 };
 
 pub(super) struct AssignmentServices<'a> {
@@ -34,7 +32,7 @@ pub(super) use services_from_backend;
 
 pub(crate) struct MdSanAssignmentHandler<'s, 'a: 's> {
     id: AssignmentId,
-    dest: WritablePlace,
+    dest: MdSanPlaceValue,
     services: MutAccess<'s, AssignmentServices<'a>>,
 }
 
@@ -52,9 +50,6 @@ impl MdSanAssignmentHandler<'_, '_> {
         dest: MdSanPlaceValue,
         services: MutAccess<'s, AssignmentServices<'a>>,
     ) -> MdSanAssignmentHandler<'s, 'a> {
-        let MdSanPlaceValue::LazyDestination(dest) = dest else {
-            unreachable!()
-        };
         MdSanAssignmentHandler { id, dest, services }
     }
 }
@@ -84,11 +79,9 @@ impl<'s, 'a: 's> AssignmentHandler for MdSanAssignmentHandler<'s, 'a> {
         fields: impl Iterator<Item = Self::Operand>,
         variant: Option<common::pri::VariantIndex>,
     ) {
-        if self.dest.is_md(self.services.type_manager) {
+        if let Some(true) = self.dest.is_md(self.services.type_manager) {
             // FIXME: What if we have MD<MD<T>>?
-            self.set(MdSanValue::fresh(
-                self.dest.size(self.services.type_manager),
-            ));
+            return self.services.vars_state.set_place_alive(&self.dest);
         }
 
         self.set_adt_value(fields.map(|f| f.is_rel().then_some(f)), variant);
@@ -183,7 +176,7 @@ impl<'s, 'a: 's> MdSanAssignmentHandler<'s, 'a> {
                 .services
                 .type_manager
                 .layouts()
-                .resolve_adt_fields(self.dest.type_id(), variant_index)
+                .resolve_adt_fields(self.dest_type_id(), variant_index)
                 .map(|(index, _type_id, offset, _size)| (index, offset));
             lay_out(fields, field_offsets)
         };
@@ -204,7 +197,7 @@ impl<'s, 'a: 's> MdSanAssignmentHandler<'s, 'a> {
                 .services
                 .type_manager
                 .layouts()
-                .resolve_array_elements(self.dest.type_id())
+                .resolve_array_elements(self.dest_type_id())
                 .1
                 .enumerate()
                 .map(|(index, (offset, _size))| (index as _, offset));
@@ -216,6 +209,12 @@ impl<'s, 'a: 's> MdSanAssignmentHandler<'s, 'a> {
 
     fn inspect_place_for_access(&self, place: &MdSanPlaceValue) {
         MdSanPlaceInspector::new(self.services.vars_state).inspect_place_for_access(place);
+    }
+
+    fn dest_type_id(&self) -> TypeId {
+        self.dest
+            .type_id(self.services.type_manager)
+            .unwrap_or_else(|| panic!("Unknown type for assignment destination: {:?}", self.dest))
     }
 }
 

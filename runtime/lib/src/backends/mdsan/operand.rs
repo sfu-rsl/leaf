@@ -1,6 +1,5 @@
 use crate::{
     abs::{Constant, SymVariable},
-    backends::mdsan::state::WritablePlace,
     pri::fluent::backend::OperandHandler,
 };
 
@@ -28,23 +27,14 @@ impl OperandHandler for MdSanOperandHandler<'_> {
 
     fn copy_of(self, place: Self::Place) -> Self::Operand {
         MdSanPlaceInspector::new(self.vars_state).inspect_place_for_access(&place);
+        /* MD wrapped values that implement Copy, do not implement Drop, so we do not detect them.
+         * Other than those, it is possible to copy a value owned by the wrapped value,
+         * which need to be only checked for liveness and does not propagate the state.*/
         MdSanValue::non_rel()
     }
 
     fn move_of(self, place: Self::Place) -> Self::Operand {
-        match place {
-            backend::state::PlaceValue2::NonRelevant {} => MdSanValue::non_rel(),
-            backend::state::PlaceValue2::AccessedMdWrapped { .. } => {
-                // Calling into_inner: Decommission of the MD wrapper, nothing to carry
-                MdSanValue::non_rel()
-            }
-            backend::state::PlaceValue2::ToCarryMdContainer { mem_region } => {
-                self.vars_state.take_place(&mem_region)
-            }
-            backend::state::PlaceValue2::LazyDestination(WritablePlace { .. }) => unreachable!(),
-            backend::state::PlaceValue2::LifetimeMarkedMd { .. } => unreachable!(),
-            backend::state::PlaceValue2::ToDropMdWrapped { .. } => unreachable!(),
-        }
+        self.vars_state.take_place(&place)
     }
 
     fn const_from(self, _info: Constant) -> Self::Operand {

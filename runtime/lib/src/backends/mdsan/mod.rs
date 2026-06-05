@@ -25,7 +25,7 @@ mod associated_types {
     use super::*;
 
     pub(super) type MdSanPlaceInfo = place::PlaceWithMetadata;
-    pub(super) type MdSanPlaceValue = state::PlaceValue2;
+    pub(super) type MdSanPlaceValue = state::PlaceValue;
     pub(super) type MdSanValue = state::Value;
 
     pub(super) type MdSanPlaceBuilder = place::MdSanPlaceBuilder;
@@ -201,13 +201,19 @@ trait MdMemoryState {
 
     fn set_place(&mut self, place: &Self::ToSetPlaceValue, value: Self::Value);
 
-    fn update_place(
-        &mut self,
-        place: &Self::ToUpdatePlaceValue,
-        value: Self::ValueForAddress,
-    ) -> bool;
+    fn set_place_alive(&mut self, place: &Self::ToUpdatePlaceValue);
 
-    fn erase_place(&mut self, place: &Self::ToErasePlaceValue);
+    fn mark_place_dropped(&mut self, place: &Self::ToUpdatePlaceValue);
+
+    fn erase_place(&mut self, place: &Self::ToErasePlaceValue) -> bool;
+
+    fn copy_raw_memory(
+        &mut self,
+        conc_src_ptr: RawAddress,
+        conc_dst_ptr: RawAddress,
+        ptr_type_id: TypeId,
+        conc_count: usize,
+    );
 }
 
 trait MdTypeProvider {

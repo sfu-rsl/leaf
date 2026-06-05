@@ -1,19 +1,17 @@
-use core::num::NonZero;
-use std::{
+use core::{
     fmt::{self, Debug, Display},
+    num::NonZero,
     ops::Range,
 };
 
 use common::pri::TypeSize;
 
-use crate::utils::{RangeIntersection, byte_offset_from};
+use crate::utils::RangeIntersection;
 
 pub(super) type Address = common::types::RawAddress;
 
-use super::MemObject;
-
 mod high {
-    use common::{log_debug, log_warn, pri::TypeId, types::PointerOffset};
+    use common::{log_debug, log_warn, types::PointerOffset};
 
     use super::low::Memory;
 
@@ -76,10 +74,10 @@ mod high {
         }
 
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn erase_objects(&mut self, addr: Address, size: TypeSize) {
+        pub(crate) fn erase_objects(&mut self, addr: Address, size: TypeSize) -> usize {
             let Some(size) = NonZero::<TypeSize>::new(size) else {
                 // ZSTs are not stored to be erased
-                return;
+                return 0;
             };
 
             let range = range_from(addr, size);
@@ -105,7 +103,7 @@ mod high {
                     true
                 },
                 |_, _, _| {},
-            );
+            )
         }
 
         /// # Panics
@@ -155,16 +153,15 @@ mod high {
             None
         }
 
-        pub(crate) fn update_containing(&mut self, addr: Address, value: O) -> bool {
+        pub(crate) fn update_containing(&mut self, addr: Address, value: O) -> Option<O> {
             if let Some((obj_addr, (obj_size, obj))) = self.mem.before_or_at_mut(&addr).peek_prev()
             {
                 let obj_range = range_from(*obj_addr, *obj_size);
                 if obj_range.contains(&addr) {
-                    *obj = value;
-                    return true;
+                    return Some(core::mem::replace(obj, value));
                 }
             }
-            false
+            None
         }
     }
 }
