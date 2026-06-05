@@ -1,3 +1,6 @@
+#[cfg(feature = "std")]
+use std::prelude::rust_2021::*;
+
 use super::types::TypeId;
 
 #[cfg_attr(not(core_build), macro_export)]
@@ -291,4 +294,82 @@ pub fn current_instant_millis() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
         .as_millis()
+}
+
+#[cfg(feature = "std")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(::rkyv::Archive, ::rkyv::Serialize, ::rkyv::Deserialize)
+)]
+#[cfg_attr(
+    feature = "rkyv",
+    rkyv(
+        serialize_bounds(
+            __S: rkyv::ser::Writer + rkyv::ser::Allocator,
+            __S::Error: rkyv::rancor::Source,
+        ),
+        deserialize_bounds(__D::Error: rkyv::rancor::Source),
+        bytecheck(
+            bounds(
+                __C: rkyv::validation::ArchiveContext,
+            )
+        ),
+    ),
+)]
+pub enum JsonLikeValue {
+    Null,
+    Bool(bool),
+    Number(u128),
+    String(String),
+    Array(#[cfg_attr(feature = "rkyv", rkyv(omit_bounds))] Vec<JsonLikeValue>),
+    Object(
+        #[cfg_attr(feature = "rkyv", rkyv(omit_bounds))]
+        std::collections::HashMap<String, JsonLikeValue>,
+    ),
+}
+
+#[cfg(feature = "std")]
+impl JsonLikeValue {
+    pub fn as_bool(&self) -> Option<bool> {
+        if let Self::Bool(b) = self {
+            Some(*b)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_number(&self) -> Option<u128> {
+        if let Self::Number(n) = self {
+            Some(*n)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        if let Self::String(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_array(&self) -> Option<&[JsonLikeValue]> {
+        if let Self::Array(arr) = self {
+            Some(arr)
+        } else {
+            None
+        }
+    }
+
+    pub fn as_object(&self) -> Option<&std::collections::HashMap<String, JsonLikeValue>> {
+        if let Self::Object(obj) = self {
+            Some(obj)
+        } else {
+            None
+        }
+    }
 }

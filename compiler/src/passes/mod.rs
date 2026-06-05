@@ -6,6 +6,7 @@ mod p_map_exp;
 mod program_dep;
 mod runtime_adder;
 pub(crate) mod type_info;
+mod md_types;
 
 use common::log_debug;
 use std::any::Any;
@@ -37,6 +38,7 @@ pub(crate) use p_map_exp::ProgramMapExporter;
 pub(crate) use program_dep::ProgramDependenceMapExporter;
 pub(crate) use runtime_adder::RuntimeExternCrateAdder;
 pub(crate) use type_info::TypeInfoExporter;
+pub(crate) use md_types::MdInfoExporter;
 
 pub(super) type Callbacks = dyn CallbacksExt + Send;
 

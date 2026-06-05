@@ -89,9 +89,10 @@ impl MdMemoryState for RawPointerVariableState {
         }
 
         match place {
-            PlaceValue::LazyDestination(writable_place) => {
-                self.set_region(writable_place.memory_region(&self.type_manager), value)
-            }
+            PlaceValue::LazyDestination(writable_place) => self.set_region(
+                writable_place.memory_region(self.type_manager.as_ref()),
+                value,
+            ),
             PlaceValue::NonRelevant {} => {
                 panic!("Setting labels to a place that was assessed as non-relevant")
             }
@@ -122,7 +123,7 @@ impl MdMemoryState for RawPointerVariableState {
     fn set_place_alive(&mut self, place: &Self::ToUpdatePlaceValue) {
         match place {
             PlaceValue::LazyDestination(writable_place) => {
-                let mem_region = writable_place.memory_region(&self.type_manager);
+                let mem_region = writable_place.memory_region(self.type_manager.as_ref());
                 self.set_region(mem_region, Value::fresh(mem_region.size))
             }
             PlaceValue::NonRelevant {} => {
@@ -281,7 +282,7 @@ impl RawPointerVariableState {
         place
             .metadata()
             .type_id()
-            .filter(|type_id| self.type_manager.is_md_container_type2(*type_id))
+            .filter(|type_id| self.type_manager.is_md_container_type(type_id))
             .map(|type_id| MemoryRegion {
                 addr: place.metadata().address(),
                 size: self.get_type_size(type_id),
@@ -307,7 +308,7 @@ impl RawPointerVariableState {
         place
             .metadata()
             .type_id()
-            .filter(|type_id| self.type_manager.is_md_container_type2(*type_id))
+            .filter(|type_id| self.type_manager.is_md_container_type(type_id))
             .map(|type_id| MemoryRegion {
                 addr: place.metadata().address(),
                 size: self.get_type_size(type_id),
@@ -319,9 +320,9 @@ impl RawPointerVariableState {
             let Some(type_id) = type_id else {
                 return None;
             };
-            if self.type_manager.is_md_container_type2(type_id) {
+            if self.type_manager.is_md_container_type(&type_id) {
                 Some(PlaceMdRelevance::Container(
-                    self.type_manager.is_md_type2(type_id),
+                    self.type_manager.is_md_type(&type_id),
                 ))
             } else {
                 None

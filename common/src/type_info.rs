@@ -201,7 +201,10 @@ impl<V: Copy> From<NamedCoreTypes<V>> for CoreTypes<V> {
 pub struct GenericTypesData<All, Cores> {
     pub all_types: All,
     pub core_types: Cores,
+    pub metadata: HashMap<String, MetadataValue>,
 }
+
+pub type MetadataValue = super::utils::JsonLikeValue;
 
 pub type TypesData = GenericTypesData<HashMap<TypeId, TypeInfo>, CoreTypes>;
 
@@ -227,6 +230,8 @@ pub trait TypeDatabase<'t> {
     }
 
     fn core_types(&self) -> &CoreTypes<TypeId>;
+
+    fn get_metadata(&self, key: &str) -> Option<&MetadataValue>;
 }
 
 impl<'t> TypeDatabase<'t> for &'t TypesData {
@@ -237,6 +242,10 @@ impl<'t> TypeDatabase<'t> for &'t TypesData {
     fn core_types(&self) -> &CoreTypes<TypeId> {
         &self.core_types
     }
+
+    fn get_metadata(&self, key: &str) -> Option<&MetadataValue> {
+        self.metadata.get(key)
+    }
 }
 
 #[cfg(feature = "std")]
@@ -246,6 +255,7 @@ impl<'t, D: TypeDatabase<'t> + ?Sized> TypeDatabase<'t> for std::rc::Rc<D> {
             fn opt_get_type(&self, key: &TypeId) -> Option<&'t TypeInfo>;
             fn get_type(&self, key: &TypeId) -> &'t TypeInfo;
             fn core_types(&self) -> &CoreTypes<TypeId>;
+            fn get_metadata(&self, key: &str) -> Option<&MetadataValue>;
         }
     }
 }
@@ -299,6 +309,7 @@ pub mod rw {
         pub(super) fn write<'a>(
             all_types: impl Iterator<Item = &'a TypeInfo>,
             core_types: CoreTypes<TypeId>,
+            metadata: HashMap<String, MetadataValue>,
             out_dir: impl AsRef<Path>,
         ) -> Result<PathBuf, Box<dyn StdError>> {
             let path = out_dir.as_ref().join(FILENAME_DB);
@@ -313,6 +324,7 @@ pub mod rw {
             let data = SerializedTypesData {
                 all_types: all_types.cloned().collect(),
                 core_types: core_types.to_pairs().to_vec(),
+                metadata,
             };
             data.serialize(&mut serializer)
                 .map(|_| path)
@@ -366,11 +378,21 @@ pub mod rw {
                         unsafe { &rkyv::access_unchecked::<ArchivedTypesData>(&raw).core_types };
                     rkyv::deserialize::<CoreTypes, Error>(serialized)
                 }?;
+                #[cfg(debug_assertions)]
+                let metadata = rkyv::access::<ArchivedTypesData, Error>(&raw)
+                    .and_then(|a| rkyv::deserialize::<_, Error>(&a.metadata))?;
+                #[cfg(not(debug_assertions))]
+                let metadata = {
+                    let serialized =
+                        unsafe { &rkyv::access_unchecked::<ArchivedTypesData>(&raw).metadata };
+                    rkyv::deserialize::<_, Error>(serialized)
+                }?;
                 Ok(Self {
                     raw,
                     deserialized: GenericTypesData {
                         all_types: Default::default(),
                         core_types,
+                        metadata,
                     },
                 })
             }
@@ -430,6 +452,10 @@ pub mod rw {
             fn core_types(&self) -> &CoreTypes<TypeId> {
                 &self.deserialized.core_types
             }
+
+            fn get_metadata(&self, key: &str) -> Option<&MetadataValue> {
+                self.deserialized.metadata.get(key)
+            }
         }
 
         pub(super) const FILENAME_DB: &str = "types.rkyv";
@@ -444,6 +470,7 @@ pub mod rw {
         pub(super) fn write<'a>(
             all_types: impl Iterator<Item = &'a TypeInfo>,
             core_types: CoreTypes<TypeId>,
+            metadata: HashMap<String, MetadataValue>,
             out_dir: impl AsRef<Path>,
         ) -> Result<PathBuf, Box<dyn StdError>> {
             let path = out_dir.as_ref().join(FILENAME_DB);
@@ -465,6 +492,7 @@ pub mod rw {
                     .map(|t| (t.id, t))
                     .collect(),
                 core_types,
+                metadata,
             };
 
             rkyv::api::high::to_bytes_in::<_, Error>(&data, rkyv::ser::writer::IoWriter::new(file))
@@ -500,19 +528,25 @@ pub mod rw {
     pub fn write_types_db_in<'a>(
         types: impl Iterator<Item = &'a TypeInfo> + Clone,
         core_types: CoreTypes<TypeId>,
+        metadata: HashMap<String, MetadataValue>,
         out_dir: impl AsRef<Path>,
     ) -> Result<PathBuf, Box<dyn StdError>> {
         log_info!("Writing type info db in: `{}`", out_dir.as_ref().display());
 
         if cfg!(debug_assertions) {
-            serdes::write(types.clone(), core_types.clone(), out_dir.as_ref())?;
+            serdes::write(
+                types.clone(),
+                core_types.clone(),
+                metadata.clone(),
+                out_dir.as_ref(),
+            )?;
         }
 
         // Writing in JSON format may be used for debugging purposes, so making it easier to enable.
         let result = if cfg!(info_db_fmt = "json") {
-            serdes::write(types, core_types, out_dir)
+            serdes::write(types, core_types, metadata, out_dir)
         } else if cfg!(info_db_fmt = "rkyv") {
-            rkyving::write(types, core_types, out_dir)
+            rkyving::write(types, core_types, metadata, out_dir)
         } else {
             unreachable!()
         };

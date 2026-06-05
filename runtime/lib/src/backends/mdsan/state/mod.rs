@@ -127,7 +127,7 @@ impl WritablePlace {
     }
 
     pub fn is_md(&self, type_manager: &(impl MdTypeProvider + ?Sized)) -> bool {
-        type_manager.is_md_type2(self.type_id())
+        type_manager.is_md_type(&self.type_id())
     }
 
     pub fn size(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> TypeSize {

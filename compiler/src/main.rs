@@ -212,6 +212,7 @@ mod driver_callbacks {
 
         let passes = chain!(
             prerequisites_pass,
+            <MdInfoExporter>,
             <TypeInfoExporter>,
             <ProgramMapExporter>,
             <ProgramDependenceMapExporter>,
