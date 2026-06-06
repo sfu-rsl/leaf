@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use rustc_middle::mir::{self, visit::Visitor};
 use rustc_middle::ty::{
     EarlyBinder, GenericArgsRef, Instance, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
@@ -35,11 +36,8 @@ impl CompilationPass for MdInfoExporter {
         let (md_touching_instances, md_containers, found_mds) = scan_all_bodies(tcx);
 
         log_info!(
-            "Instances: {:?}",
-            md_touching_instances
-                .iter()
-                .map(|i| i.def)
-                .collect::<Vec<_>>()
+            "MIR Bodies That Touch ManuallyDrop: {}",
+            serde_json::to_string(&list_bodies_to_include(tcx, &md_touching_instances)).unwrap()
         );
 
         let set_to_array = |s: &HashSet<TypeId>| {
@@ -129,6 +127,22 @@ fn scan_all_bodies<'s>(tcx: TyCtxt) -> (HashSet<Instance>, HashSet<TypeId>, Hash
 
 fn type_id<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> TypeId {
     TypeId::new(tcx.type_id_hash(ty).as_u128()).unwrap()
+}
+
+fn list_bodies_to_include<'tcx>(
+    tcx: TyCtxt<'tcx>,
+    md_touching_instances: &HashSet<Instance>,
+) -> Vec<common::types::DefId> {
+    md_touching_instances
+        .iter()
+        .map(|i| i.def_id())
+        .filter(|def_id| {
+            tcx.crate_name(def_id.krate).as_str()
+                != *super::instr::pri_utils::sym::RUNTIME_LIB_CRATE
+        })
+        .map(|def_id| common::types::DefId(def_id.krate.as_u32(), def_id.index.as_u32()))
+        .sorted()
+        .collect()
 }
 
 struct MdCollectorVisitor<'tcx, 's, 'b> {

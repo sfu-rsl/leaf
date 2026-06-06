@@ -36,6 +36,20 @@ pub(super) fn should_instrument<'tcx>(
         return false;
     }
 
+    if is_lang_start_item(tcx, def_id) {
+        return false;
+    }
+
+    // To be removed once we ensure it is working correctly.
+    if false && is_drop_fn(tcx, def_id) {
+        return false;
+    }
+
+    // Some intrinsic functions have body.
+    if tcx.intrinsic(def_id).is_some() {
+        return false;
+    }
+
     rules::bake_rules(storage, get_exceptional_exclusions);
     let rules = rules::get_baked_body_rules(storage);
     if let Some((decision, item)) =
@@ -51,20 +65,6 @@ pub(super) fn should_instrument<'tcx>(
             decision
         );
         return decision;
-    }
-
-    if is_lang_start_item(tcx, def_id) {
-        return false;
-    }
-
-    // To be removed once we ensure it is working correctly.
-    if false && is_drop_fn(tcx, def_id) {
-        return false;
-    }
-
-    // Some intrinsic functions have body.
-    if tcx.intrinsic(def_id).is_some() {
-        return false;
     }
 
     true
