@@ -44,6 +44,7 @@ pub(crate) enum EntityFilter {
 pub(crate) enum EntityLocationFilter {
     #[serde(alias = "def_path")]
     DefPathMatch(PatternMatch),
+    DefId(DefIdFilter),
     Crate(CrateFilter),
 }
 
@@ -54,6 +55,8 @@ pub(crate) enum CrateFilter {
     Externality(bool),
     Name(PatternMatch),
 }
+
+pub(crate) type DefIdFilter = common::types::DefId;
 
 filter_struct! {
     #[derive(dm::From)]
