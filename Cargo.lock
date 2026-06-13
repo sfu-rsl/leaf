@@ -1708,6 +1708,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "runtime_mdsan"
+version = "0.2.0"
+dependencies = [
+ "common",
+ "runtime",
+]
+
+[[package]]
 name = "runtime_noop"
 version = "0.2.0"
 dependencies = [
