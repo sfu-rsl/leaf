@@ -966,36 +966,38 @@ pub(super) mod utils {
         tcx: TyCtxt<'tcx>,
         ty: Ty<'tcx>,
     ) -> common::pri::PrimitiveType {
-            use mir_ty::FloatTy;
-            use common::pri::PrimitiveType;
-            match ty.kind() {
-                TyKind::Bool => PrimitiveType::BOOL,
-                TyKind::Char => PrimitiveType::CHAR,
-                TyKind::Int(_) => match ty.primitive_size(tcx).bytes() {
-                    1 => PrimitiveType::I8,
-                    2 => PrimitiveType::I16,
-                    4 => PrimitiveType::I32,
-                    8 => PrimitiveType::I64,
-                    16 => PrimitiveType::I128,
-                    s => panic!("Unexpected integer size: {s}"),
-                },
-                TyKind::Uint(_) => match ty.primitive_size(tcx).bytes() {
-                    1 => PrimitiveType::U8,
-                    2 => PrimitiveType::U16,
-                    4 => PrimitiveType::U32,
-                    8 => PrimitiveType::U64,
-                    16 => PrimitiveType::U128,
-                    s => panic!("Unexpected integer size: {s}"),
-                },
-                TyKind::Float(float_ty) => match float_ty {
+        use common::pri::PrimitiveType;
+        match ty.kind() {
+            TyKind::Bool => PrimitiveType::BOOL,
+            TyKind::Char => PrimitiveType::CHAR,
+            TyKind::Int(_) => match ty.primitive_size(tcx).bytes() {
+                1 => PrimitiveType::I8,
+                2 => PrimitiveType::I16,
+                4 => PrimitiveType::I32,
+                8 => PrimitiveType::I64,
+                16 => PrimitiveType::I128,
+                s => panic!("Unexpected integer size: {s}"),
+            },
+            TyKind::Uint(_) => match ty.primitive_size(tcx).bytes() {
+                1 => PrimitiveType::U8,
+                2 => PrimitiveType::U16,
+                4 => PrimitiveType::U32,
+                8 => PrimitiveType::U64,
+                16 => PrimitiveType::U128,
+                s => panic!("Unexpected integer size: {s}"),
+            },
+            TyKind::Float(float_ty) => {
+                use mir_ty::FloatTy;
+                match float_ty {
                     FloatTy::F16 => PrimitiveType::F16,
                     FloatTy::F32 => PrimitiveType::F32,
                     FloatTy::F64 => PrimitiveType::F64,
                     FloatTy::F128 => PrimitiveType::F128,
-                },
-                _ if ty.is_primitive() => panic!("Unexpected primitive type: {}", ty),
-                _ => panic!("Unexpected non-primitive type."),
+                }
             }
+            _ if ty.is_primitive() => panic!("Unexpected primitive type: {}", ty),
+            _ => panic!("Unexpected non-primitive type."),
+        }
     }
 
     pub(super) fn ptr_to_place<'tcx>(
