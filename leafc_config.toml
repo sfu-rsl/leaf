@@ -64,7 +64,7 @@ all = [
 
 # [[instr_rules.exclude]]
 # entity = "call_flow"
-# kind = { any = ["call_control", "call_input", "func_data"] }
+# kind = { any = ["call_addr", "call_input", "func_data", "func_addr"] }
 # all = []
 
 # [[instr_rules.exclude]]
