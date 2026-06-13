@@ -116,8 +116,7 @@ def should_add_leaf_as_dep() -> bool:
 def common_cargo_options(dummy_crate_dir: Path) -> list[str]:
     return [
         f"--manifest-path={dummy_crate_dir.joinpath('Cargo.toml')}",
-        f"--target={BUILD_TARGET}",
-        "-Zbuild-std=core,std,panic_unwind,panic_abort,test",
+        *OPTS_BUILD_STD,
     ]
 
 
