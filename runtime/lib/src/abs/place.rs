@@ -1,19 +1,16 @@
-use super::{FieldIndex, LocalIndex, VariantIndex};
+use core::ptr::NonNull;
 
 use derive_more as dm;
+
+use common::{log_error, log_warn};
+
+use super::{FieldIndex, LocalIndex, RawAddress, TypeId, TypeSize, ValueType, VariantIndex};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Local {
     ReturnValue,          // 0
     Argument(LocalIndex), // 1-n
     Normal(LocalIndex),   // > n
-}
-
-impl Local {
-    #[inline(always)]
-    pub(crate) fn is_func_local(&self) -> bool {
-        matches!(self, Local::ReturnValue | Local::Argument(_))
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -54,30 +51,6 @@ impl<B, P> Place<B, P> {
     #[inline]
     pub fn add_projection(&mut self, projection: P) {
         self.projections.push(projection);
-    }
-
-    #[inline]
-    pub fn with_projection(mut self, projection: P) -> Self {
-        self.add_projection(projection);
-        self
-    }
-}
-
-impl<B, P> From<B> for Place<B, P> {
-    fn from(value: B) -> Self {
-        Self::new(value)
-    }
-}
-
-impl<P> TryFrom<Place<Local, P>> for Local {
-    type Error = Place<Local, P>;
-
-    fn try_from(value: Place<Local, P>) -> Result<Self, Self::Error> {
-        if !value.has_projection() {
-            Ok(value.base)
-        } else {
-            Err(value)
-        }
     }
 }
 
@@ -135,35 +108,11 @@ pub(crate) trait HasMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, dm::Deref, dm::DerefMut, dm::From)]
-pub(crate) struct LocalWithMetadata<M> {
-    pub local: Local,
+pub(crate) struct LocalWithMetadata<M = DefaultPlaceMetadata> {
     #[deref]
     #[deref_mut]
+    pub local: Local,
     metadata: M,
-}
-
-impl<M> LocalWithMetadata<M> {
-    pub(crate) fn new(local: Local, metadata: M) -> Self {
-        Self { local, metadata }
-    }
-}
-
-impl<M> AsRef<Local> for LocalWithMetadata<M> {
-    fn as_ref(&self) -> &Local {
-        &self.local
-    }
-}
-
-impl<M> From<Local> for LocalWithMetadata<M>
-where
-    M: Default,
-{
-    fn from(value: Local) -> Self {
-        Self {
-            local: value,
-            metadata: Default::default(),
-        }
-    }
 }
 
 impl<M> HasMetadata for LocalWithMetadata<M> {
@@ -190,19 +139,20 @@ impl<M> HasMetadata for LocalWithMetadata<M> {
 */
 
 #[derive(Debug, Clone, dm::Deref, dm::DerefMut)]
-pub(crate) struct PlaceWithMetadata<L, P, M> {
+pub(crate) struct GenericPlaceWithMetadata<B, P, M> {
     #[deref]
     #[deref_mut]
-    place: Place<L, P>,
+    place: Place<B, P>,
     projs_metadata: Vec<M>,
 }
 
-impl<L, P> HasMetadata for PlaceWithMetadata<L, P, L::Metadata>
+impl<B, P> HasMetadata for GenericPlaceWithMetadata<B, P, B::Metadata>
 where
-    L: HasMetadata,
+    B: HasMetadata,
 {
-    type Metadata = L::Metadata;
+    type Metadata = B::Metadata;
 
+    #[inline]
     fn metadata(&self) -> &Self::Metadata {
         if self.has_projection() {
             debug_assert_eq!(self.projs_metadata.len(), self.projections().len());
@@ -212,6 +162,7 @@ where
         }
     }
 
+    #[inline]
     fn metadata_mut(&mut self) -> &mut Self::Metadata {
         if self.has_projection() {
             debug_assert_eq!(self.projs_metadata.len(), self.projections().len());
@@ -222,7 +173,7 @@ where
     }
 }
 
-impl<L, P, M> PlaceWithMetadata<L, P, M> {
+impl<B, P, M> GenericPlaceWithMetadata<B, P, M> {
     pub(crate) fn push_metadata(&mut self, metadata: M) {
         self.projs_metadata.push(metadata);
     }
@@ -230,24 +181,86 @@ impl<L, P, M> PlaceWithMetadata<L, P, M> {
     pub(crate) fn projs_metadata(&self) -> impl Iterator<Item = &M> + '_ {
         self.projs_metadata.iter()
     }
-
-    pub(crate) fn projs_metadata_mut(&mut self) -> impl Iterator<Item = &mut M> + '_ {
-        self.projs_metadata.iter_mut()
-    }
 }
 
-impl<L, P, M> From<L> for PlaceWithMetadata<L, P, M> {
-    fn from(value: L) -> Self {
-        Self::from(Place::from(value))
-    }
+pub(crate) type PlaceWithMetadata<P, M = DefaultPlaceMetadata> =
+    GenericPlaceWithMetadata<LocalWithMetadata<M>, P, M>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct DefaultPlaceMetadata {
+    address: Option<NonNull<()>>,
+    type_id: Option<TypeId>,
+    // Fast-accessible type information
+    ty: Option<ValueType>,
+    size: Option<TypeSize>,
 }
 
-impl<L, P, M> From<Place<L, P>> for PlaceWithMetadata<L, P, M> {
-    fn from(value: Place<L, P>) -> Self {
+impl Default for DefaultPlaceMetadata {
+    fn default() -> Self {
         Self {
-            place: value,
-            projs_metadata: Vec::with_capacity(0),
+            address: None,
+            type_id: None,
+            ty: None,
+            size: None,
         }
+    }
+}
+
+impl DefaultPlaceMetadata {
+    #[inline]
+    pub(crate) fn address(&self) -> RawAddress {
+        self.address
+            .unwrap_or_else(|| {
+                log_error!("Presumably an unchecked null pointer dereference is happening in the program. Runtime will terminate the execution.");
+                panic!("Address of place is not available.")
+            })
+            .as_ptr()
+    }
+
+    #[inline]
+    pub(crate) fn set_address(&mut self, address: RawAddress) {
+        debug_assert!(self.address.is_none());
+        if cfg!(debug_assertions) && self.address.is_none() {
+            log_warn!("Setting null address to place metadata. {:?}", self);
+        }
+        self.address = NonNull::new(address as *mut ());
+    }
+
+    #[inline]
+    pub(crate) fn type_id(&self) -> Option<TypeId> {
+        self.type_id
+    }
+
+    #[inline]
+    pub(crate) fn unwrap_type_id(&self) -> TypeId {
+        self.type_id.expect("Type id is not available.")
+    }
+
+    #[inline]
+    pub(crate) fn set_type_id(&mut self, type_id: TypeId) {
+        debug_assert!(self.type_id.is_none());
+        self.type_id = Some(type_id);
+    }
+
+    #[inline]
+    pub(crate) fn ty(&self) -> Option<&ValueType> {
+        self.ty.as_ref()
+    }
+
+    #[inline]
+    pub(crate) fn set_ty(&mut self, ty: ValueType) {
+        self.ty = Some(ty);
+    }
+
+    #[inline]
+    pub(crate) fn size(&self) -> Option<TypeSize> {
+        self.size.as_ref().copied()
+    }
+
+    #[inline]
+    pub(crate) fn set_size(&mut self, size: TypeSize) {
+        debug_assert!(self.size.is_none());
+        self.size = Some(size);
     }
 }
 
@@ -265,4 +278,75 @@ pub(crate) enum PlaceUsage {
 pub(crate) enum PlaceAsOperandUsage {
     Copy,
     Move,
+}
+
+mod conversions {
+    use super::*;
+
+    impl<B, P> From<B> for Place<B, P> {
+        fn from(value: B) -> Self {
+            Self::new(value)
+        }
+    }
+
+    // Cannot generalize to B
+    impl<P> TryFrom<Place<Local, P>> for Local {
+        type Error = Place<Local, P>;
+
+        fn try_from(value: Place<Local, P>) -> Result<Self, Self::Error> {
+            if !value.has_projection() {
+                Ok(value.base)
+            } else {
+                Err(value)
+            }
+        }
+    }
+
+    impl<M> From<Local> for LocalWithMetadata<M>
+    where
+        M: Default,
+    {
+        fn from(value: Local) -> Self {
+            Self {
+                local: value,
+                metadata: Default::default(),
+            }
+        }
+    }
+
+    impl<B, P, M> From<B> for GenericPlaceWithMetadata<B, P, M> {
+        fn from(value: B) -> Self {
+            Self::from(Place::from(value))
+        }
+    }
+
+    impl<B, P, M> From<Place<B, P>> for GenericPlaceWithMetadata<B, P, M> {
+        fn from(value: Place<B, P>) -> Self {
+            Self {
+                place: value,
+                projs_metadata: Vec::with_capacity(0),
+            }
+        }
+    }
+
+    impl<P, M: Default> From<Local> for PlaceWithMetadata<P, M> {
+        fn from(value: Local) -> Self {
+            Self::from(LocalWithMetadata::from(value))
+        }
+    }
+
+    impl<P, M> TryFrom<PlaceWithMetadata<P, M>> for LocalWithMetadata<M>
+    where
+        LocalWithMetadata<M>: Clone,
+    {
+        type Error = PlaceWithMetadata<P, M>;
+
+        fn try_from(place: PlaceWithMetadata<P, M>) -> Result<Self, Self::Error> {
+            if !place.has_projection() {
+                Ok(place.base().clone())
+            } else {
+                Err(place)
+            }
+        }
+    }
 }

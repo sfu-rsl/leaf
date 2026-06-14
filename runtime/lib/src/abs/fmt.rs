@@ -1,9 +1,13 @@
-use std::fmt::{Display, Formatter, Result};
+use core::{
+    fmt::{Display, Formatter, Result},
+    ops::Deref,
+};
 
 use common::utils::comma_separated;
 
 use super::{
     expr::sym_place::{Select, SelectTarget, SymbolicReadTree},
+    place::{GenericPlaceWithMetadata, HasMetadata},
     *,
 };
 
@@ -14,6 +18,17 @@ where
 {
     fn fmt(&self, f: &mut Formatter) -> Result {
         PlaceFormatter::format(f, self)
+    }
+}
+
+impl<B, P> Display for GenericPlaceWithMetadata<B, P, place::DefaultPlaceMetadata>
+where
+    Place<B, P>: Display,
+    Self: HasMetadata<Metadata = place::DefaultPlaceMetadata>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use place::HasMetadata;
+        write!(f, "{}@{:p}", self.deref(), self.metadata().address())
     }
 }
 
