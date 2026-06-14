@@ -96,10 +96,11 @@ pub enum AtomicBinaryOp {
     Max = common::pri::AtomicBinaryOp::MAX.to_raw(),
 }
 
-pub(crate) use place::Local;
+pub(crate) use place::{
+    Local, LocalWithMetadata, PlaceAsOperandUsage, PlaceUsage, PlaceWithMetadata,
+};
 pub(crate) type Place<L = Local, P = Projection<L>> = place::Place<L, P>;
 pub(crate) type Projection<L> = place::Projection<L>;
-pub(crate) use place::{PlaceAsOperandUsage, PlaceUsage};
 
 #[derive(Debug)]
 pub(crate) enum Operand<P, C, S> {

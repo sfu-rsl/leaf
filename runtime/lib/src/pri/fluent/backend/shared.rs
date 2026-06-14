@@ -1,6 +1,10 @@
-use core::marker::PhantomData;
+use core::{marker::PhantomData, ops::DerefMut};
 
-use crate::abs::{Place, Projection};
+use common::log_info;
+
+use crate::abs::place::{
+    DefaultPlaceMetadata, GenericPlaceWithMetadata, HasMetadata, Local, Place, Projection,
+};
 
 use super::*;
 
@@ -8,7 +12,7 @@ pub(crate) struct DefaultPlaceBuilder<B = Local, I = B, P = Projection<I>> {
     _phantom: PhantomData<(B, I, P)>,
 }
 
-impl<L, P> Default for DefaultPlaceBuilder<L, P> {
+impl<B, I, P> Default for DefaultPlaceBuilder<B, I, P> {
     fn default() -> Self {
         Self {
             _phantom: Default::default(),
@@ -18,37 +22,46 @@ impl<L, P> Default for DefaultPlaceBuilder<L, P> {
 
 impl<B, I, P> PlaceBuilder for DefaultPlaceBuilder<B, I, P>
 where
-    B: From<PlaceInfoBase>,
-    P: From<PlaceInfoProjection<I>>,
+    B: From<Local>,
+    P: From<Projection<I>>,
+    B: HasMetadata<Metadata = DefaultPlaceMetadata>,
     for<'a> B: 'a,
     for<'a> I: 'a,
     for<'a> P: 'a,
 {
-    type Place = Place<B, P>;
+    type Place = GenericPlaceWithMetadata<B, P, DefaultPlaceMetadata>;
     type Index = I;
     type Projector<'a>
-        = DefaultPlaceProjectionHandler<'a, Self::Place, Self::Index>
+        = DefaultPlaceProjectionHandler<'a, B, P, I>
     where
         Self::Place: 'a;
-    type MetadataHandler<'a> = ();
+    type MetadataHandler<'a> = DefaultMetadataHandler<'a, Self::Place>;
 
     fn from_base(self, base: PlaceInfoBase) -> Self::Place {
-        Place::new(base.into())
+        match base {
+            PlaceInfoBase::Local(local) => GenericPlaceWithMetadata::from(Place::new(local.into())),
+            PlaceInfoBase::Some => {
+                log_info!("Place info is not fully available.");
+                unimplemented!("Partial place info is not supported in this backend yet.")
+            }
+        }
     }
 
     fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::Projector<'a> {
-        DefaultPlaceProjectionHandler::new(place)
+        DefaultPlaceProjectionHandler::new(place.deref_mut())
     }
 
-    fn metadata(self, _place: &mut Self::Place) {}
+    fn metadata<'a>(self, place: &'a mut Self::Place) -> Self::MetadataHandler<'a> {
+        DefaultMetadataHandler::new(place)
+    }
 }
 
-pub(crate) struct DefaultPlaceProjectionHandler<'a, P, I> {
-    place: &'a mut P,
+pub(crate) struct DefaultPlaceProjectionHandler<'a, B, P, I> {
+    place: &'a mut Place<B, P>,
     _phantom: PhantomData<I>,
 }
 
-impl<'a, B, I, P> DefaultPlaceProjectionHandler<'a, Place<B, P>, I> {
+impl<'a, B, P, I> DefaultPlaceProjectionHandler<'a, B, P, I> {
     pub(crate) fn new(place: &'a mut Place<B, P>) -> Self {
         Self {
             place,
@@ -57,14 +70,22 @@ impl<'a, B, I, P> DefaultPlaceProjectionHandler<'a, Place<B, P>, I> {
     }
 }
 
-impl<'a, B, I, P> PlaceProjector for DefaultPlaceProjectionHandler<'a, Place<B, P>, I>
+impl<'a, B, P, I> PlaceProjector for DefaultPlaceProjectionHandler<'a, B, P, I>
 where
-    P: From<PlaceInfoProjection<I>>,
+    P: From<Projection<I>>,
 {
     type Index = I;
 
     fn by(self, projection: PlaceInfoProjection<Self::Index>) {
-        self.place.add_projection(projection.into())
+        match projection {
+            PlaceInfoProjection::Projection(projection) => {
+                self.place.add_projection(projection.into())
+            }
+            PlaceInfoProjection::Some => {
+                log_info!("Place info is not fully available.");
+                unimplemented!("Partial place info is not supported in this backend yet.")
+            }
+        }
     }
 }
 
@@ -76,6 +97,36 @@ impl PlaceMetadataHandler for () {
     fn set_primitive_type(&mut self, _ty: ValueType) {}
 
     fn set_size(self, _byte_size: TypeSize) {}
+}
+
+pub(crate) struct DefaultMetadataHandler<'a, P> {
+    place: &'a mut P,
+}
+
+impl<'a, P> DefaultMetadataHandler<'a, P> {
+    pub(crate) fn new(place: &'a mut P) -> Self {
+        Self { place }
+    }
+}
+
+impl<P: HasMetadata<Metadata = DefaultPlaceMetadata>> PlaceMetadataHandler
+    for DefaultMetadataHandler<'_, P>
+{
+    fn set_address(&mut self, address: RawAddress) {
+        self.place.metadata_mut().set_address(address);
+    }
+
+    fn set_type_id(&mut self, type_id: TypeId) {
+        self.place.metadata_mut().set_type_id(type_id);
+    }
+
+    fn set_primitive_type(&mut self, ty: ValueType) {
+        self.place.metadata_mut().set_ty(ty);
+    }
+
+    fn set_size(self, byte_size: TypeSize) {
+        self.place.metadata_mut().set_size(byte_size);
+    }
 }
 
 pub(crate) mod noop {
