@@ -89,7 +89,7 @@ impl Value {
         base: PointerOffset,
     ) -> Vec<((PointerOffset, NonZero<TypeSize>), Label)> {
         let mut labels = self.labels;
-        labels.iter_mut().for_each(|((offset, size), _)| {
+        labels.iter_mut().for_each(|((offset, _size), _)| {
             *offset += base;
         });
         labels
@@ -110,11 +110,7 @@ pub(crate) struct WritablePlace {
 }
 
 impl WritablePlace {
-    pub fn type_id(&self) -> TypeId {
-        self.type_id.expect("Type ID should be set")
-    }
-
-    pub fn type_id2(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> TypeId {
+    fn type_id(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> TypeId {
         self.type_id.unwrap_or_else(|| {
             type_manager
                 .get_pointee_ty(
@@ -126,12 +122,12 @@ impl WritablePlace {
         })
     }
 
-    pub fn is_md(&self, type_manager: &(impl MdTypeProvider + ?Sized)) -> bool {
-        type_manager.is_md_type(&self.type_id())
+    pub fn is_md(&self, type_manager: &(impl TypeDatabase + MdTypeProvider + ?Sized)) -> bool {
+        type_manager.is_md_type(&self.type_id(type_manager))
     }
 
     pub fn size(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> TypeSize {
-        type_manager.get_size(&self.type_id2(type_manager)).unwrap()
+        type_manager.get_size(&self.type_id(type_manager)).unwrap()
     }
 
     pub fn memory_region(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> MemoryRegion {
@@ -178,7 +174,7 @@ impl PlaceValue {
             PlaceValue::ToDropMaybeMdWrapped { .. } => None,
             PlaceValue::ToCarryMdContainer { .. } => None,
             PlaceValue::LazyDestination(writable_place) => {
-                Some(writable_place.type_id2(type_manager))
+                Some(writable_place.type_id(type_manager))
             }
             PlaceValue::NonRelevant {} => None,
         }
