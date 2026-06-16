@@ -101,24 +101,23 @@ impl<'a> CallHandler for SymExCallHandler<'a> {
         ret_val_place: Self::Place,
         tupling: ArgsTupling,
     ) {
-        let arg_types = Self::collect_arg_types_if_tupled(tupling, &arg_places);
-
         fn ensure_deter_place(place: PlaceValueRef) -> DeterPlaceValueRef {
             debug_assert!(!place.is_symbolic());
             DeterPlaceValueRef::new(place)
         }
+        let arg_places: Vec<_> = arg_places.into_iter().map(ensure_deter_place).collect();
 
         let tupling_info = Self::make_lazy_tupling_info(
             tupling,
-            arg_types,
+            &arg_places,
             self.type_manager,
             self.variables_state_factory,
         );
-        self.variables_state.add_layer();
 
+        self.variables_state.add_layer();
         self.flow_manager.emplace_args(
             SignaturePlaces {
-                args: arg_places.into_iter().map(ensure_deter_place).collect(),
+                args: arg_places,
                 return_val: ensure_deter_place(ret_val_place),
             },
             tupling_info,
@@ -204,12 +203,12 @@ impl DropHandler for SymExCallHandler<'_> {
 mod tupling {
     use delegate::delegate;
 
-    use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo};
-
     use crate::{
         abs::{FieldIndex, PlaceUsage, RawAddress},
-        call::tupling::TuplingHelper,
-        type_info::{FieldsShapeInfoExt, TypeInfoExt},
+        call::{
+            tupling::TuplingHelper,
+            tupling_utils::{TuplingHelperTypeUtils, make_lazy_tupling_info},
+        },
     };
 
     use super::*;
@@ -219,10 +218,9 @@ mod tupling {
     };
 
     pub(crate) struct TuplingHelperImpl<'a> {
-        pub(crate) type_manager: &'a dyn TypeDatabase,
-        pub(crate) tuple_type: LazyTypeInfo,
-        pub(crate) fields_info: Option<StructShape>,
-        pub(crate) temp_vars_state: SymExVariablesState,
+        type_manager: &'a dyn TypeDatabase,
+        temp_vars_state: SymExVariablesState,
+        type_utils: TuplingHelperTypeUtils<'a, LazyTypeInfo>,
     }
 
     impl<'a> CallShadowMemory<DeterPlaceValueRef> for TuplingHelperImpl<'a> {
@@ -237,25 +235,19 @@ mod tupling {
         }
     }
 
-    impl TuplingHelper<DeterPlaceValueRef, SymExValue> for TuplingHelperImpl<'_> {
+    impl<'a> TuplingHelper<DeterPlaceValueRef> for TuplingHelperImpl<'a> {
         fn make_tupled_arg_pseudo_place(&mut self, _usage: PlaceUsage) -> DeterPlaceValueRef {
             DeterPlaceValueRef::new(
                 DeterministicPlaceValue::from_addr_type_info(
                     RawAddress::default(),
-                    self.tuple_type.clone(),
+                    self.type_utils.type_holder.clone(),
                 )
                 .to_value_ref(),
             )
         }
 
         fn num_fields(&mut self) -> FieldIndex {
-            self.type_info()
-                .expect_single_variant()
-                .fields
-                .as_struct()
-                .unwrap()
-                .fields()
-                .len() as FieldIndex
+            self.type_utils.num_fields()
         }
 
         fn field_place(
@@ -264,7 +256,7 @@ mod tupling {
             field: FieldIndex,
             _usage: PlaceUsage,
         ) -> DeterPlaceValueRef {
-            let field_info = &self.fields_info().fields()[field as usize];
+            let field_info = self.type_utils.field_info(field);
             DeterPlaceValueRef::new(
                 DeterministicPlaceValue::from_addr_type(
                     base.address().wrapping_byte_add(field_info.offset as usize),
@@ -283,98 +275,42 @@ mod tupling {
         ) -> Self {
             Self {
                 type_manager,
-                tuple_type,
-                fields_info: None,
                 temp_vars_state,
+                type_utils: TuplingHelperTypeUtils::new(
+                    tuple_type,
+                    Box::new(|type_info| type_info.fetch(type_manager)),
+                ),
             }
-        }
-
-        pub(crate) fn type_info(&mut self) -> &TypeInfo {
-            self.tuple_type.fetch(self.type_manager)
-        }
-
-        pub(crate) fn fields_info(&mut self) -> &StructShape {
-            if self.fields_info.is_none() {
-                let type_info = self.type_info();
-                let info = match type_info.expect_single_variant().fields {
-                    FieldsShapeInfo::Struct(ref shape) => shape.clone(),
-                    _ => panic!("Expected tuple type info, got: {:?}", type_info),
-                };
-                self.fields_info = Some(info);
-            }
-            self.fields_info.as_ref().unwrap()
         }
     }
 
     impl<'a> SymExCallHandler<'a> {
-        pub(super) fn collect_arg_types_if_tupled(
-            tupling: ArgsTupling,
-            arg_places: &[<Self as CallHandler>::Place],
-        ) -> Option<Vec<LazyTypeInfo>> {
-            matches!(tupling, ArgsTupling::Tupled).then(|| {
-                arg_places
-                    .iter()
-                    .map(|place| place.type_info().clone())
-                    .collect::<Vec<_>>()
-            })
-        }
-
         pub(super) fn make_lazy_tupling_info(
             tupling: ArgsTupling,
-            arg_types: Option<Vec<backend::expr::LazyTypeInfo>>,
+            arg_places: &[DeterPlaceValueRef],
             type_manager: &'a dyn TypeDatabase,
             variables_state_factory: &'a dyn Fn() -> SymExVariablesState,
         ) -> impl FnOnce() -> ArgsTuplingInfo<'a, 'a, DeterPlaceValueRef, SymExValue> {
-            move || match tupling {
-                ArgsTupling::Untupled {
-                    tupled_arg_index,
-                    tuple_type,
-                } => {
-                    core::hint::cold_path();
-                    let Local::Argument(tupled_arg_index) = tupled_arg_index else {
-                        unreachable!()
-                    };
-                    ArgsTuplingInfo::Untupled {
-                        tupled_arg_index,
-                        tupling_helper: Box::new(move || {
-                            Box::new(tupling::TuplingHelperImpl::new(
-                                type_manager,
-                                tuple_type.into(),
-                                variables_state_factory(),
-                            ))
-                        }),
-                    }
-                }
-                ArgsTupling::Tupled => {
-                    core::hint::cold_path();
-                    let (first_arg_type, mut rest_args_types) = {
-                        let mut arg_types = arg_types.unwrap();
-                        let rest_args_types = arg_types.split_off(1);
-                        let first_arg_type = arg_types.remove(0);
-                        (first_arg_type, rest_args_types)
-                    };
-                    ArgsTuplingInfo::Tupled {
-                        head_args: Box::new(move || {
-                            vec![{
-                                debug_assert_eq!(
-                                    first_arg_type.get_size(type_manager),
-                                    Some(0),
-                                    "Expected to happen only in FnOnce implementation of a non-capturing closure",
-                                );
-                                Implied::always(Value::from(Constant::Zst).to_value_ref())
-                            }]
-                        }),
-                        tupling_helper: Box::new(move || {
-                            Box::new(tupling::TuplingHelperImpl::new(
-                                type_manager,
-                                rest_args_types.remove(0),
-                                variables_state_factory(),
-                            ))
-                        }),
-                    }
-                }
-                ArgsTupling::Normal => ArgsTuplingInfo::Normal,
-            }
+            make_lazy_tupling_info(
+                tupling,
+                arg_places,
+                |place| place.type_info().clone(),
+                |tuple_type| {
+                    Box::new(tupling::TuplingHelperImpl::new(
+                        type_manager,
+                        tuple_type.into(),
+                        variables_state_factory(),
+                    ))
+                },
+                |head_places| {
+                    debug_assert!(
+                        head_places.len() == 1
+                            && head_places[0].type_info().get_size(type_manager) == Some(0),
+                        "Expected to happen only in FnOnce implementation of a non-capturing closure",
+                    );
+                    vec![Implied::always(Value::from(Constant::Zst).to_value_ref())]
+                },
+            )
         }
     }
 }

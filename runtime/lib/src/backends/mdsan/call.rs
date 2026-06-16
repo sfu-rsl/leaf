@@ -1,3 +1,5 @@
+use delegate::delegate;
+
 use crate::{
     abs::{
         AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local,
@@ -81,7 +83,7 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
     }
 
     fn enter(mut self, def: FuncDef) {
-        let sanity = self.flow_manager.enter(def);
+        let _sanity = self.flow_manager.enter(def);
     }
 
     fn emplace_arguments(
@@ -90,11 +92,9 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
         ret_val_place: Self::Place,
         tupling: ArgsTupling,
     ) {
-        let arg_types = Self::collect_arg_types_if_tupled(tupling, &arg_places);
-
         let tupling_info = Self::make_lazy_tupling_info(
             tupling,
-            arg_types,
+            &arg_places,
             self.type_manager,
             self.variables_state_factory,
         );
@@ -168,25 +168,23 @@ impl DropHandler for MdSanCallHandler<'_> {
 }
 
 mod tupling {
-    use delegate::delegate;
-
-    use common::type_info::{FieldsShapeInfo, StructShape, TypeInfo};
 
     use crate::{
         abs::{FieldIndex, Local, PlaceUsage, RawAddress, TypeId, place::HasMetadata},
         backends::mdsan::MdSanPlaceInfo,
-        call::tupling::TuplingHelper,
-        type_info::{FieldsShapeInfoExt, TypeInfoExt},
+        call::{
+            tupling::TuplingHelper,
+            tupling_utils::{TuplingHelperTypeUtils, make_lazy_tupling_info},
+        },
     };
 
     use super::*;
     use backend::TypeDatabase;
 
     pub(crate) struct TuplingHelperImpl<'a> {
-        pub(crate) type_manager: &'a dyn TypeDatabase,
-        pub(crate) tuple_type: TypeId,
-        pub(crate) fields_info: Option<StructShape>,
-        pub(crate) temp_vars_state: MdSanVariablesState,
+        type_manager: &'a dyn TypeDatabase,
+        temp_vars_state: MdSanVariablesState,
+        type_utils: TuplingHelperTypeUtils<'a, TypeId>,
     }
 
     impl<'a> CallShadowMemory<MdSanPlaceValue> for TuplingHelperImpl<'a> {
@@ -201,13 +199,15 @@ mod tupling {
         }
     }
 
-    impl TuplingHelper<MdSanPlaceValue, MdSanValue> for TuplingHelperImpl<'_> {
+    impl TuplingHelper<MdSanPlaceValue> for TuplingHelperImpl<'_> {
         fn make_tupled_arg_pseudo_place(&mut self, usage: PlaceUsage) -> MdSanPlaceValue {
             self.temp_vars_state.ref_place(
                 {
                     let mut place_info = MdSanPlaceInfo::from(Local::Argument(0));
                     place_info.metadata_mut().set_address(1 as RawAddress);
-                    place_info.metadata_mut().set_type_id(self.tuple_type);
+                    place_info
+                        .metadata_mut()
+                        .set_type_id(self.type_utils.type_holder);
                     place_info
                 },
                 usage,
@@ -215,13 +215,7 @@ mod tupling {
         }
 
         fn num_fields(&mut self) -> FieldIndex {
-            self.type_info()
-                .expect_single_variant()
-                .fields
-                .as_struct()
-                .unwrap()
-                .fields()
-                .len() as FieldIndex
+            self.type_utils.num_fields()
         }
 
         fn field_place(
@@ -230,7 +224,7 @@ mod tupling {
             field: FieldIndex,
             _usage: PlaceUsage,
         ) -> MdSanPlaceValue {
-            let field_info = &self.fields_info().fields()[field as usize];
+            let field_info = self.type_utils.field_info(field);
             let field_ty = field_info.ty;
             base.project_field(
                 field_info.offset,
@@ -248,106 +242,38 @@ mod tupling {
         ) -> Self {
             Self {
                 type_manager,
-                tuple_type,
-                fields_info: None,
                 temp_vars_state,
+                type_utils: TuplingHelperTypeUtils::new(
+                    tuple_type,
+                    Box::new(|type_id| type_manager.get_type(type_id)),
+                ),
             }
-        }
-
-        pub(crate) fn type_info(&mut self) -> &TypeInfo {
-            self.type_manager.get_type(&self.tuple_type)
-        }
-
-        pub(crate) fn fields_info(&'_ mut self) -> &StructShape {
-            if self.fields_info.is_none() {
-                let type_info = self.type_info();
-                let info = match type_info.expect_single_variant().fields {
-                    FieldsShapeInfo::Struct(ref shape) => shape.clone(),
-                    _ => panic!("Expected tuple type info, got: {:?}", type_info),
-                };
-                self.fields_info = Some(info);
-            }
-            self.fields_info.as_ref().unwrap()
         }
     }
 
     impl<'a> MdSanCallHandler<'a> {
-        pub(super) fn collect_arg_types_if_tupled(
-            tupling: ArgsTupling,
-            arg_places: &[<Self as CallHandler>::Place],
-        ) -> Option<Vec<TypeId>> {
-            matches!(tupling, ArgsTupling::Tupled).then(|| {
-                arg_places
-                    .iter()
-                    .map(|place| match place {
-                        MdSanPlaceValue::LazyDestination(place) => place.type_id(),
-                        MdSanPlaceValue::AccessedMdWrapped { .. }
-                        | MdSanPlaceValue::ToCarryMdContainer { .. }
-                        | MdSanPlaceValue::LifetimeMarkedMd { .. }
-                        | MdSanPlaceValue::ToDropMaybeMdWrapped { .. }
-                        | MdSanPlaceValue::NonRelevant {} => unreachable!(),
-                    })
-                    .collect::<Vec<_>>()
-            })
-        }
-
         pub(super) fn make_lazy_tupling_info(
             tupling: ArgsTupling,
-            arg_types: Option<Vec<TypeId>>,
+            arg_places: &[MdSanPlaceValue],
             type_manager: &'a dyn TypeDatabase,
             variables_state_factory: &'a dyn Fn() -> MdSanVariablesState,
         ) -> impl FnOnce() -> ArgsTuplingInfo<'a, 'a, MdSanPlaceValue, MdSanValue> {
-            move || match tupling {
-                ArgsTupling::Untupled {
-                    tupled_arg_index,
-                    tuple_type,
-                } => {
-                    core::hint::cold_path();
-                    let Local::Argument(tupled_arg_index) = tupled_arg_index else {
-                        unreachable!()
-                    };
-                    ArgsTuplingInfo::Untupled {
-                        tupled_arg_index,
-                        tupling_helper: Box::new(move || {
-                            Box::new(tupling::TuplingHelperImpl::new(
-                                type_manager,
-                                tuple_type.into(),
-                                variables_state_factory(),
-                            ))
-                        }),
-                    }
-                }
-                ArgsTupling::Tupled => {
-                    core::hint::cold_path();
-                    let (first_arg_type, mut rest_args_types) = {
-                        let mut arg_types = arg_types.unwrap();
-                        let rest_args_types = arg_types.split_off(1);
-                        let first_arg_type = arg_types.remove(0);
-                        (first_arg_type, rest_args_types)
-                    };
-                    ArgsTuplingInfo::Tupled {
-                        head_args: Box::new(move || {
-                            // vec![{
-                            //     debug_assert_eq!(
-                            //         todo!(),
-                            //         Some(0),
-                            //         "Expected to happen only in FnOnce implementation of a non-capturing closure",
-                            //     );
-                            //     MdSanValue::non_rel()
-                            // }]
-                            todo!()
-                        }),
-                        tupling_helper: Box::new(move || {
-                            Box::new(tupling::TuplingHelperImpl::new(
-                                type_manager,
-                                rest_args_types.remove(0),
-                                variables_state_factory(),
-                            ))
-                        }),
-                    }
-                }
-                ArgsTupling::Normal => ArgsTuplingInfo::Normal,
-            }
+            make_lazy_tupling_info(
+                tupling,
+                arg_places,
+                |p| {
+                    p.type_id(type_manager)
+                        .expect("Expected type info for a tupled argument")
+                },
+                |t| {
+                    Box::new(tupling::TuplingHelperImpl::new(
+                        type_manager,
+                        t,
+                        variables_state_factory(),
+                    ))
+                },
+                |places| core::iter::repeat_n(MdSanValue::non_rel(), places.len()).collect(),
+            )
         }
     }
 }
@@ -417,7 +343,7 @@ mod breakage {
                 log_warn!(
                     target: TAG,
                     concat!(
-                        "Possible loss of symbolic returned value from {:?}, ",
+                        "Possible loss of MD-relevant returned value from {:?}, ",
                         "current internal function: {:?}",
                     ),
                     callee,
@@ -443,8 +369,7 @@ mod breakage {
             current: FuncDef,
             unconsumed_args: Vec<MdSanValue>,
         ) -> MdSanValue {
-            let symbolic_args = self.inspect_external_call_info(current, &unconsumed_args);
-
+            let _ = self.inspect_external_call_info(current, &unconsumed_args);
             unknown_value()
         }
 
@@ -456,7 +381,7 @@ mod breakage {
             unconsumed_args: Vec<MdSanValue>,
             current_arg_places: &[P],
         ) -> Vec<MdSanValue> {
-            self.inspect_external_call_info(current, &unconsumed_args);
+            let _ = self.inspect_external_call_info(current, &unconsumed_args);
             self.at_enter_with_no_caller(current, current_arg_places)
         }
 
@@ -502,11 +427,11 @@ mod breakage {
 impl CallShadowMemory<MdSanPlaceValue> for MdSanVariablesState {
     type Value = MdSanValue;
 
-    fn take_place(&mut self, place: &MdSanPlaceValue) -> Self::Value {
-        MdMemoryState::take_place(self, place)
-    }
-
-    fn set_place(&mut self, place: &MdSanPlaceValue, value: Self::Value) {
-        MdMemoryState::set_place(self, place, value)
+    delegate! {
+        #[through(MdMemoryState)]
+        to self {
+            fn take_place(&mut self, place: &MdSanPlaceValue) -> Self::Value;
+            fn set_place(&mut self, place: &MdSanPlaceValue, value: Self::Value);
+        }
     }
 }

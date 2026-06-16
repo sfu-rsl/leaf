@@ -168,6 +168,9 @@ pub(crate) trait CallDataFlowManager: CallFlowManager {
         are_args_tupled: bool,
     );
 
+    /* NOTE: Why `tupling` is lazy?
+     * Because if we have a broken call flow, we might not need to resolve tupling at all.
+     */
     fn emplace_args<'a, 'h>(
         &'a mut self,
         places: SignaturePlaces<Self::Place>,
@@ -310,7 +313,7 @@ pub(crate) mod tupling {
 
     use super::*;
     type LazyTuplingHelper<'h, 'f, P, V> =
-        Box<dyn FnOnce() -> Box<dyn TuplingHelper<P, V> + 'h> + 'f>;
+        Box<dyn FnOnce() -> Box<dyn TuplingHelper<P, Value = V> + 'h> + 'f>;
 
     #[derive(dm::Debug)]
     pub(crate) enum ArgsTuplingInfo<'h, 'f, P, V> {
@@ -327,13 +330,13 @@ pub(crate) mod tupling {
         /// Expected to happen only in `FnOnce` implementation of a non-capturing closure.
         Tupled {
             #[debug(ignore)]
-            head_args: Box<dyn FnOnce() -> Vec<V> + 'f>,
+            head_args: Box<dyn FnOnce(&[P]) -> Vec<V> + 'f>,
             #[debug(ignore)]
             tupling_helper: LazyTuplingHelper<'h, 'f, P, V>,
         },
     }
 
-    pub(crate) trait TuplingHelper<P, V>: CallShadowMemory<P, Value = V> {
+    pub(crate) trait TuplingHelper<P>: CallShadowMemory<P> {
         fn make_tupled_arg_pseudo_place(&mut self, usage: PlaceUsage) -> P;
 
         /// Returns the number of fields in the tuple.
@@ -566,6 +569,7 @@ mod implementation {
         impl<P, V, BC, S> DefaultCallFlowManager<P, V, BC, S> {
             pub(super) fn resolve_tupling(
                 &mut self,
+                arg_places: &[P],
                 args: &mut PassedArgs<V>,
                 tupling: ArgsTuplingInfo<P, V>,
             ) {
@@ -588,8 +592,11 @@ mod implementation {
                     } if !args.are_tupled => {
                         core::hint::cold_path();
                         log_debug!(target: TAG, "Tupling arguments");
+                        let separated_args = core::mem::replace(
+                            &mut args.values,
+                            head_args(&arg_places[..arg_places.len()]),
+                        );
                         // Replace the separate arguments with a tupled one.
-                        let separated_args = core::mem::replace(&mut args.values, head_args());
                         args.values
                             .push(Self::tuple(separated_args, tupling_helper().as_mut()));
                     }
@@ -606,7 +613,7 @@ mod implementation {
 
             fn untuple(
                 tupled_value: V,
-                helper: &mut (impl TuplingHelper<P, V> + ?Sized),
+                helper: &mut (impl TuplingHelper<P, Value = V> + ?Sized),
             ) -> Vec<V> {
                 // Write the value to the pseudo place in memory, then read the fields
                 let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place(PlaceUsage::Write);
@@ -627,7 +634,7 @@ mod implementation {
 
             fn tuple(
                 separate_values: Vec<V>,
-                helper: &mut (impl TuplingHelper<P, V> + ?Sized),
+                helper: &mut (impl TuplingHelper<P, Value = V> + ?Sized),
             ) -> V {
                 let tupled_pseudo_place = helper.make_tupled_arg_pseudo_place(PlaceUsage::Write);
 
@@ -656,6 +663,108 @@ mod implementation {
         impl<'h, 'f, P, V> ArgsTuplingInfoProvider<'h, 'f, P, V> for NoOpArgsTuplingInfoProvider {
             fn get(self) -> ArgsTuplingInfo<'h, 'f, P, V> {
                 ArgsTuplingInfo::Normal
+            }
+        }
+
+        pub(crate) mod utils {
+            use crate::{
+                abs::FieldIndex,
+                pri::fluent::backend::ArgsTupling,
+                type_info::{self, StructShape, TypeInfo, TypeInfoExt},
+            };
+
+            use super::*;
+
+            pub(crate) struct TuplingHelperTypeUtils<
+                'a,
+                T,
+                F = Box<dyn for<'b> FnMut(&'b mut T) -> &'b TypeInfo + 'a>,
+            > {
+                fields_info: Option<StructShape>,
+                pub(crate) type_holder: T,
+                get_type_info: F,
+                _marker: core::marker::PhantomData<&'a ()>,
+            }
+
+            impl<'a, T, F> TuplingHelperTypeUtils<'a, T, F> {
+                pub(crate) fn new(type_holder: T, get_type_info: F) -> Self {
+                    Self {
+                        fields_info: None,
+                        type_holder,
+                        get_type_info,
+                        _marker: Default::default(),
+                    }
+                }
+            }
+
+            impl<'a, T, F> TuplingHelperTypeUtils<'a, T, F>
+            where
+                F: for<'b> FnMut(&'b mut T) -> &'b TypeInfo,
+            {
+                pub(crate) fn fields_info(&mut self) -> &StructShape {
+                    if self.fields_info.is_none() {
+                        let type_info = (self.get_type_info)(&mut self.type_holder);
+                        let info = match type_info.expect_single_variant().fields {
+                            type_info::FieldsShapeInfo::Struct(ref shape) => shape.clone(),
+                            _ => panic!("Expected tuple type info, got: {:?}", type_info),
+                        };
+                        self.fields_info = Some(info);
+                    }
+                    self.fields_info.as_ref().unwrap()
+                }
+
+                pub(crate) fn num_fields(&mut self) -> FieldIndex {
+                    self.fields_info().fields().len() as FieldIndex
+                }
+
+                pub(crate) fn field_info(&mut self, field: FieldIndex) -> &type_info::FieldInfo {
+                    self.fields_info().fields().get(field as usize).unwrap()
+                }
+            }
+
+            use crate::abs::TypeId;
+
+            pub(crate) fn make_lazy_tupling_info<'h, 'f, T: From<TypeId> + 'f, P, V>(
+                tupling: ArgsTupling,
+                arg_places: &[P],
+                get_tuple_type: impl FnOnce(&P) -> T,
+                tupling_helper_factory: impl FnOnce(T) -> Box<dyn TuplingHelper<P, Value = V> + 'h> + 'f,
+                head_args: impl FnOnce(&[P]) -> Vec<V> + 'f,
+            ) -> impl FnOnce() -> ArgsTuplingInfo<'h, 'f, P, V> + 'f {
+                let tuple_type = matches!(tupling, ArgsTupling::Tupled)
+                    .then(|| arg_places.get(0).map(|p| get_tuple_type(p)))
+                    .flatten();
+                move || match tupling {
+                    ArgsTupling::Untupled {
+                        tupled_arg_index,
+                        tuple_type,
+                    } => {
+                        core::hint::cold_path();
+                        let crate::abs::Local::Argument(tupled_arg_index) = tupled_arg_index else {
+                            unreachable!()
+                        };
+                        ArgsTuplingInfo::Untupled {
+                            tupled_arg_index,
+                            tupling_helper: Box::new(move || {
+                                (tupling_helper_factory)(tuple_type.into())
+                            }),
+                        }
+                    }
+                    ArgsTupling::Tupled => {
+                        core::hint::cold_path();
+                        ArgsTuplingInfo::Tupled {
+                            // Expected to happen only in FnOnce implementation of a non-capturing closure
+                            head_args: Box::new(head_args),
+                            tupling_helper: {
+                                let tuple_type = tuple_type.expect(
+                                    "Expected to have at least two args, the closure and the args",
+                                );
+                                Box::new(move || (tupling_helper_factory)(tuple_type))
+                            },
+                        }
+                    }
+                    ArgsTupling::Normal => ArgsTuplingInfo::Normal,
+                }
             }
         }
     }
@@ -902,7 +1011,7 @@ mod implementation {
                 CallFlowSanity::Expected(from_caller)
                 | CallFlowSanity::Unknown(Some(from_caller)) => {
                     let mut args = from_caller.args.expect(MSG_DATA_UNAVAILABLE);
-                    self.resolve_tupling(&mut args, tupling.get());
+                    self.resolve_tupling(&places.args, &mut args, tupling.get());
                     args.values
                 }
                 CallFlowSanity::Broken(unconsumed_parcel) => match unconsumed_parcel {
@@ -1157,5 +1266,6 @@ mod implementation {
     pub(crate) use logging::TAG;
 }
 pub(crate) use implementation::{
-    DefaultCallFlowManager, NoOpCallFlowBreakageCallback, TAG, tupling::NoOpArgsTuplingInfoProvider,
+    DefaultCallFlowManager, NoOpCallFlowBreakageCallback, TAG,
+    tupling::NoOpArgsTuplingInfoProvider, tupling::utils as tupling_utils,
 };
