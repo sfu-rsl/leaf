@@ -2,7 +2,7 @@ use std::{cell::RefCell, num::NonZero, ops::DerefMut, rc::Rc};
 
 use derive_more as dm;
 
-use common::type_info::TypeInfo;
+use common::{log_warn, type_info::TypeInfo};
 
 use crate::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
@@ -277,7 +277,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
 
         let value = match values[..] {
             // Single
-            [(_, sym_val, type_id)] if place_val.type_id().eq(type_id) => self
+            [(_, (sym_val, type_id))] if place_val.type_id().eq(type_id) => self
                 .retrieve_sym_value(sym_val.clone(), place_val.type_id())
                 .into(),
             // None
@@ -309,7 +309,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
 
         let value = match values[..] {
             // Single
-            [(_, sym_val, type_id)] if place_val.type_id().eq(type_id) => self
+            [(_, (sym_val, type_id))] if place_val.type_id().eq(type_id) => self
                 .retrieve_sym_value(sym_val.clone(), place_val.type_id())
                 .into(),
             // None
@@ -335,7 +335,10 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         place_val: &DeterministicPlaceValue,
         value: Implied<ValueRef>,
     ) {
-        let size = self.get_type_size(place_val);
+        let Some(size) = NonZero::<TypeSize>::new(self.get_type_size(place_val)) else {
+            // ZSTs are constants
+            return;
+        };
         self.set_addr(place_val.address(), size, place_val.type_id(), value)
     }
 
@@ -372,7 +375,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         &self,
         place_val: &DeterministicPlaceValue,
         size: TypeSize,
-        values: Vec<(Address, &SymValueRef, &TypeId)>,
+        values: Vec<((Address, NonZero<TypeSize>), &(SymValueRef, TypeId))>,
     ) -> PorterValue {
         let result = self.create_porter(place_val, values, size);
         self.retrieve_porter_value(&result)
@@ -382,7 +385,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         /* &mut */ &self,
         place_val: &DeterministicPlaceValue,
         size: TypeSize,
-        values: Vec<(Address, &SymValueRef, &TypeId)>,
+        values: Vec<((Address, NonZero<TypeSize>), &(SymValueRef, TypeId))>,
     ) -> PorterValue {
         // Disabling removal because of possible use after move.
         // https://github.com/rust-lang/unsafe-code-guidelines/issues/188
@@ -397,13 +400,13 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     fn create_porter(
         &self,
         place_val: &DeterministicPlaceValue,
-        sym_values: Vec<(Address, &SymValueRef, &TypeId)>,
+        sym_values: Vec<((Address, NonZero<TypeSize>), &(SymValueRef, TypeId))>,
         whole_size: TypeSize,
     ) -> PorterValue {
         let obj_addr = place_val.address();
         let sym_values = sym_values
             .into_iter()
-            .map(|(addr, sym_value, sym_type_id)| {
+            .map(|((addr, _size), (sym_value, sym_type_id))| {
                 let offset: PointerOffset = byte_offset_from(addr, obj_addr) as PointerOffset;
 
                 (offset, *sym_type_id, sym_value.clone())
@@ -450,7 +453,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     fn set_addr(
         &mut self,
         addr: Address,
-        size: TypeSize,
+        size: NonZero<TypeSize>,
         type_id: TypeId,
         value: Implied<ValueRef>,
     ) {
@@ -458,14 +461,15 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
         self.to_sym_values(&mut sym_values, 0, size, value.value, type_id);
         self.memory.replace_values(addr, size, sym_values);
         #[cfg(feature = "implicit_flow")]
-        self.memory.replace_preconditions(addr, size, value.by);
+        self.memory
+            .replace_preconditions(addr, size.get(), value.by);
     }
 
     fn to_sym_values(
         &self,
-        values: &mut Vec<(PointerOffset, TypeSize, SymValueRef, TypeId)>,
+        values: &mut Vec<((PointerOffset, NonZero<TypeSize>), (SymValueRef, TypeId))>,
         base_offset: PointerOffset,
-        size: TypeSize,
+        size: NonZero<TypeSize>,
         value: ValueRef,
         type_id: TypeId,
     ) {
@@ -497,7 +501,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 self.to_sym_values_porter(values, base_offset, size, porter, type_id)
             }
             Value::Symbolic(_) => {
-                values.push((base_offset, size, SymValueRef::new(value), type_id));
+                values.push(((base_offset, size), (SymValueRef::new(value), type_id)));
             }
             Value::Concrete(ConcreteValue::Adt(adt)) => {
                 self.to_sym_values_adt(values, base_offset, adt, type_id);
@@ -512,7 +516,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     #[tracing::instrument(level = "debug", skip(self, adt), fields(value = %adt))]
     fn to_sym_values_adt(
         &self,
-        values: &mut Vec<(PointerOffset, TypeSize, SymValueRef, TypeId)>,
+        values: &mut Vec<((PointerOffset, NonZero<TypeSize>), (SymValueRef, TypeId))>,
         base_offset: PointerOffset,
         adt: &AdtValue,
         type_id: TypeId,
@@ -528,27 +532,33 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
          * taken care of in the assignment logic. */
 
         for (field_index, field_ty, field_offset, field_size) in field_ranges {
-            if let Some(value) = adt
+            let Some(field_size) = NonZero::new(field_size) else {
+                // ZST fields are not stored.
+                continue;
+            };
+            let Some(value) = adt
                 .fields
                 // For unions, the list of fields may be incomplete.
                 .get(field_index as usize)
                 .and_then(|f| f.value.as_ref())
-            {
-                self.to_sym_values(
-                    values,
-                    base_offset + field_offset,
-                    field_size,
-                    value.clone(),
-                    field_ty,
-                );
-            }
+            else {
+                continue;
+            };
+
+            self.to_sym_values(
+                values,
+                base_offset + field_offset,
+                field_size,
+                value.clone(),
+                field_ty,
+            );
         }
     }
 
     #[tracing::instrument(level = "debug", skip(self, array), fields(value = %array))]
     fn to_sym_values_array(
         &self,
-        values: &mut Vec<(PointerOffset, TypeSize, SymValueRef, TypeId)>,
+        values: &mut Vec<((PointerOffset, NonZero<TypeSize>), (SymValueRef, TypeId))>,
         base_offset: PointerOffset,
         array: &ArrayValue,
         type_id: TypeId,
@@ -559,7 +569,7 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             self.to_sym_values(
                 values,
                 base_offset + elem_offset,
-                elem_size,
+                NonZero::new(elem_size).unwrap(),
                 element.clone(),
                 elem_type_id,
             );
@@ -569,9 +579,9 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
     #[tracing::instrument(level = "debug", skip(self, porter), fields(value = %porter))]
     fn to_sym_values_porter(
         &self,
-        values: &mut Vec<(PointerOffset, TypeSize, SymValueRef, TypeId)>,
+        values: &mut Vec<((PointerOffset, NonZero<TypeSize>), (SymValueRef, TypeId))>,
         base_offset: PointerOffset,
-        size: TypeSize,
+        size: NonZero<TypeSize>,
         porter: &PorterValue,
         type_id: TypeId,
     ) {
@@ -580,13 +590,18 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
             self.expr_builder.borrow_mut().deref_mut(),
         );
         if let Ok(value) = opt_masked_value {
-            values.push((0, size, value.into(), type_id))
+            values.push(((0, size), (value.into(), type_id)))
         } else {
             for (offset, type_id, sym_value) in porter.sym_values.iter() {
+                let Some(type_size) = self.type_manager.get_size(type_id).and_then(NonZero::new)
+                else {
+                    log_warn!("Unexpected ZST symbolic value in a porter: {:?}", porter);
+                    continue;
+                };
                 self.to_sym_values(
                     values,
                     base_offset + *offset,
-                    self.type_manager.get_size(type_id).unwrap(),
+                    type_size,
                     sym_value.clone_to(),
                     *type_id,
                 );

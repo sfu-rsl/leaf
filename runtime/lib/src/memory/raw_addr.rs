@@ -4,11 +4,11 @@ use core::{
     ops::Range,
 };
 
-use common::pri::TypeSize;
+use common::{pri::TypeSize, types::RawAddress};
 
 use crate::utils::RangeIntersection;
 
-pub(super) type Address = common::types::RawAddress;
+type Address = RawAddress;
 
 mod high {
     use common::{log_debug, log_warn, types::PointerOffset};
@@ -34,13 +34,8 @@ mod high {
         pub(crate) fn read_objects<'a, 'b>(
             &'a self,
             addr: Address,
-            size: TypeSize,
+            size: NonZero<TypeSize>,
         ) -> Vec<((Address, NonZero<TypeSize>), &'a O)> {
-            let Some(size) = NonZero::<TypeSize>::new(size) else {
-                // ZST symbolic values are not expected.
-                return Default::default();
-            };
-
             let range = range_from(addr, size);
 
             let mut objs = Vec::new();
@@ -74,12 +69,7 @@ mod high {
         }
 
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn erase_objects(&mut self, addr: Address, size: TypeSize) -> usize {
-            let Some(size) = NonZero::<TypeSize>::new(size) else {
-                // ZSTs are not stored to be erased
-                return 0;
-            };
-
+        pub(crate) fn erase_objects(&mut self, addr: Address, size: NonZero<TypeSize>) -> usize {
             let range = range_from(addr, size);
 
             self.mem.drain_range_and_apply(
@@ -112,18 +102,12 @@ mod high {
         pub(crate) fn replace_objects(
             &mut self,
             addr: Address,
-            size: TypeSize,
+            size: NonZero<TypeSize>,
             objs: Vec<((PointerOffset, NonZero<TypeSize>), O)>,
         ) {
-            let Some(size) = NonZero::<TypeSize>::new(size) else {
-                // ZSTs are not stored.
-                debug_assert!(objs.is_empty());
-                return;
-            };
-
             let range = range_from(addr, size);
 
-            self.erase_objects(addr, size.get());
+            self.erase_objects(addr, size);
 
             let mut cursor = self.mem.after_or_at_mut(&addr);
             for ((offset, obj_size), obj) in objs {
@@ -165,7 +149,6 @@ mod high {
         }
     }
 }
-pub(super) use high::MemoryGate;
 
 mod low {
     use std::{
@@ -180,8 +163,14 @@ mod low {
     use super::*;
 
     type MemoryElement<O> = (NonZero<TypeSize>, O);
+
+    /// Sparse raw-addressed object memory.
+    ///
+    /// Stores non-zero-sized objects keyed by their start address. Each entry keeps
+    /// the object size and payload, while range helpers provide overlap-aware read,
+    /// mutate, and drain operations.
     #[derive(Debug)]
-    pub(super) struct Memory<O>(BTreeMap<Address, MemoryElement<O>>);
+    pub(crate) struct Memory<O>(BTreeMap<Address, MemoryElement<O>>);
 
     impl<O> Default for Memory<O> {
         fn default() -> Self {
@@ -358,3 +347,6 @@ mod low {
 fn range_from(addr: Address, size: NonZero<TypeSize>) -> Range<Address> {
     addr..addr.wrapping_byte_add(size.get() as usize)
 }
+
+pub(crate) use high::MemoryGate;
+pub(crate) use low::Memory;

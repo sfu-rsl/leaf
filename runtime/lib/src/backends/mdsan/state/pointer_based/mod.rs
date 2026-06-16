@@ -1,9 +1,8 @@
-mod memory;
-
 use std::{num::NonZero, rc::Rc};
 
 use crate::{
     abs::{PlaceUsage, PointerOffset, RawAddress, TypeId, TypeSize, place::HasMetadata},
+    memory::raw_addr::MemoryGate,
     utils::byte_offset_from,
 };
 
@@ -17,12 +16,10 @@ use backend::{
 
 use super::Value;
 
-use memory::*;
-
 type Place = PlaceWithMetadata;
 
 pub(in super::super) struct RawPointerVariableState {
-    memory: memory::MemoryGate<MdState>,
+    memory: MemoryGate<MdState>,
     type_manager: Rc<MdSanTypeManager>,
 }
 
@@ -171,12 +168,19 @@ impl RawPointerVariableState {
     #[tracing::instrument(level = "debug", skip(self))]
     fn erase_region(&mut self, region: MemoryRegion) -> bool {
         let addr = region.addr;
-        let size = region.size;
+        let Some(size) = NonZero::new(region.size) else {
+            return false;
+        };
         self.memory.erase_objects(addr, size) > 0
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
     fn copy_region_raw(&mut self, src_addr: RawAddress, dst_addr: RawAddress, size: TypeSize) {
+        let Some(size) = NonZero::new(size) else {
+            // ZSTs are not supported
+            return;
+        };
+
         let values = self.memory.read_objects(src_addr, size);
         let values = self.convert_to_offsets(src_addr, values);
         self.memory.replace_objects(dst_addr, size, values);
@@ -187,7 +191,10 @@ impl RawPointerVariableState {
     #[tracing::instrument(level = "debug", skip(self))]
     fn take_region(&mut self, region: MemoryRegion) -> Value {
         let addr = region.addr;
-        let size = region.size;
+        let Some(size) = NonZero::new(region.size) else {
+            // ZSTs are not supported
+            return Value::non_rel();
+        };
 
         let values = self.memory.read_objects(addr, size);
         let values = self.convert_to_offsets(addr, values);
@@ -198,14 +205,20 @@ impl RawPointerVariableState {
     #[tracing::instrument(level = "debug", skip(self))]
     fn set_region(&mut self, region: MemoryRegion, value: Value) {
         let addr = region.addr;
-        let size = region.size;
+        let Some(size) = NonZero::new(region.size) else {
+            // ZSTs are not supported
+            return;
+        };
         self.memory.replace_objects(addr, size, value.labels);
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
     fn drop_region(&mut self, region: MemoryRegion) {
         let addr = region.addr;
-        let size = region.size;
+        let Some(size) = NonZero::new(region.size) else {
+            // ZSTs are not supported
+            return;
+        };
         self.memory.erase_objects(addr, size);
     }
 }
@@ -216,7 +229,7 @@ impl RawPointerVariableState {
     fn convert_to_offsets(
         &self,
         start: RawAddress,
-        values: Vec<((Address, NonZero<TypeSize>), &MemObject)>,
+        values: Vec<((RawAddress, NonZero<TypeSize>), &MemObject)>,
     ) -> Vec<((PointerOffset, NonZero<TypeSize>), MemObject)> {
         values
             .into_iter()

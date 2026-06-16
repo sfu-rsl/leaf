@@ -18,6 +18,7 @@
 pub mod abs;
 mod backends;
 mod call;
+pub(crate) mod memory;
 pub(crate) mod outgen;
 pub mod pri;
 pub(crate) mod solvers;
