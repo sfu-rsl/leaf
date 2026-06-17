@@ -1,7 +1,7 @@
 use core::iter;
 
 use crate::{
-    abs::{AssignmentId, FieldIndex, TypeId},
+    abs::{FieldIndex, TypeId},
     pri::fluent::backend::AssignmentHandler,
     type_info::{TypeLayoutResolver, TypeLayoutResolverExt},
     utils::MutAccess,
@@ -31,26 +31,23 @@ use common::types::PointerOffset;
 pub(super) use services_from_backend;
 
 pub(crate) struct MdSanAssignmentHandler<'s, 'a: 's> {
-    id: AssignmentId,
     dest: MdSanPlaceValue,
     services: MutAccess<'s, AssignmentServices<'a>>,
 }
 
 impl MdSanAssignmentHandler<'_, '_> {
     pub(super) fn new<'a>(
-        id: AssignmentId,
         dest: MdSanPlaceValue,
         backend: &'a mut MdSanBackend,
     ) -> MdSanAssignmentHandler<'a, 'a> {
-        MdSanAssignmentHandler::with_services(id, dest, services_from_backend!(backend).into())
+        MdSanAssignmentHandler::with_services(dest, services_from_backend!(backend).into())
     }
 
     pub(super) fn with_services<'s, 'a>(
-        id: AssignmentId,
         dest: MdSanPlaceValue,
         services: MutAccess<'s, AssignmentServices<'a>>,
     ) -> MdSanAssignmentHandler<'s, 'a> {
-        MdSanAssignmentHandler { id, dest, services }
+        MdSanAssignmentHandler { dest, services }
     }
 }
 

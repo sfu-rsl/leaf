@@ -7,7 +7,7 @@ use crate::{
 
 use super::alias::backend;
 use backend::{
-    MdMemoryState, MdSanBackend, MdSanPlaceValue, MdSanValue, TypeDatabase,
+    MdMemoryState, MdSanBackend, MdSanPlaceValue, MdSanValue,
     assignment::{self, AssignmentServices},
     state::MemoryRegion,
 };
@@ -93,7 +93,7 @@ impl<'a> RawMemoryHandler for MdSanRawMemoryHandler<'a> {
 
     fn swap(
         mut self,
-        assignment_id: AssignmentId,
+        _assignment_id: AssignmentId,
         _first_ptr: Self::Operand,
         conc_first_ptr: RawAddress,
         _second_ptr: Self::Operand,
@@ -123,12 +123,8 @@ impl<'a> RawMemoryHandler for MdSanRawMemoryHandler<'a> {
 
         macro_rules! assign {
             ($place:expr, $value:expr) => {
-                AssignmentHandlerImpl::with_services(
-                    assignment_id,
-                    $place,
-                    (&mut self.services).into(),
-                )
-                .use_of($value);
+                AssignmentHandlerImpl::with_services($place, (&mut self.services).into())
+                    .use_of($value);
             };
         }
 

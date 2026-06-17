@@ -1,22 +1,17 @@
 use delegate::delegate;
 
 use crate::{
-    abs::{
-        AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local,
-        backend::PhasedCallTraceRecorder, utils::BasicBlockLocationExt,
-    },
-    backends::mdsan::{MdMemoryState, state::MdState},
+    abs::{AssignmentId, BasicBlockIndex, CalleeDef, FuncDef},
+    backends::mdsan::MdMemoryState,
     call::{
         CallControlFlowManager, CallDataFlowManager, CallFlowManager, CallShadowMemory,
         DefaultCallFlowManager, SignaturePlaces, tupling::ArgsTuplingInfo,
     },
     pri::fluent::backend::{ArgsTupling, CallHandler, DropHandler},
-    utils::InPlaceSelfHierarchical,
 };
 
 use super::alias::backend;
 use backend::{MdSanBackend, MdSanPlaceValue, MdSanValue, MdSanVariablesState, TypeDatabase};
-use common::log_info;
 
 #[derive(Default)]
 pub(super) struct StackData {
@@ -50,10 +45,6 @@ impl<'a> MdSanCallHandler<'a> {
             type_manager: backend.type_manager.as_ref(),
         }
     }
-
-    fn current_func(&self) -> FuncDef {
-        self.flow_manager.current_func()
-    }
 }
 
 impl<'a> CallHandler for MdSanCallHandler<'a> {
@@ -61,11 +52,11 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
     type Operand = MdSanValue;
     type MetadataHandler = ();
 
-    fn before_call(mut self, def: CalleeDef, call_site: BasicBlockIndex) {
+    fn before_call(self, def: CalleeDef, _call_site: BasicBlockIndex) {
         self.flow_manager.prepare_for_calling(def);
     }
 
-    fn before_call_some(mut self) {
+    fn before_call_some(self) {
         self.flow_manager.prepare_for_call();
     }
 
@@ -82,7 +73,7 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
         );
     }
 
-    fn enter(mut self, def: FuncDef) {
+    fn enter(self, def: FuncDef) {
         let _sanity = self.flow_manager.enter(def);
     }
 
