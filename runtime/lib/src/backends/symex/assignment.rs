@@ -129,9 +129,9 @@ impl<EB: SymExValueExprBuilder> AssignmentHandler for SymExAssignmentHandler<'_,
         }
     }
 
-    fn thread_local_ref_to(mut self) {
+    fn thread_local_ref_to(self) {
         // Thread local references cannot refer to symbolic places, so the reference is concrete.
-        self.set_value(Implied::by_unknown(UnevalValue::Some.into()))
+        self.some()
     }
 
     fn address_of(self, place: Self::Place, is_mutable: bool) {

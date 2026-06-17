@@ -118,37 +118,6 @@ impl<'s, 'a: 's> AssignmentHandler for MdSanAssignmentHandler<'s, 'a> {
         // Not possible to be an MD.
         self.some()
     }
-
-    fn thread_local_ref_to(self) {
-        self.some()
-    }
-
-    fn cast_of(self, _operand: Self::Operand, _target: crate::abs::CastKind) {
-        self.some()
-    }
-    fn binary_op_between(
-        self,
-        _operator: crate::abs::BinaryOp,
-        _first: Self::Operand,
-        _second: Self::Operand,
-    ) {
-        self.some()
-    }
-    fn unary_op_on(self, _operator: crate::abs::UnaryOp, _operand: Self::Operand) {
-        self.some()
-    }
-    fn raw_ptr_from(self, _data_ptr: Self::Operand, _metadata: Self::Operand, _is_mutable: bool) {
-        self.some()
-    }
-    fn variant_index(self, _variant_index: common::pri::VariantIndex) {
-        self.some()
-    }
-    fn shallow_init_box_from(self, _value: Self::Operand) {
-        self.some()
-    }
-    fn wrap_in_unsafe_binder(self, _value: Self::Operand) {
-        self.some()
-    }
 }
 
 impl<'s, 'a: 's> MdSanAssignmentHandler<'s, 'a> {

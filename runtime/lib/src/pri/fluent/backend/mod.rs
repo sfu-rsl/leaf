@@ -193,34 +193,62 @@ pub(crate) trait AssignmentHandler: Sized {
     type DiscriminablePlace = Self::Place;
     type Operand;
 
-    fn use_of(self, operand: Self::Operand);
+    fn use_of(self, _operand: Self::Operand) {
+        self.some()
+    }
 
-    fn repeat_of(self, operand: Self::Operand, count: usize);
+    fn repeat_of(self, _operand: Self::Operand, _count: usize) {
+        self.some()
+    }
 
-    fn ref_to(self, place: Self::Place, is_mutable: bool);
+    fn ref_to(self, _place: Self::Place, _is_mutable: bool) {
+        self.some()
+    }
 
-    fn thread_local_ref_to(self);
+    fn thread_local_ref_to(self) {
+        self.some()
+    }
 
     // FIXME: Rename
-    fn address_of(self, place: Self::Place, is_mutable: bool);
+    fn address_of(self, _place: Self::Place, _is_mutable: bool) {
+        self.some()
+    }
 
-    fn cast_of(self, operand: Self::Operand, target: CastKind);
+    fn cast_of(self, _operand: Self::Operand, _target: CastKind) {
+        self.some()
+    }
 
-    fn binary_op_between(self, operator: BinaryOp, first: Self::Operand, second: Self::Operand);
+    fn binary_op_between(self, _operator: BinaryOp, _first: Self::Operand, _second: Self::Operand) {
+        self.some()
+    }
 
-    fn unary_op_on(self, operator: UnaryOp, operand: Self::Operand);
+    fn unary_op_on(self, _operator: UnaryOp, _operand: Self::Operand) {
+        self.some()
+    }
 
-    fn discriminant_from(self, place: Self::DiscriminablePlace);
+    fn discriminant_from(self, _place: Self::DiscriminablePlace) {
+        self.some()
+    }
 
-    fn array_from(self, items: impl Iterator<Item = Self::Operand>);
+    fn array_from(self, _items: impl Iterator<Item = Self::Operand>) {
+        self.some()
+    }
 
     fn tuple_from(self, fields: impl Iterator<Item = Self::Operand>) {
         self.adt_from(fields, None)
     }
 
-    fn adt_from(self, fields: impl Iterator<Item = Self::Operand>, variant: Option<VariantIndex>);
+    fn adt_from(
+        self,
+        _fields: impl Iterator<Item = Self::Operand>,
+        _variant: Option<VariantIndex>,
+    ) {
+        self.some()
+    }
 
-    fn union_from(self, active_field: FieldIndex, value: Self::Operand);
+    fn union_from(self, _active_field: FieldIndex, _value: Self::Operand) {
+        self.some()
+    }
 
     fn closure_from(self, upvars: impl Iterator<Item = Self::Operand>) {
         self.adt_from(upvars, None)
@@ -234,17 +262,29 @@ pub(crate) trait AssignmentHandler: Sized {
         self.adt_from(upvars, None)
     }
 
-    fn raw_ptr_from(self, data_ptr: Self::Operand, metadata: Self::Operand, is_mutable: bool);
+    fn raw_ptr_from(self, _data_ptr: Self::Operand, _metadata: Self::Operand, _is_mutable: bool) {
+        self.some()
+    }
 
-    fn variant_index(self, variant_index: VariantIndex);
+    fn variant_index(self, _variant_index: VariantIndex) {
+        self.some()
+    }
 
-    fn shallow_init_box_from(self, value: Self::Operand);
+    fn shallow_init_box_from(self, _value: Self::Operand) {
+        self.some()
+    }
 
-    fn wrap_in_unsafe_binder(self, value: Self::Operand);
+    fn wrap_in_unsafe_binder(self, _value: Self::Operand) {
+        self.some()
+    }
 
-    fn use_if_eq(self, current: Self::Operand, expected: Self::Operand, then: Self::Operand);
+    fn use_if_eq(self, _current: Self::Operand, _expected: Self::Operand, _then: Self::Operand) {
+        self.some()
+    }
 
-    fn use_and_check_eq(self, val: Self::Operand, expected: Self::Operand);
+    fn use_and_check_eq(self, _val: Self::Operand, _expected: Self::Operand) {
+        self.some()
+    }
 
     fn some(self);
 }
