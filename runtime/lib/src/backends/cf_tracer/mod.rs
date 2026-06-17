@@ -47,7 +47,7 @@ impl RuntimeBackend for CftBackend {
         Self: 'a;
 
     type MemoryHandler<'a>
-        = NoOpMemoryHandler
+        = NoOpLifetimeHandler
     where
         Self: 'a;
 

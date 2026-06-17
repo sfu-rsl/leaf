@@ -34,7 +34,7 @@ mod associated_types {
 
     pub(super) type MdSanAssignmentHandler<'a> = assignment::MdSanAssignmentHandler<'a, 'a>;
 
-    pub(super) type MdSanMemoryHandler<'a> = state::MdSanMemoryHandler<'a>;
+    pub(super) type MdSanLifetimeHandler<'a> = state::MdSanLifetimeHandler<'a>;
     pub(super) type MdSanRawMemoryHandler<'a> = raw_mem::MdSanRawMemoryHandler<'a>;
 
     pub(super) type MdSanCallFlowManager = call::MdSanCallFlowManager;
@@ -88,7 +88,7 @@ impl RuntimeBackend for MdSanBackend {
         Self: 'a;
 
     type MemoryHandler<'a>
-        = MdSanMemoryHandler<'a>
+        = MdSanLifetimeHandler<'a>
     where
         Self: 'a;
 
@@ -142,7 +142,7 @@ impl RuntimeBackend for MdSanBackend {
     }
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
-        MdSanMemoryHandler::new(self)
+        MdSanLifetimeHandler::new(self)
     }
 
     fn raw_memory<'a>(&'a mut self) -> Self::RawMemoryHandler<'a> {
