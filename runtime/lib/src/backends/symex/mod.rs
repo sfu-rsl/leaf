@@ -64,7 +64,7 @@ mod associated_types {
         assignment::SymExAssignmentHandler<'a, 'a, SymExExprBuilder>;
     #[cfg(feature = "implicit_flow")]
     pub(super) type SymExImplicationInvestigator = dyn ImplicationInvestigator;
-    pub(super) type SymExMemoryHandler<'a> = state::SymExMemoryHandler<'a>;
+    pub(super) type SymExLifetimeHandler<'a> = state::SymExLifetimeHandler<'a>;
     pub(super) type SymExRawMemoryHandler<'a> = memory::SymExRawMemoryHandler<'a, SymExExprBuilder>;
 
     pub(super) type SymExSymVariablesManager = sym_vars::DefaultSymVariablesManager;
@@ -206,7 +206,7 @@ impl RuntimeBackend for SymExBackend {
         Self: 'a;
 
     type MemoryHandler<'a>
-        = SymExMemoryHandler<'a>
+        = SymExLifetimeHandler<'a>
     where
         Self: 'a;
 
@@ -257,7 +257,7 @@ impl RuntimeBackend for SymExBackend {
     }
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
-        SymExMemoryHandler::new(self)
+        SymExLifetimeHandler::new(self)
     }
 
     fn raw_memory<'a>(&'a mut self) -> Self::RawMemoryHandler<'a> {

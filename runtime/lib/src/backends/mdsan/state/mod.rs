@@ -1,3 +1,4 @@
+mod lifetime;
 mod pointer_based;
 
 use core::num::NonZero;
@@ -6,45 +7,12 @@ use common::log_error;
 use derive_more as dm;
 
 use crate::abs::{PointerOffset, RawAddress, TypeId, TypeSize};
-use crate::pri::fluent::backend::MemoryHandler;
 
 use super::alias::backend;
-use backend::{MdMemoryState, MdSanBackend, MdSanPlaceValue, MdSanVariablesState, TypeDatabase};
+use backend::{MdMemoryState, MdSanPlaceValue, MdSanVariablesState, TypeDatabase};
 
+pub(super) use lifetime::MdSanLifetimeHandler;
 pub(super) use pointer_based::RawPointerVariableState;
-
-pub(crate) struct MdSanMemoryHandler<'s> {
-    vars_state: &'s mut MdSanVariablesState,
-}
-
-impl<'s> MdSanMemoryHandler<'s> {
-    pub(super) fn new(backend: &'s mut MdSanBackend) -> Self {
-        Self {
-            vars_state: &mut backend.vars_state,
-        }
-    }
-}
-
-impl<'s> MemoryHandler for MdSanMemoryHandler<'s> {
-    type Place = PlaceValue;
-
-    fn mark_live(self, _place: Self::Place) {
-        // Nothing to do for now.
-    }
-
-    fn mark_dead(self, place: Self::Place) {
-        match place {
-            PlaceValue::LifetimeMarkedMd { mem_region } => {
-                self.vars_state.erase_place(&mem_region);
-            }
-            PlaceValue::NonRelevant {} => {}
-            PlaceValue::AccessedMdWrapped { .. }
-            | PlaceValue::ToCarryMdContainer { .. }
-            | PlaceValue::LazyDestination(..)
-            | PlaceValue::ToDropMaybeMdWrapped { .. } => unreachable!(),
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]

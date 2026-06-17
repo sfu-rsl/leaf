@@ -28,7 +28,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
         >
     where
         Self: 'a;
-    type MemoryHandler<'a>: MemoryHandler<Place = Self::Place>
+    type MemoryHandler<'a>: LifetimeHandler<Place = Self::Place>
     where
         Self: 'a;
     type RawMemoryHandler<'a>: RawMemoryHandler<Place = Self::Place, Operand = Self::Operand>
@@ -289,7 +289,7 @@ pub(crate) trait AssignmentHandler: Sized {
     fn some(self);
 }
 
-pub(crate) trait MemoryHandler {
+pub(crate) trait LifetimeHandler {
     type Place;
 
     fn mark_live(self, place: Self::Place);

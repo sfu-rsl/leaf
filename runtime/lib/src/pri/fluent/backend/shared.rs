@@ -273,9 +273,9 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpMemoryHandler;
+    pub(crate) struct NoOpLifetimeHandler;
 
-    impl MemoryHandler for NoOpMemoryHandler {
+    impl LifetimeHandler for NoOpLifetimeHandler {
         type Place = NullPlace;
 
         fn mark_live(self, _place: Self::Place) {}
