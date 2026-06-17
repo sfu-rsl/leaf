@@ -2,18 +2,16 @@ mod pointer_based;
 
 use core::num::NonZero;
 
-use common::{log_debug, log_info};
+use common::log_error;
 use derive_more as dm;
 
 use crate::abs::{PointerOffset, RawAddress, TypeId, TypeSize};
 use crate::pri::fluent::backend::MemoryHandler;
 
-pub(super) use pointer_based::RawPointerVariableState;
-
 use super::alias::backend;
-use backend::{
-    MdMemoryState, MdSanBackend, MdSanPlaceValue, MdSanVariablesState, MdTypeProvider, TypeDatabase,
-};
+use backend::{MdMemoryState, MdSanBackend, MdSanPlaceValue, MdSanVariablesState, TypeDatabase};
+
+pub(super) use pointer_based::RawPointerVariableState;
 
 pub(crate) struct MdSanMemoryHandler<'s> {
     vars_state: &'s mut MdSanVariablesState,
@@ -50,20 +48,18 @@ impl<'s> MemoryHandler for MdSanMemoryHandler<'s> {
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
-pub(super) enum MdState {
+pub(crate) enum MdState {
     Alive,
     Dropped,
 }
 
-pub(super) type Label = MdState;
-
 #[derive(Clone, Debug)]
 pub(crate) struct Value {
-    labels: Vec<((PointerOffset, NonZero<TypeSize>), Label)>,
+    labels: Vec<((PointerOffset, NonZero<TypeSize>), MdState)>,
 }
 
 impl Value {
-    pub fn new(labels: Vec<((PointerOffset, NonZero<TypeSize>), Label)>) -> Self {
+    pub fn new(labels: Vec<((PointerOffset, NonZero<TypeSize>), MdState)>) -> Self {
         Self { labels }
     }
 
@@ -87,7 +83,7 @@ impl Value {
     pub fn labels_with_base(
         self,
         base: PointerOffset,
-    ) -> Vec<((PointerOffset, NonZero<TypeSize>), Label)> {
+    ) -> Vec<((PointerOffset, NonZero<TypeSize>), MdState)> {
         let mut labels = self.labels;
         labels.iter_mut().for_each(|((offset, _size), _)| {
             *offset += base;
@@ -104,25 +100,27 @@ pub(crate) struct MemoryRegion {
 
 #[derive(Clone, Debug)]
 pub(crate) struct WritablePlace {
-    pub(crate) addr: RawAddress,
-    pub(crate) type_id: Option<TypeId>,
-    pub(crate) pointer_type_id: Option<TypeId>,
+    addr: RawAddress,
+    type_id: DirectOrPointerTypeId,
+}
+
+#[derive(Clone, Debug)]
+enum DirectOrPointerTypeId {
+    Direct(TypeId),
+    Pointer(TypeId),
 }
 
 impl WritablePlace {
     fn type_id(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> TypeId {
-        self.type_id.unwrap_or_else(|| {
-            type_manager
-                .get_pointee_ty(
-                    self.pointer_type_id
-                        .as_ref()
-                        .expect("Expected pointer type ID"),
-                )
-                .unwrap()
-        })
+        match self.type_id {
+            DirectOrPointerTypeId::Direct(type_id) => type_id,
+            DirectOrPointerTypeId::Pointer(ptr_type_id) => {
+                type_manager.get_pointee_ty(&ptr_type_id).unwrap()
+            }
+        }
     }
 
-    pub fn is_md(&self, type_manager: &(impl TypeDatabase + MdTypeProvider + ?Sized)) -> bool {
+    pub fn is_md(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> bool {
         type_manager.is_md_type(&self.type_id(type_manager))
     }
 
@@ -180,6 +178,17 @@ impl PlaceValue {
         }
     }
 
+    pub(crate) fn address(&self) -> Option<RawAddress> {
+        match self {
+            PlaceValue::AccessedMdWrapped { addr } => Some(*addr),
+            PlaceValue::ToCarryMdContainer { mem_region } => Some(mem_region.addr),
+            PlaceValue::LazyDestination(writable_place) => Some(writable_place.addr),
+            PlaceValue::LifetimeMarkedMd { mem_region } => Some(mem_region.addr),
+            PlaceValue::ToDropMaybeMdWrapped { wrapped_addr } => Some(*wrapped_addr),
+            PlaceValue::NonRelevant {} => None,
+        }
+    }
+
     pub(crate) fn project_field(
         &self,
         offset: PointerOffset,
@@ -200,8 +209,7 @@ impl PlaceValue {
             PlaceValue::LazyDestination(writable_place) => {
                 PlaceValue::LazyDestination(WritablePlace {
                     addr: writable_place.addr.wrapping_add(offset),
-                    type_id: Some(get_type_id()),
-                    pointer_type_id: None,
+                    type_id: DirectOrPointerTypeId::Direct(get_type_id()),
                 })
             }
             PlaceValue::LifetimeMarkedMd { mem_region: _ } => PlaceValue::NonRelevant {}, // FIXME: MD<MD<T>>
@@ -225,28 +233,14 @@ impl<'a> DefaultPlaceInspector<'a> {
 
 impl super::PlaceInspector for DefaultPlaceInspector<'_> {
     fn inspect_place_for_access(&self, place: &MdSanPlaceValue) {
-        match place {
-            MdSanPlaceValue::AccessedMdWrapped { addr } => {
-                if self
-                    .vars_state
-                    .peek_place(addr)
-                    .is_some_and(|s| matches!(s, MdState::Dropped))
-                {
-                    common::log_error!("Accessing a dropped MD wrapper at {addr:p}");
-                    panic!("Accessing a dropped MD wrapper at {addr:p}");
-                }
-            }
-            MdSanPlaceValue::NonRelevant {} => {}
-            MdSanPlaceValue::ToCarryMdContainer { .. }
-            | MdSanPlaceValue::LazyDestination(..)
-            | MdSanPlaceValue::LifetimeMarkedMd { .. }
-            | MdSanPlaceValue::ToDropMaybeMdWrapped { .. } => {
-                if cfg!(debug_assertions) {
-                    common::log_warn!(
-                        "Inspecting a place for access that is not MD wrapped: {place:?}"
-                    );
-                }
-            }
+        if self
+            .vars_state
+            .peek_place(place)
+            .is_some_and(|s| matches!(s, MdState::Dropped))
+        {
+            let addr = place.address().unwrap();
+            log_error!("Accessing a dropped MD wrapper at {addr:p}");
+            panic!("Accessing a dropped MD wrapper at {addr:p}");
         }
     }
 }

@@ -6,17 +6,13 @@ use crate::{
     utils::byte_offset_from,
 };
 
+use common::log_warn;
+
 use super::backend;
 
-use backend::{
-    MdMemoryState, MdSanTypeManager,
-    place::{PlaceWithMetadata, Projection},
-    state::{MdState, MemoryRegion, PlaceValue, WritablePlace},
-};
+use backend::{MdMemoryState, MdSanPlaceInfo as PlaceInfo, MdSanTypeManager, place::Projection};
 
-use super::Value;
-
-type Place = PlaceWithMetadata;
+use super::{DirectOrPointerTypeId, MdState, MemoryRegion, PlaceValue, Value, WritablePlace};
 
 pub(in super::super) struct RawPointerVariableState {
     memory: MemoryGate<MdState>,
@@ -39,12 +35,8 @@ impl RawPointerVariableState {
 type MemObject = MdState;
 
 impl MdMemoryState for RawPointerVariableState {
-    type PlaceInfo = Place;
+    type PlaceInfo = PlaceInfo;
     type PlaceValue = PlaceValue;
-    type ToInspectPlaceValue = RawAddress;
-    type ToTakePlaceValue = PlaceValue;
-    type ToSetPlaceValue = PlaceValue;
-    type ToUpdatePlaceValue = PlaceValue;
     type ToErasePlaceValue = MemoryRegion;
     type ValueForAddress = MemObject;
     type Value = Value;
@@ -62,8 +54,20 @@ impl MdMemoryState for RawPointerVariableState {
         self.get_deref_of_ptr(conc_ptr, ptr_type_id, usage)
     }
 
-    fn peek_place(&self, place: &Self::ToInspectPlaceValue) -> Option<&Self::ValueForAddress> {
-        self.peek_addr(place)
+    fn peek_place(&self, place: &Self::ToPeekPlaceValue) -> Option<&Self::ValueForAddress> {
+        match place {
+            PlaceValue::AccessedMdWrapped { addr } => self.peek_addr(addr),
+            PlaceValue::NonRelevant {} => None,
+            PlaceValue::ToCarryMdContainer { .. }
+            | PlaceValue::LazyDestination(..)
+            | PlaceValue::LifetimeMarkedMd { .. }
+            | PlaceValue::ToDropMaybeMdWrapped { .. } => {
+                if cfg!(debug_assertions) {
+                    log_warn!("Inspecting a place for access that is not MD wrapped: {place:?}");
+                }
+                None
+            }
+        }
     }
 
     fn take_place(&mut self, place: &Self::ToTakePlaceValue) -> Self::Value {
@@ -161,8 +165,42 @@ impl RawPointerVariableState {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    fn take_region(&mut self, region: MemoryRegion) -> Value {
+        let addr = region.addr;
+        let Some(size) = NonZero::new(region.size) else {
+            // ZSTs are not supported
+            return Value::non_rel();
+        };
+
+        let values = self.memory.read_objects(addr, size);
+        let values = self.convert_to_offsets(addr, values);
+        self.memory.erase_objects(addr, size);
+        Value::new(values)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     fn update_addr(&mut self, addr: RawAddress, value: MemObject) -> Option<MemObject> {
         self.memory.update_containing(addr, value)
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    fn set_region(&mut self, region: MemoryRegion, value: Value) {
+        let addr = region.addr;
+        let Some(size) = NonZero::new(region.size) else {
+            // ZSTs are not supported
+            return;
+        };
+        self.memory.replace_objects(addr, size, value.labels);
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    fn drop_region(&mut self, region: MemoryRegion) {
+        let addr = region.addr;
+        let Some(size) = NonZero::new(region.size) else {
+            // ZSTs are not supported
+            return;
+        };
+        self.memory.erase_objects(addr, size);
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
@@ -184,42 +222,6 @@ impl RawPointerVariableState {
         let values = self.memory.read_objects(src_addr, size);
         let values = self.convert_to_offsets(src_addr, values);
         self.memory.replace_objects(dst_addr, size, values);
-    }
-}
-
-impl RawPointerVariableState {
-    #[tracing::instrument(level = "debug", skip(self))]
-    fn take_region(&mut self, region: MemoryRegion) -> Value {
-        let addr = region.addr;
-        let Some(size) = NonZero::new(region.size) else {
-            // ZSTs are not supported
-            return Value::non_rel();
-        };
-
-        let values = self.memory.read_objects(addr, size);
-        let values = self.convert_to_offsets(addr, values);
-        self.memory.erase_objects(addr, size);
-        Value::new(values)
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    fn set_region(&mut self, region: MemoryRegion, value: Value) {
-        let addr = region.addr;
-        let Some(size) = NonZero::new(region.size) else {
-            // ZSTs are not supported
-            return;
-        };
-        self.memory.replace_objects(addr, size, value.labels);
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
-    fn drop_region(&mut self, region: MemoryRegion) {
-        let addr = region.addr;
-        let Some(size) = NonZero::new(region.size) else {
-            // ZSTs are not supported
-            return;
-        };
-        self.memory.erase_objects(addr, size);
     }
 }
 
@@ -248,7 +250,7 @@ enum PlaceMdRelevance {
 }
 
 impl RawPointerVariableState {
-    pub(super) fn get_place<'a, 'b>(&'a self, place: Place, usage: PlaceUsage) -> PlaceValue {
+    fn get_place<'a, 'b>(&'a self, place: PlaceInfo, usage: PlaceUsage) -> PlaceValue {
         match usage {
             PlaceUsage::Copy => self
                 .opt_copied_md_wrapped_owned(&place)
@@ -277,13 +279,31 @@ impl RawPointerVariableState {
                 }),
             PlaceUsage::Write => PlaceValue::LazyDestination(WritablePlace {
                 addr: place.metadata().address(),
-                type_id: place.metadata().type_id(),
-                pointer_type_id: None,
+                type_id: DirectOrPointerTypeId::Direct(place.metadata().unwrap_type_id()),
             }),
         }
     }
 
-    fn opt_copied_md_wrapped_owned(&self, place: &Place) -> Option<RawAddress> {
+    fn get_deref_of_ptr<'a>(
+        &self,
+        conc_ptr: RawAddress,
+        ptr_type_id: TypeId,
+        usage: PlaceUsage,
+    ) -> PlaceValue {
+        match usage {
+            PlaceUsage::Copy => PlaceValue::NonRelevant {},
+            PlaceUsage::Write => PlaceValue::LazyDestination(WritablePlace {
+                addr: conc_ptr,
+                type_id: DirectOrPointerTypeId::Pointer(ptr_type_id),
+            }),
+            PlaceUsage::Drop => PlaceValue::ToDropMaybeMdWrapped {
+                wrapped_addr: conc_ptr,
+            },
+            PlaceUsage::Move | PlaceUsage::Ref | PlaceUsage::Mark => unimplemented!(),
+        }
+    }
+
+    fn opt_copied_md_wrapped_owned(&self, place: &PlaceInfo) -> Option<RawAddress> {
         let relevance = self.inspect_place_for_wrapped(place)?;
         match relevance {
             PlaceMdRelevance::WrappedOwned => Some(place.metadata().address()),
@@ -291,7 +311,7 @@ impl RawPointerVariableState {
         }
     }
 
-    fn opt_moved_md_container(&self, place: &Place) -> Option<MemoryRegion> {
+    fn opt_moved_md_container(&self, place: &PlaceInfo) -> Option<MemoryRegion> {
         place
             .metadata()
             .type_id()
@@ -302,7 +322,7 @@ impl RawPointerVariableState {
             })
     }
 
-    fn opt_referenced_md_wrapped(&self, place: &Place) -> Option<RawAddress> {
+    fn opt_referenced_md_wrapped(&self, place: &PlaceInfo) -> Option<RawAddress> {
         let relevance = self.inspect_place_for_wrapped(place)?;
         match relevance {
             PlaceMdRelevance::Wrapped | PlaceMdRelevance::WrappedOwned => {
@@ -312,12 +332,12 @@ impl RawPointerVariableState {
         }
     }
 
-    fn opt_dropped_md_wrapped(&self, _place: &Place) -> Option<RawAddress> {
+    fn opt_dropped_md_wrapped(&self, _place: &PlaceInfo) -> Option<RawAddress> {
         // `ManuallyDrop::drop` directly calls `drop_in_place` so it is going to be a pointer-based access
         None
     }
 
-    fn opt_marked_md(&self, place: &Place) -> Option<MemoryRegion> {
+    fn opt_marked_md(&self, place: &PlaceInfo) -> Option<MemoryRegion> {
         place
             .metadata()
             .type_id()
@@ -328,7 +348,7 @@ impl RawPointerVariableState {
             })
     }
 
-    fn inspect_place_for_wrapped(&self, place: &Place) -> Option<PlaceMdRelevance> {
+    fn inspect_place_for_wrapped(&self, place: &PlaceInfo) -> Option<PlaceMdRelevance> {
         let base_state = |type_id| {
             let Some(type_id) = type_id else {
                 return None;
@@ -363,25 +383,5 @@ impl RawPointerVariableState {
         }
 
         Some(current)
-    }
-
-    pub(super) fn get_deref_of_ptr<'a>(
-        &self,
-        conc_ptr: RawAddress,
-        ptr_type_id: TypeId,
-        usage: PlaceUsage,
-    ) -> PlaceValue {
-        match usage {
-            PlaceUsage::Copy => PlaceValue::NonRelevant {},
-            PlaceUsage::Write => PlaceValue::LazyDestination(WritablePlace {
-                addr: conc_ptr,
-                type_id: None,
-                pointer_type_id: Some(ptr_type_id),
-            }),
-            PlaceUsage::Drop => PlaceValue::ToDropMaybeMdWrapped {
-                wrapped_addr: conc_ptr,
-            },
-            PlaceUsage::Move | PlaceUsage::Ref | PlaceUsage::Mark => unimplemented!(),
-        }
     }
 }

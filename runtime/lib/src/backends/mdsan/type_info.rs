@@ -1,11 +1,13 @@
 use std::collections::HashSet;
 
-use common::log_warn;
-use common::type_info::TypeDatabase;
 use delegate::delegate;
 
+use common::log_warn;
+use common::type_info::TypeDatabase;
+
 use crate::abs::TypeId;
-use crate::backends::mdsan::MdTypeProvider;
+
+use super::MdTypeProvider;
 
 type SetImpl<T> = HashSet<T>;
 pub(super) struct MdSanTypeDb<D: 'static> {
@@ -69,11 +71,11 @@ impl<T> MdTypeProvider for MdSanTypeDb<T> {
 impl<D: TypeDatabase<'static> + 'static> TypeDatabase<'static> for MdSanTypeDb<D> {
     delegate! {
         to self.inner {
-                fn opt_get_type(&self, key: &TypeId) -> Option<&'static common::type_info::TypeInfo>;
+            fn opt_get_type(&self, key: &TypeId) -> Option<&'static common::type_info::TypeInfo>;
 
-                fn core_types(&self) -> &common::type_info::CoreTypes<TypeId>;
+            fn core_types(&self) -> &common::type_info::CoreTypes<TypeId>;
 
-                fn get_metadata(&self, key: &str) -> Option<&common::type_info::MetadataValue>;
+            fn get_metadata(&self, key: &str) -> Option<&common::type_info::MetadataValue>;
         }
     }
 }

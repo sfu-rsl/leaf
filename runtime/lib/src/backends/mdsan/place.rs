@@ -18,12 +18,10 @@ pub(crate) type MdSanPlaceBuilder = crate::pri::fluent::backend::shared::Default
 >;
 
 mod handlers {
-    use crate::{
-        abs::PlaceUsage, backends::mdsan::MdMemoryState, pri::fluent::backend::PlaceHandler,
-    };
+    use crate::{abs::PlaceUsage, pri::fluent::backend::PlaceHandler};
 
     use super::*;
-    use backend::{MdSanBackend, MdSanPlaceInfo, MdSanVariablesState};
+    use backend::{MdMemoryState, MdSanBackend, MdSanPlaceInfo, MdSanVariablesState};
 
     pub(crate) struct MdSanPlaceHandler<'a> {
         vars_state: &'a mut MdSanVariablesState,

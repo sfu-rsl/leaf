@@ -68,12 +68,6 @@ cfg_if! {
     }
 }
 
-const CONFIG_FILENAME: &str = "leaf_config";
-fn load_config() -> ::config::Config {
-    common::config::load_config(CONFIG_FILENAME, "LEAF", |b| Ok(b))
-        .expect("Failed to read configurations")
-}
-
 pub struct MdSanInstanceManager;
 
 impl MdSanInstanceManager {

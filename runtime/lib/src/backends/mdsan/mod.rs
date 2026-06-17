@@ -11,9 +11,9 @@ mod alias;
 mod assignment;
 mod call;
 mod instance;
-mod memory;
 mod operand;
 mod place;
+mod raw_mem;
 mod state;
 mod type_info;
 
@@ -35,7 +35,7 @@ mod associated_types {
     pub(super) type MdSanAssignmentHandler<'a> = assignment::MdSanAssignmentHandler<'a, 'a>;
 
     pub(super) type MdSanMemoryHandler<'a> = state::MdSanMemoryHandler<'a>;
-    pub(super) type MdSanRawMemoryHandler<'a> = memory::MdSanRawMemoryHandler<'a>;
+    pub(super) type MdSanRawMemoryHandler<'a> = raw_mem::MdSanRawMemoryHandler<'a>;
 
     pub(super) type MdSanCallFlowManager = call::MdSanCallFlowManager;
     pub(super) type MdSanCallHandler<'a> = call::MdSanCallHandler<'a>;
@@ -135,10 +135,10 @@ impl RuntimeBackend for MdSanBackend {
 
     fn assign_to<'a>(
         &'a mut self,
-        id: common::pri::AssignmentId,
+        _id: common::pri::AssignmentId,
         dest: <Self::AssignmentHandler<'a> as crate::pri::fluent::backend::AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a> {
-        MdSanAssignmentHandler::new(id, dest, self)
+        MdSanAssignmentHandler::new(dest, self)
     }
 
     fn memory<'a>(&'a mut self) -> Self::MemoryHandler<'a> {
@@ -178,11 +178,11 @@ impl Shutdown for MdSanBackend {
 trait MdMemoryState {
     type PlaceInfo;
     type PlaceValue;
-    type ToInspectPlaceValue;
-    type ToTakePlaceValue;
-    type ToSetPlaceValue;
-    type ToUpdatePlaceValue;
-    type ToErasePlaceValue;
+    type ToPeekPlaceValue = Self::PlaceValue;
+    type ToTakePlaceValue = Self::PlaceValue;
+    type ToSetPlaceValue = Self::PlaceValue;
+    type ToUpdatePlaceValue = Self::PlaceValue;
+    type ToErasePlaceValue = Self::PlaceValue;
     type ValueForAddress;
     type Value;
 
@@ -195,7 +195,7 @@ trait MdMemoryState {
         usage: PlaceUsage,
     ) -> Self::PlaceValue;
 
-    fn peek_place(&self, place: &Self::ToInspectPlaceValue) -> Option<&Self::ValueForAddress>;
+    fn peek_place(&self, place: &Self::ToPeekPlaceValue) -> Option<&Self::ValueForAddress>;
 
     fn take_place(&mut self, place: &Self::ToTakePlaceValue) -> Self::Value;
 

@@ -90,9 +90,6 @@ fn scan_all_bodies<'s>(tcx: TyCtxt) -> (HashSet<Instance>, HashSet<TypeId>, Hash
                     }
                     .collect_and_check_if_any(body);
                     instances.insert(instance.clone(), has_any);
-                    if instance.def_id().is_local() {
-                        log_info!(target: TAG, "Instance {:?} {}", instance, has_any);
-                    }
                 }
                 _ => {}
             })
@@ -118,6 +115,7 @@ fn scan_all_bodies<'s>(tcx: TyCtxt) -> (HashSet<Instance>, HashSet<TypeId>, Hash
     ) -> HashSet<TypeId> {
         types.into_iter().map(|t| type_id(tcx, t)).collect()
     }
+
     (
         md_touching_instances,
         to_type_ids(tcx, md_containers),
