@@ -220,7 +220,6 @@ mod driver_callbacks {
             Instrumentor::new(true, None /* FIXME */, config.instr_rules.clone()),
             <InstrumentationCounter>,
             <InstrumentationRecursionChecker>,
-            MonoItemInternalizer::new(config.internalization_rules.clone()),
         );
 
         if config.codegen_all_mir {
