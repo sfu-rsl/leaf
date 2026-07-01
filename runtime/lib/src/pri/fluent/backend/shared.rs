@@ -48,6 +48,7 @@ where
     }
 
     fn project_on<'a>(self, place: &'a mut Self::Place) -> Self::Projector<'a> {
+        place.push_metadata(Default::default());
         DefaultPlaceProjectionHandler::new(place.deref_mut())
     }
 

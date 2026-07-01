@@ -62,7 +62,30 @@ mod handlers {
         type Place = PlaceValueRef;
         type DiscriminablePlace = DiscriminantPossiblePlace;
 
-        fn from_info<'a>(self, info: Self::PlaceInfo<'a>) -> Self::Place {
+        fn from_info<'a>(self, mut info: Self::PlaceInfo<'a>) -> Self::Place {
+            // FIXME: Temporary solution until LazyTypeInfo is upgraded.
+            if let Some(ty) = info.metadata().ty() {
+                if info.metadata().type_id().is_none() {
+                    use crate::abs::{ValueType, backend::CoreTypeProvider};
+                    use crate::type_info::TypeInfo;
+                    let id = match ty {
+                        ValueType::Bool => {
+                            Some(CoreTypeProvider::<&TypeInfo>::bool(self.type_manager).id)
+                        }
+                        ValueType::Char => {
+                            Some(CoreTypeProvider::<&TypeInfo>::char(self.type_manager).id)
+                        }
+                        ValueType::Int(int_type) => Some(
+                            CoreTypeProvider::<&TypeInfo>::int_type(self.type_manager, *int_type)
+                                .id,
+                        ),
+                        ValueType::Float(_float_type) => None,
+                    };
+                    if let Some(id) = id {
+                        info.metadata_mut().set_type_id(id);
+                    }
+                }
+            }
             self.vars_state.ref_place(&info, self.usage)
         }
 

@@ -46,6 +46,6 @@ impl OperandHandler for MdSanOperandHandler<'_> {
     }
 
     fn new_symbolic(self, _var: SymVariable<Self::Operand>) -> Self::Operand {
-        unimplemented!()
+        MdSanValue::non_rel()
     }
 }

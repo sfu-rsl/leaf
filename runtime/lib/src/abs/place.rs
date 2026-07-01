@@ -220,7 +220,7 @@ impl DefaultPlaceMetadata {
     #[inline]
     pub(crate) fn set_address(&mut self, address: RawAddress) {
         debug_assert!(self.address.is_none());
-        if cfg!(debug_assertions) && self.address.is_none() {
+        if cfg!(debug_assertions) && address.is_null() {
             log_warn!("Setting null address to place metadata. {:?}", self);
         }
         self.address = NonNull::new(address as *mut ());
