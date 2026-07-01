@@ -277,10 +277,17 @@ impl RawPointerVariableState {
                 .map_or(PlaceValue::NonRelevant {}, |region| {
                     PlaceValue::LifetimeMarkedMd { mem_region: region }
                 }),
-            PlaceUsage::Write => PlaceValue::LazyDestination(WritablePlace {
-                addr: place.metadata().address(),
-                type_id: DirectOrPointerTypeId::Direct(place.metadata().unwrap_type_id()),
-            }),
+            PlaceUsage::Write => {
+                place
+                    .metadata()
+                    .type_id()
+                    .map_or(PlaceValue::NonRelevant {}, |type_id| {
+                        PlaceValue::LazyDestination(WritablePlace {
+                            addr: place.metadata().address(),
+                            type_id: DirectOrPointerTypeId::Direct(type_id),
+                        })
+                    })
+            }
         }
     }
 

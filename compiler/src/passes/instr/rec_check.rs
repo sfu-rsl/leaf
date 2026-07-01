@@ -55,15 +55,19 @@ impl CompilationPass for InstrumentationRecursionChecker {
             })
             .collect::<HashSet<_>>();
 
+        log_info!(
+            "Recursion checking for {} instances",
+            all_pri_instances.len()
+        );
+
         let mut to_visit = all_pri_instances;
         let mut visited = HashSet::new();
         let mut call_sites: HashMap<_, Vec<Span>> = HashMap::new();
         while let Some(caller) = { to_visit.iter().next().copied() } {
             to_visit.remove(&caller);
-            if visited.contains(&caller) {
+            if !visited.insert(caller) {
                 continue;
             }
-            visited.insert(caller);
 
             for Spanned { node: callee, span } in collect_called_instances(tcx, caller) {
                 {
