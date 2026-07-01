@@ -134,6 +134,7 @@ def common_env_vars() -> dict[str, str]:
         "PATH",
         "CARGO_HOME",
         "RUSTUP_TOOLCHAIN",
+        "RUSTUP_HOME",
         "LEAFC_LOG",
     ]
     return {
