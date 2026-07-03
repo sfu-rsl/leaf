@@ -3,7 +3,7 @@ use serde::Deserialize;
 
 use crate::CONFIG_ENV_PREFIX;
 use crate::passes::{InstrumentationRules, InternalizationRules};
-use common::log_info;
+use common::{log_error, log_info};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub(crate) struct LeafCompilerConfig {
@@ -19,9 +19,9 @@ pub(crate) struct LeafCompilerConfig {
     pub marker_cfg_name: String,
     #[serde(default)]
     #[serde(alias = "rules")]
-    pub instr_rules: InstrumentationRules,
+    instr_rules: InstrumentationRules,
     #[serde(default)]
-    pub internalization_rules: InternalizationRules,
+    pub passes: PassesConfig,
 }
 
 fn default_override_sysroot() -> bool {
@@ -102,37 +102,105 @@ fn default_runtime_shim_crate_name() -> String {
 
 const CONFIG_FILENAME: &str = "leafc_config";
 
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(crate) struct PassesConfig {
+    #[serde(default)]
+    pub instrumentation: GatedPassConfig<InstrumentationPassConfig>,
+    #[serde(default)]
+    pub instrumentation_counter: GatedPassConfig<()>,
+    #[serde(default)]
+    pub instrumentation_rec_check: GatedPassConfig<()>,
+    #[serde(default)]
+    pub internalization: GatedPassConfig<InternalizationPassConfig>,
+    #[serde(default)]
+    pub program_map: GatedPassConfig<()>,
+    #[serde(default)]
+    pub program_dep: GatedPassConfig<()>,
+    #[serde(default)]
+    pub type_export: GatedPassConfig<()>,
+    #[serde(default)]
+    pub md_info: GatedPassConfig<()>,
+}
+
+#[derive(Debug, Clone, Deserialize, Deref)]
+pub(crate) struct GatedPassConfig<T> {
+    #[serde(default = "default_pass_enabled")]
+    pub enabled: bool,
+    #[serde(flatten)]
+    #[deref]
+    pub config: T,
+}
+
+fn default_pass_enabled() -> bool {
+    true
+}
+
+impl<T: Default> Default for GatedPassConfig<T> {
+    fn default() -> Self {
+        GatedPassConfig {
+            enabled: default_pass_enabled(),
+            config: T::default(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(crate) struct InstrumentationPassConfig {
+    #[serde(default)]
+    pub(crate) rules: InstrumentationRules,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(crate) struct InternalizationPassConfig {
+    #[serde(default)]
+    pub(crate) rules: InternalizationRules,
+}
+
 pub(super) fn load_config() -> LeafCompilerConfig {
-    common::config::load_config(CONFIG_FILENAME, CONFIG_ENV_PREFIX, |b| {
-        Ok(b)
-            .and_then(|b| {
-                b.set_default(
-                    format!(
-                        "{}.{}.{}.{}",
-                        LeafCompilerConfig::F_RUNTIME_SHIM,
-                        RuntimeShimConfig::F_LOCATION,
-                        RuntimeShimLocation::V_EXTERNAL,
-                        RuntimeShimLocation::F_CRATE_NAME,
-                    ),
-                    default_runtime_shim_crate_name(),
-                )
-            })
-            .and_then(|b| {
-                b.set_default(
-                    format!(
-                        "{}.{}.{}.{}",
-                        LeafCompilerConfig::F_RUNTIME_SHIM,
-                        RuntimeShimConfig::F_LOCATION,
-                        RuntimeShimLocation::V_EXTERNAL,
-                        RuntimeShimLocation::F_SEARCH_PATH,
-                    ),
-                    RuntimeShimExternalLocation::V_SYSROOT,
-                )
-            })
-    })
-    .and_then(|c| c.try_deserialize())
-    .inspect(|c| log_info!("Loaded configurations: {:?}", c))
-    .expect("Failed to read configurations")
+    let mut config: LeafCompilerConfig =
+        common::config::load_config(CONFIG_FILENAME, CONFIG_ENV_PREFIX, |b| {
+            Ok(b)
+                .and_then(|b| {
+                    b.set_default(
+                        format!(
+                            "{}.{}.{}.{}",
+                            LeafCompilerConfig::F_RUNTIME_SHIM,
+                            RuntimeShimConfig::F_LOCATION,
+                            RuntimeShimLocation::V_EXTERNAL,
+                            RuntimeShimLocation::F_CRATE_NAME,
+                        ),
+                        default_runtime_shim_crate_name(),
+                    )
+                })
+                .and_then(|b| {
+                    b.set_default(
+                        format!(
+                            "{}.{}.{}.{}",
+                            LeafCompilerConfig::F_RUNTIME_SHIM,
+                            RuntimeShimConfig::F_LOCATION,
+                            RuntimeShimLocation::V_EXTERNAL,
+                            RuntimeShimLocation::F_SEARCH_PATH,
+                        ),
+                        RuntimeShimExternalLocation::V_SYSROOT,
+                    )
+                })
+        })
+        .and_then(|c| c.try_deserialize())
+        .inspect(|c| log_info!("Loaded configurations: {:?}", c))
+        .expect("Failed to read configurations");
+
+    if !config.instr_rules.is_empty() {
+        let instr_configs = &mut config.passes.instrumentation.config;
+        if !instr_configs.rules.is_empty() {
+            log_error!(
+                "Use either the top-level `instr_rules` or the `passes.instrumentation` config, but not both."
+            );
+            panic!("Configuration error");
+        }
+        instr_configs.rules = core::mem::replace(&mut config.instr_rules, Default::default());
+    }
+
+    config
 }
 
 pub(crate) mod rules {
@@ -152,6 +220,12 @@ pub(crate) mod rules {
                 include: Vec::default(),
                 exclude: Vec::default(),
             }
+        }
+    }
+
+    impl<T> InclusionRules<T> {
+        pub(crate) fn is_empty(&self) -> bool {
+            self.include.is_empty() && self.exclude.is_empty()
         }
     }
 
@@ -210,4 +284,3 @@ pub(crate) mod rules {
         pub(crate) of: Vec<LogicFormula<T>>,
     }
 }
-use rules::*;

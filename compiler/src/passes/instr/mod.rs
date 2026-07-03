@@ -70,25 +70,21 @@ use TAG_INSTRUMENTATION as TAG_INSTR;
 const TAG_INSTR_COUNTER: &str = concatcp!(TAG_INSTRUMENTATION, "::counter");
 
 const KEY_PRI_ITEMS: &str = "pri_items";
-const KEY_ENABLED: &str = "instr_enabled";
 const KEY_TOTAL_COUNT: &str = "total_body_count";
 const KEY_SWITCH_ORIG_INDICES: &str = "instr_switch_indices";
 
 #[derive(Default)]
 pub(crate) struct Instrumentor {
-    enabled: bool,
     total_body_count: Option<NonZeroUsize>,
     rules: Option<InstrumentationRules>,
 }
 
 impl Instrumentor {
     pub(crate) fn new(
-        enabled: bool,
         total_body_count: Option<NonZeroUsize>,
         filters: InstrumentationRules,
     ) -> Self {
         Self {
-            enabled,
             total_body_count,
             rules: Some(filters),
         }
@@ -107,8 +103,6 @@ impl CompilationPass for Instrumentor {
         _krate: &rustc_ast::Crate,
         storage: &mut dyn Storage,
     ) -> rustc_driver::Compilation {
-        // As early as possible, we use transform_ast to set the enabled flag.
-        storage.get_or_insert_with(KEY_ENABLED.to_owned(), || self.enabled);
         storage.get_or_insert_with(KEY_TOTAL_COUNT.to_owned(), || self.total_body_count);
         storage.get_or_insert_with(decision::rules::KEY_RULES.to_owned(), || {
             self.rules.take().unwrap()
@@ -129,10 +123,6 @@ impl CompilationPass for Instrumentor {
         body: &mut Body<'tcx>,
         storage: &mut dyn Storage,
     ) {
-        if !*storage.get_mut::<bool>(&KEY_ENABLED.to_owned()).unwrap() {
-            return;
-        }
-
         transform(tcx, body, storage);
     }
 }

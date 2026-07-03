@@ -1,12 +1,13 @@
 mod codegen;
+mod gated;
 mod instr;
 pub(crate) mod logger;
+mod md_types;
 mod noop;
 mod p_map_exp;
 mod program_dep;
 mod runtime_adder;
 pub(crate) mod type_info;
-mod md_types;
 
 use common::log_debug;
 use std::any::Any;
@@ -26,11 +27,13 @@ use crate::config::LeafCompilerConfig;
 use crate::utils::Chain;
 
 pub(crate) use codegen::{InternalizationRules, MonoItemInternalizer};
+pub(crate) use gated::CompilationPassLogExt as GatedCompilationPassLogExt;
 pub(crate) use instr::{
     InstrumentationCounter, InstrumentationRecursionChecker, InstrumentationRules, Instrumentor,
     pri_utils,
 };
-pub(crate) use logger::CompilationPassLogExt;
+pub(crate) use logger::CompilationPassLogExt as LoggedCompilationPassLogExt;
+pub(crate) use md_types::MdInfoExporter;
 #[allow(unused)]
 pub(crate) use noop::NoOpPass;
 pub(crate) use noop::OverrideFlagsForcePass;
@@ -38,7 +41,6 @@ pub(crate) use p_map_exp::ProgramMapExporter;
 pub(crate) use program_dep::ProgramDependenceMapExporter;
 pub(crate) use runtime_adder::RuntimeExternCrateAdder;
 pub(crate) use type_info::TypeInfoExporter;
-pub(crate) use md_types::MdInfoExporter;
 
 pub(super) type Callbacks = dyn CallbacksExt + Send;
 

@@ -194,15 +194,22 @@ mod driver_callbacks {
             },
         );
 
+        let instrumentation_pass = Instrumentor::new(
+            None, /* FIXME */
+            config.passes.instrumentation.rules.clone(),
+        );
+
         let passes = chain!(
             prerequisites_pass,
-            <MdInfoExporter>,
-            <TypeInfoExporter>,
-            <ProgramMapExporter>,
-            <ProgramDependenceMapExporter>,
-            Instrumentor::new(true, None /* FIXME */, config.instr_rules.clone()),
-            <InstrumentationCounter>,
-            <InstrumentationRecursionChecker>,
+            MdInfoExporter::default().into_gated(config.passes.md_info.enabled),
+            TypeInfoExporter::default().into_gated(config.passes.type_export.enabled),
+            ProgramMapExporter::default().into_gated(config.passes.program_map.enabled),
+            ProgramDependenceMapExporter::default().into_gated(config.passes.program_dep.enabled),
+            instrumentation_pass.into_gated(config.passes.instrumentation.enabled),
+            InstrumentationCounter::default()
+                .into_gated(config.passes.instrumentation_counter.enabled),
+            InstrumentationRecursionChecker::default()
+                .into_gated(config.passes.instrumentation_rec_check.enabled),
         );
 
         if config.codegen_all_mir {
@@ -222,7 +229,7 @@ mod driver_callbacks {
         Box::new(
             chain!(
                 force_codegen_all_pass(),
-                MonoItemInternalizer::new(config.internalization_rules.clone()),
+                MonoItemInternalizer::new(config.passes.internalization.rules.clone()),
             )
             .to_callbacks(),
         )
