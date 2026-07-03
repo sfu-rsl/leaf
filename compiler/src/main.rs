@@ -175,22 +175,8 @@ mod driver_callbacks {
             };
             passes.set_leaf_config(config);
 
-            passes.add_config_callback(Box::new(move |rustc_config, leafc_config| {
-                let cfg_name = leafc_config.marker_cfg_name.clone();
-                if cfg_name.is_empty() {
-                    return;
-                }
-                log_info!("Adding marker cfg to the crate config: `{cfg_name}`.");
-                rustc_config
-                    .crate_check_cfg
-                    .push(format!("cfg({})", cfg_name));
-                rustc_config.crate_cfg.push(cfg_name.clone());
-            }));
-            passes.add_config_callback(Box::new(move |rustc_config, _| {
-                /* Forcing inlining to happen as some compiler helper functions in the PRI use
-                 * generic functions from the core library which may cause infinite loops. */
-                rustc_config.opts.unstable_opts.inline_mir = Some(true);
-            }));
+            passes.add_config_callback(Box::new(config_marker_cfg));
+            passes.add_config_callback(Box::new(config_mir_inlining));
             passes.add_config_callback(Box::new(codegen_all::config_codegen_all));
             passes
         }
@@ -208,15 +194,12 @@ mod driver_callbacks {
             },
         );
 
-        let nctfe_pass = NoOpPass;
-
         let passes = chain!(
             prerequisites_pass,
             <MdInfoExporter>,
             <TypeInfoExporter>,
             <ProgramMapExporter>,
             <ProgramDependenceMapExporter>,
-            nctfe_pass,
             Instrumentor::new(true, None /* FIXME */, config.instr_rules.clone()),
             <InstrumentationCounter>,
             <InstrumentationRecursionChecker>,
@@ -272,6 +255,29 @@ mod driver_callbacks {
         );
 
         from_cargo && !is_primary
+    }
+
+    fn config_marker_cfg(
+        rustc_config: &mut rustc_interface::Config,
+        leafc_config: &mut LeafCompilerConfig,
+    ) {
+        let cfg_name = leafc_config.marker_cfg_name.clone();
+        if cfg_name.is_empty() {
+            return;
+        }
+
+        log_info!("Adding marker cfg to the crate config: `{cfg_name}`.");
+
+        rustc_config
+            .crate_check_cfg
+            .push(format!("cfg({})", cfg_name));
+        rustc_config.crate_cfg.push(cfg_name.clone());
+    }
+
+    fn config_mir_inlining(rustc_config: &mut rustc_interface::Config, _: &mut LeafCompilerConfig) {
+        /* Forcing inlining to happen as some compiler helper functions in the PRI use
+         * generic functions from the core library which may cause infinite loops. */
+        rustc_config.opts.unstable_opts.inline_mir = Some(true);
     }
 
     mod shim_dep {
