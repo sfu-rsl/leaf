@@ -74,7 +74,7 @@ pub(crate) mod sym {
 
         common::pri::pass_func_names_to!(symbols_in_pri, all_comma_separated);
 
-        pub(crate) const ALL_MAINS: [LeafSymbol; 135] =
+        pub(crate) const ALL_MAINS: [LeafSymbol; 134] =
             common::pri::pass_func_names_to!(bracket, all_comma_separated);
 
         pub(crate) mod intrinsics {
@@ -478,7 +478,7 @@ pub(super) fn filter_main_funcs<'tcx>(
     all_pri_items: &[DefId],
 ) -> HashMap<LeafSymbol, FunctionInfo> {
     let items = filter_pri_items(tcx, all_pri_items, sym::MODULE_MARKER)
-        .filter(|def_id| matches!(tcx.def_kind(def_id), DefKind::Fn | DefKind::AssocFn))
+        .filter(|def_id| matches!(tcx.def_kind(*def_id), DefKind::Fn | DefKind::AssocFn))
         .inspect(|def_id| {
             log_debug!(
                 target: TAG_DISCOVERY,

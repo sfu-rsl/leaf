@@ -214,8 +214,6 @@ pub mod macros {
           { fn assign_aggregate_raw_ptr(id: AssignmentId, dest: PlaceRef, data_ptr: OperandRef, metadata: OperandRef, is_mutable: bool) }
 
           #[allow(unused_parens)]
-          { fn assign_shallow_init_box(id: AssignmentId, dest: PlaceRef, operand: OperandRef, boxed_type_id: ($type_id_ty)) }
-          #[allow(unused_parens)]
           { fn assign_wrap_unsafe_binder(id: AssignmentId, dest: PlaceRef, operand: OperandRef, binder_type_id: ($type_id_ty)) }
 
           { fn assign_some(id: AssignmentId, dest: PlaceRef) }
@@ -740,8 +738,6 @@ pub mod macros {
                 #[allow(unused_parens)]fn assign_aggregate_coroutine_closure(id: AssignmentId,dest: PlaceRef,upvars: ($slice_ty!(OperandRef)));
             }$modifier!{
                 fn assign_aggregate_raw_ptr(id: AssignmentId,dest: PlaceRef,data_ptr: OperandRef,metadata: OperandRef,is_mutable: bool);
-            }$modifier!{
-                #[allow(unused_parens)]fn assign_shallow_init_box(id: AssignmentId,dest: PlaceRef,operand: OperandRef,boxed_type_id: ($type_id_ty));
             }$modifier!{
                 #[allow(unused_parens)]fn assign_wrap_unsafe_binder(id: AssignmentId,dest: PlaceRef,operand: OperandRef,binder_type_id: ($type_id_ty));
             }$modifier!{

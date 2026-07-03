@@ -1,4 +1,4 @@
-use core::assert_matches::debug_assert_matches;
+use core::debug_assert_matches;
 use std::collections::HashMap;
 
 use rustc_middle::{
@@ -813,7 +813,7 @@ pub(super) mod utils {
             use rustc_trait_selection::infer::InferCtxtExt;
 
             tcx.infer_ctxt()
-                .build(typing_env.typing_mode)
+                .build(typing_env.typing_mode())
                 .type_implements_trait(trait_def_id, [ty], typing_env.param_env)
                 .must_apply_modulo_regions()
         }
@@ -821,7 +821,7 @@ pub(super) mod utils {
 
     pub(super) mod terminator {
         use rustc_middle::mir::{Terminator, TerminatorKind, UnwindAction};
-        use rustc_span::source_map::Spanned;
+        use rustc_span::Spanned;
 
         use super::*;
 
@@ -853,6 +853,7 @@ pub(super) mod utils {
                     call_source: mir::CallSource::Normal,
                     fn_span: DUMMY_SP,
                 },
+                attributes: Default::default(),
             }
         }
 
@@ -862,6 +863,7 @@ pub(super) mod utils {
                 kind: TerminatorKind::Goto {
                     target: target.unwrap_or(NEXT_BLOCK),
                 },
+                attributes: Default::default(),
             }
         }
     }

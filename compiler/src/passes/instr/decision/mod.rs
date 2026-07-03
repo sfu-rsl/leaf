@@ -6,7 +6,7 @@ use const_format::concatcp;
 use rustc_hir::{def_id::DefId, definitions::DefPathData};
 use rustc_middle::{
     mir::Body,
-    ty::{InstanceKind, TyCtxt},
+    ty::{InstanceKind, ShimKind, TyCtxt},
 };
 use rustc_span::Symbol;
 
@@ -72,23 +72,28 @@ pub(super) fn should_instrument<'tcx>(
 
 fn decide_instance_kind(kind: &InstanceKind) -> bool {
     use InstanceKind::*;
+    use ShimKind::*;
     match kind {
         Item(..)
-        | FnPtrShim(..)
-        | ClosureOnceShim { .. }
-        | CloneShim(..)
-        | ReifyShim(..)
-        | DropGlue(_, Some(..)) => true,
+        | Shim(
+            ShimKind::FnPtr(..)
+            | ClosureOnce { .. }
+            | Clone(..)
+            | Reify(..)
+            | DropGlue(_, Some(..)),
+        ) => true,
         Intrinsic(..)
-        | VTableShim(..)
         | Virtual(..)
-        | ConstructCoroutineInClosureShim { .. }
-        | ThreadLocalShim(..)
-        | FutureDropPollShim(..)
-        | FnPtrAddrShim(..)
-        | AsyncDropGlue(..)
-        | DropGlue(_, None)
-        | AsyncDropGlueCtorShim(..) => false,
+        | Shim(
+            VTable(..)
+            | ConstructCoroutineInClosure { .. }
+            | ThreadLocal(..)
+            | FutureDropPoll(..)
+            | FnPtrAddr(..)
+            | AsyncDropGlue(..)
+            | DropGlue(_, None)
+            | AsyncDropGlueCtor(..),
+        ) => false,
     }
 }
 
@@ -225,7 +230,7 @@ fn is_lang_start_item(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
 fn is_drop_fn(tcx: TyCtxt<'_>, def_id: DefId) -> bool {
     let mut drop_fn_ids = {
         use rustc_hir::LanguageItems as Items;
-        [Items::drop_in_place_fn, Items::async_drop_in_place_fn]
+        [Items::drop_glue_fn, Items::async_drop_in_place_fn]
             .iter()
             .filter_map(|item| item(tcx.lang_items()))
     };

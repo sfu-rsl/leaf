@@ -1,10 +1,11 @@
 use std::collections::{HashMap, HashSet};
 
 use rustc_middle::{
-    mir::{TerminatorKind, mono::MonoItem},
+    mir::TerminatorKind,
+    mono::MonoItem,
     ty::{EarlyBinder, Instance, TyCtxt, TyKind, TypingEnv},
 };
-use rustc_span::{Span, source_map::Spanned};
+use rustc_span::{Span, Spanned};
 
 use common::log_info;
 
@@ -114,7 +115,7 @@ fn collect_called_instances<'tcx>(
                 let callee_ty = instance.instantiate_mir_and_normalize_erasing_regions(
                     tcx,
                     TypingEnv::fully_monomorphized(),
-                    EarlyBinder::bind(callee_ty),
+                    EarlyBinder::bind(tcx, callee_ty),
                 );
                 if let TyKind::FnDef(def_id, args) = *callee_ty.kind() {
                     Instance::try_resolve(tcx, TypingEnv::fully_monomorphized(), def_id, args)

@@ -31,7 +31,7 @@ pub(crate) mod mir {
     use rustc_hir::{def::DefKind, definitions::DisambiguatedDefPathData};
     use rustc_middle::{
         mir::{Body, Local, Location, Statement, Terminator},
-        ty::{GenericArgsRef, Instance, InstanceKind, TyCtxt, TypingEnv, TypingMode},
+        ty::{GenericArgsRef, Instance, InstanceKind, ShimKind, TyCtxt, TypingEnv, TypingMode},
     };
     use rustc_span::def_id::{DefId, LocalDefId};
 
@@ -70,16 +70,15 @@ pub(crate) mod mir {
         }
 
         fn typing_env_in_body(self, def_id: DefId) -> TypingEnv<'tcx> {
-            TypingEnv {
-                typing_mode: if let Some(def_id) = def_id.as_local() {
+            TypingEnv::new(self.param_env(def_id), {
+                if let Some(def_id) = def_id.as_local() {
                     self.typing_mode_for_body(def_id)
                 } else {
                     // It looks like that the type will be resolved at the crate level,
                     // so for external bodies they should be already resolved.
                     TypingMode::non_body_analysis()
-                },
-                param_env: self.param_env(def_id),
-            }
+                }
+            })
         }
 
         // A safe wrapper around `opaque_types_defined_by`
@@ -89,8 +88,8 @@ pub(crate) mod mir {
                 DefKind::AssocFn
                 | DefKind::Fn
                 | DefKind::Static { .. }
-                | DefKind::Const
-                | DefKind::AssocConst
+                | DefKind::Const { .. }
+                | DefKind::AssocConst { .. }
                 | DefKind::AnonConst
                 | DefKind::Closure
                 | DefKind::InlineConst => {
@@ -221,43 +220,51 @@ pub(crate) mod mir {
     impl<'tcx> InstanceKindExt<'tcx> for InstanceKind<'tcx> {
         fn discriminant(&self) -> InstanceKindDiscr {
             use InstanceKind::*;
+            use ShimKind::*;
             match self {
                 Item(..) => 0,
                 Intrinsic(..) => 1,
-                VTableShim(..) => 2,
-                ReifyShim(..) => 3,
-                FnPtrShim(..) => 4,
                 Virtual(..) => 5,
-                ClosureOnceShim { .. } => 6,
-                ConstructCoroutineInClosureShim { .. } => 7,
-                ThreadLocalShim(..) => 8,
-                FutureDropPollShim(..) => 9,
-                DropGlue(..) => 10,
-                CloneShim(..) => 11,
-                FnPtrAddrShim(..) => 12,
-                AsyncDropGlueCtorShim(..) => 13,
-                AsyncDropGlue(..) => 14,
+                Shim(kind) => match kind {
+                    VTable(..) => 2,
+                    Reify(..) => 3,
+                    FnPtr(..) => 4,
+                    ClosureOnce { .. } => 6,
+                    ConstructCoroutineInClosure { .. } => 7,
+                    ThreadLocal(..) => 8,
+                    FutureDropPoll(..) => 9,
+                    DropGlue(..) => 10,
+                    Clone(..) => 11,
+                    FnPtrAddr(..) => 12,
+                    AsyncDropGlueCtor(..) => 13,
+                    AsyncDropGlue(..) => 14,
+                },
             }
         }
 
         fn has_identical_polymorphic_body(&self) -> bool {
             use InstanceKind::*;
+            use ShimKind::*;
             match self {
                 Item(..) => true,
-                Intrinsic(..) => false,         // Should not even have a body
-                VTableShim(..) => false,        // Opaque for MIR
-                ReifyShim(..) => false,         // Opaque for MIR
-                FnPtrShim(..) => false,         // Different for different signatures
-                Virtual(..) => false,           // Opaque for MIR
-                ClosureOnceShim { .. } => true, // Always <Self as FnMut>::call_mut
-                ConstructCoroutineInClosureShim { .. } => false,
-                ThreadLocalShim(..) => true, // Should not even have generic parameters (not sure)
-                FutureDropPollShim(..) => false, // Different for different types (not sure)
-                DropGlue(..) => false,       // Different for different types
-                CloneShim(..) => false,      // Different for different types
-                FnPtrAddrShim(..) => false,  // Different for different types
-                AsyncDropGlueCtorShim(..) => false, // Different for different types
-                AsyncDropGlue(..) => false,  // Different for different types
+                Intrinsic(..) => false,     // Should not even have a body
+                Virtual(..) => false,       // Opaque for MIR
+                Shim(
+                    VTable(..)              // Opaque for MIR
+                    | Reify(..)             // Opaque for MIR
+                    | FnPtr(..)             // Different for different signatures
+                    | ConstructCoroutineInClosure { .. }  // Different for different types (not sure)
+                    | FutureDropPoll(..)    // Different for different types (not sure)
+                    | DropGlue(..)          // Different for different types
+                    | Clone(..)             // Different for different types
+                    | FnPtrAddr(..)         // Different for different types
+                    | AsyncDropGlueCtor(..) // Different for different types
+                    | AsyncDropGlue(..),    // Different for different types
+                ) => false,
+                Shim(
+                    ClosureOnce { .. }      // Always <Self as FnMut>::call_mut
+                    | ThreadLocal(..)       // Should not even have generic parameters (not sure)
+                ) => true,        
             }
         }
 

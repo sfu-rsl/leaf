@@ -5,10 +5,9 @@
 #![feature(iter_order_by)]
 #![feature(macro_metavar_expr)]
 #![feature(box_into_inner)]
-#![feature(assert_matches)]
 #![feature(core_intrinsics)]
-#![feature(if_let_guard)]
 #![feature(option_into_flat_iter)]
+#![feature(exitcode_exit_method)]
 
 mod config;
 mod mir_transform;
@@ -34,7 +33,6 @@ extern crate rustc_mir_build;
 extern crate rustc_mir_dataflow;
 extern crate rustc_mir_transform;
 extern crate rustc_monomorphize;
-extern crate rustc_query_system;
 extern crate rustc_session;
 extern crate rustc_span;
 extern crate rustc_target;
@@ -54,7 +52,7 @@ fn main() {
 
     set_up_compiler();
 
-    std::process::exit(run_compiler(env::args()));
+    run_compiler(env::args()).exit_process()
 }
 
 fn init_logging() {
@@ -86,7 +84,7 @@ pub fn set_up_compiler() {
     rustc_driver::install_ice_hook(URL_BUG_REPORT, |_| ());
 }
 
-pub fn run_compiler(args: impl IntoIterator<Item = String>) -> i32 {
+pub fn run_compiler(args: impl IntoIterator<Item = String>) -> std::process::ExitCode {
     let config = config::load_config();
 
     let args = driver_args::set_up_args(args);

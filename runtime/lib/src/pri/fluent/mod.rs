@@ -488,16 +488,6 @@ where
         Self::assign_to(id, dest, |h| h.raw_ptr_from(data_ptr, metadata, is_mutable))
     }
 
-    fn assign_shallow_init_box(
-        id: AssignmentId,
-        dest: PlaceRef,
-        operand: OperandRef,
-        _boxed_type_id: Self::TypeId,
-    ) {
-        let operand = Self::take_back_operand(operand);
-        Self::assign_to(id, dest, |h| h.shallow_init_box_from(operand))
-    }
-
     fn assign_wrap_unsafe_binder(
         id: AssignmentId,
         dest: PlaceRef,

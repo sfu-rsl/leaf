@@ -7,7 +7,7 @@ use rustc_middle::{
     mir::{BasicBlock, BinOp, Body, CastKind, ConstOperand, Local, Operand, Place, UnOp},
     ty::{Const, GenericArg, Ty, TyCtxt},
 };
-use rustc_span::{def_id::DefId, source_map::Spanned};
+use rustc_span::{Spanned, def_id::DefId};
 
 use core::iter;
 use std::vec;
@@ -126,8 +126,6 @@ pub(crate) trait Assigner<'tcx>: AssignmentInfoProvider<'tcx> {
         metadata: OperandRef,
         is_mutable: bool,
     );
-
-    fn by_shallow_init_box(&mut self, operand: OperandRef, ty: &Ty<'tcx>);
 
     fn by_wrap_unsafe_binder(&mut self, operand: OperandRef, ty: &Ty<'tcx>);
 

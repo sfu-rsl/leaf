@@ -54,7 +54,7 @@ all = [
 
 # [[instr_rules.exclude]]
 # entity = "assignment_info"
-# kind = { any = [ "shallow_init_box" ] }
+# kind = { any = [ "wrap_unsafe_binder" ] }
 # all = []
 
 # [[instr_rules.exclude]]

@@ -257,8 +257,6 @@ pub(crate) mod noop {
 
         fn variant_index(self, _variant_index: VariantIndex) {}
 
-        fn shallow_init_box_from(self, _value: Self::Operand) {}
-
         fn wrap_in_unsafe_binder(self, _value: Self::Operand) {}
 
         fn use_if_eq(

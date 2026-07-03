@@ -955,7 +955,7 @@ mod guards {
             {
                 pub fn new(value: V) -> Self {
                     #![allow(unused_variables)]
-                    core::assert_matches::assert_matches!(
+                    core::assert_matches!(
                         value.as_ref(),
                         $pattern,
                         concat!("Value should be ", stringify!($guarded_type), ".")

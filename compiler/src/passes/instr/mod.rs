@@ -17,7 +17,7 @@ use rustc_middle::{
     },
     ty::{self as mir_ty, IntrinsicDef, Ty, TyCtxt},
 };
-use rustc_span::{Span, def_id::DefId, source_map::Spanned};
+use rustc_span::{Span, Spanned, def_id::DefId};
 
 use std::{
     borrow::Cow,
@@ -264,7 +264,6 @@ fn make_config<'tcx>(storage: &mut dyn Storage, tcx: TyCtxt<'tcx>, def_id: DefId
                 unary_op: top_level.unary_op.then(|| rules.unary_op),
                 discriminant: top_level.discriminant.then(|| rules.discriminant),
                 aggregate: top_level.aggregate.then(|| rules.aggregate),
-                shallow_init_box: top_level.shallow_init_box.then(|| rules.shallow_init_box),
                 wrap_unsafe_binder: top_level
                     .wrap_unsafe_binder
                     .then(|| rules.wrap_unsafe_binder),
@@ -769,7 +768,7 @@ where
             Some(def_id)
                 if tcx
                     .lang_items()
-                    .drop_in_place_fn()
+                    .drop_glue_fn()
                     .is_some_and(|id| id == def_id) =>
             {
                 self.instrument_drop_in_place_call(params)
@@ -1183,9 +1182,9 @@ where
             Rvalue::UnaryOp(..) => rules.unary_op,
             Rvalue::Discriminant(..) => rules.discriminant,
             Rvalue::Aggregate(..) => rules.aggregate,
-            Rvalue::ShallowInitBox(..) => rules.shallow_init_box,
             Rvalue::CopyForDeref(..) => rules.use_,
             Rvalue::WrapUnsafeBinder(..) => rules.wrap_unsafe_binder,
+            Rvalue::Reborrow(..) => None,
         };
         match filter {
             Some(include_info) => {
@@ -1217,7 +1216,7 @@ where
         self.super_rvalue(rvalue)
     }
 
-    fn visit_use(&mut self, operand: &Operand<'tcx>) {
+    fn visit_use(&mut self, operand: &Operand<'tcx>, _: &mir::WithRetag) {
         let operand_ref = self.call_adder.reference_operand(operand);
         self.call_adder.by_use(operand_ref)
     }
@@ -1315,7 +1314,7 @@ where
             }),
             Adt(def_id, variant, _, _, None) => {
                 use rustc_hir::def::DefKind;
-                match self.call_adder.tcx().def_kind(def_id) {
+                match self.call_adder.tcx().def_kind(*def_id) {
                     DefKind::Enum => Box::new(|fields| {self.call_adder.by_aggregate_enum(fields, *variant)}),
                     DefKind::Struct => Box::new(|fields| {
                         self.call_adder.by_aggregate_struct(fields)
@@ -1352,19 +1351,35 @@ where
         add_call(operands.as_slice())
     }
 
-    fn visit_shallow_init_box(&mut self, operand: &Operand<'tcx>, ty: &Ty<'tcx>) {
-        let operand_ref = self.call_adder.reference_operand(operand);
-        self.call_adder.by_shallow_init_box(operand_ref, ty);
-    }
-
     fn visit_copy_for_deref(&mut self, place: &Place<'tcx>) {
         let operand = Operand::Copy(*place);
-        self.visit_use(&operand)
+        self.visit_use(&operand, &mir::WithRetag::No)
     }
 
     fn visit_wrap_unsafe_binder(&mut self, operand: &Operand<'tcx>, ty: &Ty<'tcx>) -> () {
         let operand_ref = self.call_adder.reference_operand(operand);
         self.call_adder.by_wrap_unsafe_binder(operand_ref, ty);
+    }
+
+    fn visit_reborrow(
+        &mut self,
+        target_ty: &Ty<'tcx>,
+        mutability: &rustc_hir::Mutability,
+        place: &Place<'tcx>,
+    ) {
+        // The GVN pass should replace reborrows with use.
+        panic!(
+            concat!(
+                "Reborrow is not expected to be observed at this point. ",
+                "It should have been optimized away by the compiler. ",
+                "({:?}, {:?}, {:?}) ",
+                "at {:?}"
+            ),
+            target_ty,
+            mutability,
+            place,
+            self.call_adder.source_info().span,
+        );
     }
 }
 

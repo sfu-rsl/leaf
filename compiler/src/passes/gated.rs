@@ -129,7 +129,7 @@ where
 
     fn visit_codegen_units<'tcx>(
         tcx: TyCtxt<'tcx>,
-        units: &mut [mir::mono::CodegenUnit<'tcx>],
+        units: &mut [rustc_middle::mono::CodegenUnit<'tcx>],
         storage: &mut dyn Storage,
     ) {
         if !is_enabled::<T>(storage) {

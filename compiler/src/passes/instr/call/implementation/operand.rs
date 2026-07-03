@@ -435,9 +435,9 @@ mod utils {
             match constant.const_ {
                 Const::Unevaluated(c, _) => Some(c),
                 Const::Ty(_ty, c) => match c.kind() {
-                    ty::ConstKind::Unevaluated(ty::UnevaluatedConst { def, args }) => {
+                    ty::ConstKind::Alias(ty::IsRigid::No, ty::AliasConst { kind, args, .. }) => {
                         Some(mir::UnevaluatedConst {
-                            def,
+                            def: kind.opt_def_id().unwrap(),
                             args,
                             promoted: None,
                         })

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use rustc_hir::def_id::DefId;
-use rustc_middle::mir::{Body, mono::MonoItem};
+use rustc_middle::{mir::Body, mono::MonoItem};
 
 use crate::{
     passes::{CompilationPass, Storage, StorageExt},

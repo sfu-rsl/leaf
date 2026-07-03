@@ -1,4 +1,4 @@
-use core::assert_matches::debug_assert_matches;
+use core::debug_assert_matches;
 
 use crate::passes::instr::ctxtreqs::ForStorageMarking;
 

@@ -1,7 +1,7 @@
 use rustc_hir::{def::DefKind, def_id::LOCAL_CRATE};
 use rustc_middle::{
     middle::codegen_fn_attrs::CodegenFnAttrFlags,
-    mir::mono::{CodegenUnit, MonoItem},
+    mono::{CodegenUnit, MonoItem},
     ty::TyCtxt,
 };
 
@@ -111,9 +111,7 @@ fn should_be_internalized<'tcx>(
      * Note: In an ideal workflow, proc-macro crates should not be compiled with leaf,
      * but we make the compiler robust enough for this case. */
     else if item.symbol_name(tcx).name
-        == tcx
-            .sess
-            .generate_proc_macro_decls_symbol(tcx.stable_crate_id(LOCAL_CRATE))
+        == rustc_session::generate_proc_macro_decls_symbol(tcx.stable_crate_id(LOCAL_CRATE))
     {
         false
     } else if let Some(ruled) = rules(item.symbol_name(tcx).name) {

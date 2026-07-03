@@ -1,8 +1,11 @@
 use itertools::Itertools;
-use rustc_middle::mir::{self, visit::Visitor};
 use rustc_middle::ty::{
     EarlyBinder, GenericArgsRef, Instance, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
     TypeVisitableExt, TypeVisitor, TypingEnv,
+};
+use rustc_middle::{
+    mir::{self, visit::Visitor},
+    mono,
 };
 use rustc_type_ir::inherent::AdtDef;
 
@@ -74,7 +77,7 @@ fn scan_all_bodies<'s>(tcx: TyCtxt) -> (HashSet<Instance>, HashSet<TypeId>, Hash
         .iter()
         .for_each(|unit| {
             unit.items().iter().for_each(|(item, _)| match item {
-                mir::mono::MonoItem::Fn(instance) => {
+                mono::MonoItem::Fn(instance) => {
                     let body = tcx.instance_mir(instance.def);
                     log_debug!(target: TAG, "Scanning types in for ManuallyDrop {:?}", instance);
 
@@ -192,10 +195,12 @@ impl<'tcx, 's, 'b> TypeVisitor<TyCtxt<'tcx>> for MdCollectorVisitor<'tcx, 's, 'b
             return;
         }
 
+        let tcx = self.tcx;
+
         let ty = self.tcx.instantiate_and_normalize_erasing_regions(
             self.args,
             self.typing_env,
-            EarlyBinder::bind(ty),
+            EarlyBinder::bind(tcx, ty),
         );
 
         if !self.fully_visited_types.insert(ty) {
@@ -204,7 +209,7 @@ impl<'tcx, 's, 'b> TypeVisitor<TyCtxt<'tcx>> for MdCollectorVisitor<'tcx, 's, 'b
         }
 
         if (IsMdContainerVisitor {
-            tcx: self.tcx,
+            tcx,
             args: self.args,
             typing_env: self.typing_env,
             evaluated_types: self.evaluated_types,
@@ -220,8 +225,8 @@ impl<'tcx, 's, 'b> TypeVisitor<TyCtxt<'tcx>> for MdCollectorVisitor<'tcx, 's, 'b
         // Additional recursions
         match ty.kind() {
             TyKind::Adt(adt, args) => adt
-                .all_field_tys(self.tcx)
-                .iter_instantiated(self.tcx, args)
+                .all_field_tys(tcx)
+                .iter_instantiated(tcx, args)
                 .for_each(|t| t.visit_with(self)),
             _ => {}
         }
@@ -247,7 +252,7 @@ impl<'tcx, 's> TypeVisitor<TyCtxt<'tcx>> for IsMdContainerVisitor<'tcx, 's> {
         let ty = self.tcx.instantiate_and_normalize_erasing_regions(
             self.args,
             self.typing_env,
-            EarlyBinder::bind(ty),
+            EarlyBinder::bind(self.tcx, ty),
         );
 
         if let Some(&is_container) = self.evaluated_types.get(&ty) {
