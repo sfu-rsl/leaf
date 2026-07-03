@@ -147,7 +147,6 @@ pub(crate) enum AssignmentKind {
     UnaryOp,
     Discriminant,
     Aggregate,
-    ShallowInitBox,
     WrapUnsafeBinder,
     IntrinsicBinaryOp,
     IntrinsicUnaryOp,

@@ -192,7 +192,6 @@ define_filter_rule_group!(
         UnaryOp => unary_op,
         Discriminant => discriminant,
         Aggregate => aggregate,
-        ShallowInitBox => shallow_init_box,
         WrapUnsafeBinder => wrap_unsafe_binder,
         IntrinsicBinaryOp => intrinsic_binary_op,
         IntrinsicUnaryOp => intrinsic_unary_op,
@@ -472,7 +471,7 @@ impl ToPredicate<LocationQuery<'_>> for EntityLocationFilter {
             EntityLocationFilter::DefPathMatch(pattern) => {
                 let pred = pattern.to_predicate();
                 Box::new(move |(tcx, def_id)| {
-                    let def_path = tcx.def_path_str(def_id);
+                    let def_path = tcx.def_path_str(*def_id);
                     pred.accept(&def_path)
                 })
             }

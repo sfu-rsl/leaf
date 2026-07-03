@@ -81,7 +81,7 @@ where
     fn visit_call(
         &mut self,
         _func: &mut Operand<'tcx>,
-        _args: &mut [rustc_span::source_map::Spanned<Operand<'tcx>>],
+        _args: &mut [rustc_span::Spanned<Operand<'tcx>>],
         _destination: &mut Place<'tcx>,
         target: &mut Option<BasicBlock>,
         unwind: &mut UnwindAction,

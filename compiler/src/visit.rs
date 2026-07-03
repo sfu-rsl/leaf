@@ -5,13 +5,13 @@ use rustc_middle::{
     mir::{
         AggregateKind, AssertMessage, BackwardIncompatibleDropReason, BasicBlock, BinOp,
         BorrowKind, CallSource, CastKind, FakeReadCause, InlineAsmMacro, InlineAsmOperand, Local,
-        NonDivergingIntrinsic, Operand, Place, RawPtrKind, RetagKind, Rvalue, StatementKind,
-        SwitchTargets, TerminatorKind, UnOp, UnwindAction, UnwindTerminateReason,
-        UserTypeProjection, coverage::CoverageKind,
+        NonDivergingIntrinsic, Operand, Place, RawPtrKind, Rvalue, StatementKind, SwitchTargets,
+        TerminatorKind, UnOp, UnwindAction, UnwindTerminateReason, UserTypeProjection, WithRetag,
+        coverage::CoverageKind,
     },
     ty::{Const, Region, Ty, Variance},
 };
-use rustc_span::{Span, source_map::Spanned};
+use rustc_span::{Span, Spanned};
 
 macro_rules! make_statement_kind_visitor {
     ($visitor_trait_name:ident, $($mutability:ident)?) => {
@@ -42,10 +42,6 @@ macro_rules! make_statement_kind_visitor {
             }
 
             fn visit_storage_dead(&mut self, local: & $($mutability)? Local) -> T {
-                Default::default()
-            }
-
-            fn visit_retag(&mut self, kind: & $($mutability)? RetagKind, place: & $($mutability)? Place<'tcx>) -> T {
                 Default::default()
             }
 
@@ -98,7 +94,6 @@ macro_rules! make_statement_kind_visitor {
                     } => self.visit_set_discriminant(place, variant_index),
                     StatementKind::StorageLive(local) => self.visit_storage_live(local),
                     StatementKind::StorageDead(local) => self.visit_storage_dead(local),
-                    StatementKind::Retag(kind, place) => self.visit_retag(kind, place),
                     StatementKind::PlaceMention(place) => self.visit_place_mention(place),
                     StatementKind::AscribeUserType(box (place, user_type_proj), variance) => {
                         self.visit_ascribe_user_type(place, user_type_proj, variance)
@@ -265,7 +260,6 @@ macro_rules! make_terminator_kind_visitor {
                         ref $($mutability)? unwind,
                         ref $($mutability)? replace,
                         ref $($mutability)? drop,
-                        ref $($mutability)? async_fut,
                     } => self.visit_drop(place, target, unwind, replace),
                     & $($mutability)? Call {
                         ref $($mutability)? func,
@@ -345,7 +339,11 @@ macro_rules! make_rvalue_visitor {
                 self.super_rvalue(rvalue)
             }
 
-            fn visit_use(&mut self, operand: & $($mutability)? Operand<'tcx>) -> T {
+            fn visit_use(
+                &mut self,
+                operand: & $($mutability)? Operand<'tcx>,
+                with_retag: & $($mutability)? WithRetag,
+            ) -> T {
                 Default::default()
             }
 
@@ -374,10 +372,6 @@ macro_rules! make_rvalue_visitor {
                 kind: & $($mutability)? RawPtrKind,
                 place: & $($mutability)? Place<'tcx>,
             ) -> T {
-                Default::default()
-            }
-
-            fn visit_len(&mut self, place: & $($mutability)? Place<'tcx>) -> T {
                 Default::default()
             }
 
@@ -414,14 +408,6 @@ macro_rules! make_rvalue_visitor {
                 Default::default()
             }
 
-            fn visit_shallow_init_box(
-                &mut self,
-                operand: & $($mutability)? Operand<'tcx>,
-                ty: & $($mutability)? Ty<'tcx>,
-            ) -> T {
-                Default::default()
-            }
-
             fn visit_copy_for_deref(&mut self, place: & $($mutability)? Place<'tcx>) -> T {
                 Default::default()
             }
@@ -434,9 +420,18 @@ macro_rules! make_rvalue_visitor {
                 Default::default()
             }
 
+            fn visit_reborrow(
+                &mut self,
+                target_ty: & $($mutability)? Ty<'tcx>,
+                mutability: & $($mutability)? rustc_hir::Mutability,
+                place: & $($mutability)? Place<'tcx>
+            ) -> T {
+                Default::default()
+            }
+
             fn super_rvalue(&mut self, rvalue: & $($mutability)? Rvalue<'tcx>) -> T {
                 match rvalue {
-                    Rvalue::Use(operand) => self.visit_use(operand),
+                    Rvalue::Use(operand, with_retag) => self.visit_use(operand, with_retag),
                     Rvalue::Repeat(operand, count) => self.visit_repeat(operand, count),
                     Rvalue::Ref(region, borrow_kind, place) => {
                         self.visit_ref(region, borrow_kind, place)
@@ -448,9 +443,9 @@ macro_rules! make_rvalue_visitor {
                     Rvalue::UnaryOp(op, operand) => self.visit_unary_op(op, operand),
                     Rvalue::Discriminant(place) => self.visit_discriminant(place),
                     Rvalue::Aggregate(kind, operands) => self.visit_aggregate(kind, operands),
-                    Rvalue::ShallowInitBox(operand, ty) => self.visit_shallow_init_box(operand, ty),
                     Rvalue::CopyForDeref(place) => self.visit_copy_for_deref(place),
                     Rvalue::WrapUnsafeBinder(operand, ty) => self.visit_wrap_unsafe_binder(operand, ty),
+                    Rvalue::Reborrow(ty, mutability, place) => self.visit_reborrow(ty, mutability, place),
                 }
             }
         }

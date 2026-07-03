@@ -1,8 +1,8 @@
 use rustc_middle::mir::{BasicBlockData, Operand};
-use rustc_span::source_map::Spanned;
+use rustc_span::Spanned;
 use rustc_type_ir::ClosureArgs;
 
-use core::{assert_matches::debug_assert_matches, iter};
+use core::{debug_assert_matches, iter};
 
 use crate::{
     passes::instr::{
@@ -58,7 +58,10 @@ where
     }
 
     fn enter_func(&mut self) {
-        self.debug_info(&format!("{}", utils::body_func_ty(self.tcx(), self.body())));
+        self.debug_info(&format!(
+            "{}",
+            utils::body_func_ty(self.tcx(), self.body(), self.current_typing_env())
+        ));
 
         self.enter_func();
 
@@ -109,7 +112,7 @@ where
         let func = operand::func(
             tcx,
             tcx.lang_items()
-                .drop_in_place_fn()
+                .drop_glue_fn()
                 .expect("Lang item required for instrumenting drops"),
             [place.ty(self, tcx).ty.into()],
         );
@@ -451,10 +454,10 @@ where
 
 mod utils {
     use rustc_middle::{
-        mir::{BasicBlockData, Body, Local, Operand, Place, Rvalue, Statement},
+        mir::{BasicBlockData, Body, Local, Operand, Place, Rvalue, Statement, WithRetag},
         ty::{
-            AssocItem, ClosureArgs, ExistentialPredicateStableCmpExt, GenericArgsRef, Instance,
-            InstanceKind, PolyFnSig, TraitRef, Ty, TyCtxt, TyKind, TypingEnv,
+            AssocItem, ClosureArgs, ExistentialPredicateStableCmpExt, InstanceKind, PolyFnSig,
+            ShimKind, TraitRef, Ty, TyCtxt, TyKind, TypingEnv,
         },
     };
     use rustc_span::def_id::DefId;
@@ -463,7 +466,7 @@ mod utils {
     use common::{log_debug, log_info};
     use itertools::Itertools;
 
-    use core::{assert_matches::debug_assert_matches, iter};
+    use core::{debug_assert_matches, iter};
 
     use crate::{
         passes::instr::{MirSourceExt, decision::rules::accept_dyn_def_filter_rules},
@@ -645,11 +648,16 @@ mod utils {
         }
     }
 
-    pub fn body_func_ty<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Ty<'tcx> {
+    pub fn body_func_ty<'tcx>(
+        tcx: TyCtxt<'tcx>,
+        body: &Body<'tcx>,
+        typing_env: TypingEnv<'tcx>,
+    ) -> Ty<'tcx> {
         let source = body.source;
         log_debug!("Creating type of current function: {}", source.to_log_str());
 
         use InstanceKind::*;
+        use ShimKind::*;
         let fn_def_ty = match source.instance {
             Item(def_id) => {
                 let ty = tcx.type_of(def_id).instantiate_identity();
@@ -671,19 +679,20 @@ mod utils {
                     _ => unreachable!("Unexpected type for body instance: {:?}", ty),
                 }
             }
-            ReifyShim(def_id, _) => tcx.type_of(def_id).instantiate_identity(),
-            FnPtrShim(fn_trait_fn_id, fn_ptr_ty) => {
+            Shim(Reify(def_id, _)) => tcx
+                .normalize_erasing_regions(typing_env, tcx.type_of(def_id).instantiate_identity()),
+            Shim(FnPtr(fn_trait_fn_id, fn_ptr_ty)) => {
                 ty::fn_def_of_fn_ptr_shim(tcx, fn_trait_fn_id, fn_ptr_ty)
             }
-            ClosureOnceShim { call_once, .. } => {
+            Shim(ClosureOnce { call_once, .. }) => {
                 let arg_tys = body
                     .args_iter()
                     .map(|local| body.local_decls()[local].ty)
                     .collect::<Vec<_>>();
                 ty::fn_def_of_closure_once_shim(tcx, call_once, &arg_tys)
             }
-            CloneShim(clone_fn_id, self_ty) => ty::fn_def_of_clone_shim(tcx, clone_fn_id, self_ty),
-            DropGlue(def_id, Some(ty)) => Ty::new_fn_def(tcx, def_id, [ty]),
+            Shim(Clone(def_id, self_ty)) => ty::fn_def_of_clone_shim(tcx, def_id, self_ty),
+            Shim(DropGlue(def_id, Some(ty))) => Ty::new_fn_def(tcx, def_id, [ty]),
             instance @ _ => unreachable!("Unsupported instance: {:?}", instance),
         };
 
@@ -739,7 +748,7 @@ mod utils {
         typing_env: TypingEnv<'tcx>,
         base_args: Vec<Operand<'tcx>>,
     ) -> BasicBlockData<'tcx> {
-        let fn_def_ty = body_func_ty(tcx, call_adder.body());
+        let fn_def_ty = body_func_ty(tcx, call_adder.body(), typing_env);
         let TyKind::FnDef(def_id, generic_args) = *fn_def_ty.kind() else {
             unreachable!(
                 "Expected function definition type but received: {}",
@@ -749,7 +758,7 @@ mod utils {
 
         let fn_value = operand::func(tcx, def_id, generic_args);
 
-        if let Some((trait_ref, trait_item)) = as_dyn_compatible_method(tcx, def_id)
+        if let Some((trait_ref, trait_item)) = as_dyn_compatible_method(tcx, def_id, typing_env)
             && trait_ref.self_ty().is_sized(tcx, typing_env)
         {
             let ruled_out = accept_dyn_def_filter_rules(call_adder.storage(), &(tcx, def_id))
@@ -797,6 +806,7 @@ mod utils {
     fn as_dyn_compatible_method<'tcx>(
         tcx: TyCtxt<'tcx>,
         def_id: DefId,
+        typing_env: TypingEnv<'tcx>,
     ) -> Option<(TraitRef<'tcx>, AssocItem)> {
         let trait_ref = tcx
             .impl_of_assoc(def_id)
@@ -887,8 +897,13 @@ mod utils {
                     // A1 = X, A2 = Y, ...
                     .chain(associated_types.into_iter().map(|(principal, item)| {
                         // <T as Tr<U, V>>::A1
-                        let proj_term =
-                            Ty::new_projection_from_args(tcx, item.def_id, principal.args).into();
+                        let proj_term = Ty::new_projection_from_args(
+                            tcx,
+                            rustc_type_ir::IsRigid::No,
+                            item.def_id,
+                            principal.args,
+                        )
+                        .into();
                         ExistentialPredicate::Projection(ExistentialProjection::new(
                             tcx,
                             item.def_id,
@@ -1035,8 +1050,10 @@ mod utils {
                 Operand::Copy(place) | Operand::Move(place) => *place,
                 Operand::Constant(..) => {
                     let local = call_adder.add_local(receiver_ty);
-                    let assignment =
-                        assignment::create(Place::from(local), Rvalue::Use(receiver.clone()));
+                    let assignment = assignment::create(
+                        Place::from(local),
+                        Rvalue::Use(receiver.clone(), WithRetag::No),
+                    );
                     statements.push(assignment);
                     local.into()
                 }
@@ -1101,7 +1118,7 @@ mod utils {
         let fn_rvalue = if fn_ptr_ty != value_ty {
             rvalue::cast_to_fn_ptr(tcx, fn_value, value_ty)
         } else {
-            Rvalue::Use(fn_value)
+            Rvalue::Use(fn_value, WithRetag::No)
         };
         let fn_ptr_local = local_manager.add_local(fn_ptr_ty);
         let fn_ptr_assign = assignment::create(Place::from(fn_ptr_local), fn_rvalue);

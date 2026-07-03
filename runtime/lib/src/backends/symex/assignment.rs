@@ -269,15 +269,6 @@ impl<EB: SymExValueExprBuilder> AssignmentHandler for SymExAssignmentHandler<'_,
         self.set_value(Implied::always(value))
     }
 
-    fn shallow_init_box_from(self, value: Self::Operand) {
-        /* According to the Rust MIR documentation:
-         * https://doc.rust-lang.org/nightly/nightly-rustc/rustc_middle/mir/enum.Rvalue.html#variant.ShallowInitBox
-         * > Transmutes a *mut u8 into shallow-initialized Box<T>.
-         * BTW, very improbable to have a symbolic value here. */
-        let dst_ty_id = self.dest.type_id();
-        self.cast_of(value, CastKind::Transmute(dst_ty_id));
-    }
-
     fn wrap_in_unsafe_binder(self, value: Self::Operand) {
         let dst_ty_id = self.dest.type_id();
         self.cast_of(value, CastKind::Transmute(dst_ty_id));

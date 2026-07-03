@@ -52,6 +52,7 @@ impl<'tcx> BasicBlockDataSplitExt<'tcx> for BasicBlockData<'tcx> {
                 new_block.terminator = Some(Terminator {
                     kind: TerminatorKind::Goto { target: NEXT_BLOCK },
                     source_info: (&statement.source_info).clone(),
+                    attributes: Default::default(),
                 });
                 result.push(new_block);
                 new_block = empty_block.clone();

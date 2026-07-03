@@ -1,11 +1,12 @@
-use rustc_abi::{
-    FieldIdx, FieldsShape, Layout, LayoutData, Scalar, TagEncoding, VariantIdx, Variants,
-};
-use rustc_middle::mir::{self, visit::Visitor};
+use rustc_abi::{FieldIdx, FieldsShape, Layout, Scalar, TagEncoding, VariantIdx, Variants};
 use rustc_middle::ty::{
     EarlyBinder, GenericArgsRef, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
     TypeVisitableExt, TypeVisitor, TypingEnv,
     layout::{HasTyCtxt, HasTypingEnv, LayoutCx, TyAndLayout},
+};
+use rustc_middle::{
+    mir::{self, visit::Visitor},
+    mono,
 };
 use rustc_type_ir::inherent::AdtDef;
 
@@ -104,7 +105,7 @@ fn capture_all_types<'s>(tcx: TyCtxt) -> HashMap<TypeId, TypeInfo> {
         .iter()
         .for_each(|unit| {
             unit.items().iter().for_each(|(item, _)| match item {
-                mir::mono::MonoItem::Fn(instance) => {
+                mono::MonoItem::Fn(instance) => {
                     let body = tcx.instance_mir(instance.def);
                     log_debug!(target: TAG_TYPE_EXPORT, "Exporting types in {:?}", instance);
                     let mut place_visitor = TyVisitor {
@@ -226,7 +227,7 @@ impl<'tcx, 's, 'b> TypeVisitor<TyCtxt<'tcx>> for TyVisitor<'tcx, 's, 'b> {
         let normalized_ty = self.tcx.instantiate_and_normalize_erasing_regions(
             self.args,
             self.typing_env,
-            EarlyBinder::bind(ty),
+            EarlyBinder::bind(self.tcx, ty),
         );
         if normalized_ty != ty {
             log_debug!(target: TAG_TYPE_EXPORT, "Normalized ty with param: {} -> {}", ty, normalized_ty);
@@ -283,10 +284,10 @@ where
             TypeInfo::SIZE_UNSIZED
         };
 
-        let (variants, tag) = match &self.variants {
+        let (variants, tag) = match self.variants() {
             Variants::Empty => (vec![], None),
-            Variants::Single { index, .. } => (
-                vec![self.0.to_runtime(cx, ty_layout)],
+            Variants::Single { index } => (
+                vec![index.to_runtime(cx, ty_layout.for_variant(cx, *index))],
                 if ty.is_enum() {
                     Some(TagInfo::Constant {
                         discr_bit_rep: ty.discriminant_for_variant(tcx, *index).unwrap().val,
@@ -303,7 +304,7 @@ where
             } => (
                 variants
                     .iter_enumerated()
-                    .map(|(i, v)| v.to_runtime(cx, ty_layout.for_variant(cx, i)))
+                    .map(|(i, _)| i.to_runtime(cx, ty_layout.for_variant(cx, i)))
                     .collect(),
                 Some((tag, tag_encoding, tag_field).to_runtime(cx, ty_layout)),
             ),
@@ -322,7 +323,7 @@ where
     }
 }
 
-impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, VariantInfo> for &LayoutData<FieldIdx, VariantIdx>
+impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, VariantInfo> for VariantIdx
 where
     Cx: HasTyCtxt<'tcx> + HasTypingEnv<'tcx>,
 {
@@ -332,16 +333,9 @@ where
     where
         Cx: 'tcx,
     {
-        let index = match self.variants {
-            Variants::Single { index } => index,
-            Variants::Empty | Variants::Multiple { .. } => {
-                unreachable!("Empty and recursive variants are not expected")
-            }
-        };
-
         VariantInfo {
-            index: index.as_u32(),
-            fields: self.fields.to_runtime(cx, ty_layout),
+            index: self.as_u32(),
+            fields: ty_layout.fields.to_runtime(cx, ty_layout),
         }
     }
 }
@@ -381,8 +375,8 @@ impl<'tcx, Cx> ToRuntimeInfo<'tcx, Cx, TagEncodingInfo> for &TagEncoding<Variant
             } => TagEncodingInfo::Niche {
                 // The variant index is implicitly used as the value for the discriminant.
                 non_niche_value: untagged_variant.as_u32() as u128,
-                niche_value_range: (niche_variants.start().as_u32() as u128)
-                    ..=(niche_variants.end().as_u32() as u128),
+                niche_value_range: (niche_variants.start.as_u32() as u128)
+                    ..=(niche_variants.last.as_u32() as u128),
                 tag_value_start: *niche_start,
             },
         }

@@ -270,10 +270,6 @@ pub(crate) trait AssignmentHandler: Sized {
         self.some()
     }
 
-    fn shallow_init_box_from(self, _value: Self::Operand) {
-        self.some()
-    }
-
     fn wrap_in_unsafe_binder(self, _value: Self::Operand) {
         self.some()
     }

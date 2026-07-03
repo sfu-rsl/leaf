@@ -11,6 +11,8 @@ krate
 monomorphized
 nullary
 pointee
+reborrow
+Retag
 rlib
 RPATH
 rustc

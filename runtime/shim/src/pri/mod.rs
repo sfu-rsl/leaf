@@ -12,7 +12,7 @@ use common::pri::*;
  */
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[rustc_diagnostic_item = "leaf_module_marker"]
-pub static MODULE_MARKER: u8 = 0;
+pub const MODULE_MARKER: u8 = 0;
 
 mod ffi {
     use common::ffi::*;

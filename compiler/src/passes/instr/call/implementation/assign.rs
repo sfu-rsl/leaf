@@ -1,4 +1,4 @@
-use std::assert_matches::debug_assert_matches;
+use std::debug_assert_matches;
 
 use rustc_abi::{FieldIdx, VariantIdx};
 use rustc_middle::{
@@ -197,21 +197,6 @@ where
             ],
             vec![],
         )
-    }
-
-    fn by_shallow_init_box(&mut self, operand: OperandRef, ty: &Ty<'tcx>) {
-        let id_local = {
-            let (block, id_local) = self.make_type_id_of_bb(*ty);
-            self.insert_blocks([block]);
-            id_local
-        };
-        self.add_bb_for_assign_call(
-            sym::assign_shallow_init_box,
-            vec![
-                operand::copy_for_local(operand.into()),
-                operand::move_for_local(id_local),
-            ],
-        );
     }
 
     fn by_wrap_unsafe_binder(&mut self, operand: OperandRef, ty: &Ty<'tcx>) {

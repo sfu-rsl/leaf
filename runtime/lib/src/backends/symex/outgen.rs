@@ -1,4 +1,4 @@
-use std::{assert_matches::debug_assert_matches, collections::HashMap};
+use std::{collections::HashMap, debug_assert_matches};
 
 use common::{
     answers::{

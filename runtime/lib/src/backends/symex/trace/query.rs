@@ -1,4 +1,4 @@
-use std::{assert_matches::debug_assert_matches, borrow::Borrow, ops::Deref};
+use std::{borrow::Borrow, debug_assert_matches, ops::Deref};
 
 use common::{
     pri::BasicBlockIndex,

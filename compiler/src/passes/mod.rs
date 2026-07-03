@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use rustc_ast as ast;
 use rustc_driver::{self as driver, Compilation};
 use rustc_interface::interface;
-use rustc_middle::{mir, ty as mir_ty};
+use rustc_middle::{mir, mono, ty as mir_ty};
 use rustc_session::Session;
 
 use paste::paste;
@@ -121,7 +121,7 @@ pub(crate) trait CompilationPass {
 
     fn visit_codegen_units<'tcx>(
         tcx: mir_ty::TyCtxt<'tcx>,
-        units: &mut [mir::mono::CodegenUnit<'tcx>],
+        units: &mut [mono::CodegenUnit<'tcx>],
         storage: &mut dyn Storage,
     ) {
         Default::default()
@@ -205,11 +205,10 @@ pub(crate) trait StorageExt {
 mod implementation {
     use super::*;
 
-    use mir::mono::{CodegenUnit, MonoItemPartitions};
     use mir_ty::TyCtxt;
     use rustc_driver::Compilation;
     use rustc_hir::def_id::DefId;
-    use rustc_middle::query::TyCtxtAt;
+    use rustc_middle::mono::{CodegenUnit, MonoItemPartitions};
     use rustc_span::{Symbol, def_id::LocalDefId};
 
     use std::cell::Cell;
@@ -286,7 +285,7 @@ mod implementation {
              for<'tcx> fn(TyCtxt<'tcx>, DefId) -> &'tcx mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_MIR_SHIMS: Cell<
-             for<'tcx> fn(TyCtxt<'tcx>, mir_ty::InstanceKind<'tcx>) -> mir::Body<'tcx>
+             for<'tcx> fn(TyCtxt<'tcx>, mir_ty::ShimKind<'tcx>) -> mir::Body<'tcx>
          > = Cell::new(|_, _| unreachable!());
          static ORIGINAL_SHOULD_CODEGEN: Cell<
              for<'tcx> fn(TyCtxt<'tcx>, mir_ty::Instance<'tcx>) -> bool
@@ -495,16 +494,13 @@ mod implementation {
             tcx.arena.alloc(body)
         }
 
-        fn mir_shims<'tcx>(
-            tcx: TyCtxt<'tcx>,
-            instance: mir_ty::InstanceKind<'tcx>,
-        ) -> mir::Body<'tcx> {
+        fn mir_shims<'tcx>(tcx: TyCtxt<'tcx>, kind: mir_ty::ShimKind<'tcx>) -> mir::Body<'tcx> {
             // NOTE: It is possible that this function is called before the callbacks.
             global::set_ctxt_id(tcx);
 
             /* NOTE: Currently, it seems that there is no way to deallocate
              * something from arena. So, we have to clone the body. */
-            let mut body = ORIGINAL_MIR_SHIMS.get()(tcx, instance);
+            let mut body = ORIGINAL_MIR_SHIMS.get()(tcx, kind);
             let mut storage = global::get_storage();
             T::visit_mir_body_before(tcx, &body, &mut storage);
             T::transform_mir_body(tcx, &mut body, &mut storage);
@@ -694,14 +690,14 @@ mod implementation {
          */
         use super::*;
 
-        use rustc_codegen_ssa::{CodegenResults, traits::CodegenBackend};
-        use rustc_data_structures::fx::FxIndexMap;
+        use rustc_codegen_ssa::{CompiledModules, CrateInfo, traits::CodegenBackend};
+        use rustc_hir::attrs::CrateType;
         use rustc_metadata::{EncodedMetadata, creader::MetadataLoaderDyn};
+        use rustc_middle::dep_graph::WorkProductMap;
         use rustc_middle::util::Providers;
-        use rustc_query_system::dep_graph::{WorkProduct, WorkProductId};
         use rustc_session::{
             Session,
-            config::{self, OutputFilenames, PrintRequest},
+            config::{OutputFilenames, PrintRequest},
         };
 
         use delegate::delegate;
@@ -714,31 +710,46 @@ mod implementation {
         impl<T: CompilationPass + ?Sized> CodegenBackend for CodegenBackendWrapper<T> {
             delegate! {
                 to self.backend {
-                    fn locale_resource(&self) -> &'static str;
                     fn name(&self) -> &'static str;
 
                     fn init(&self, sess: &Session);
                     fn print(&self, req: &PrintRequest, out: &mut String, sess: &Session);
+
                     fn target_config(&self, sess: &Session) -> rustc_codegen_ssa::TargetConfig;
+                    fn supported_crate_types(&self, _sess: &Session) -> Vec<CrateType>;
 
                     fn print_passes(&self);
                     fn print_version(&self);
 
+                    fn replaced_intrinsics(&self) -> Vec<Symbol>;
+                    fn fallback_intrinsics(&self) -> Vec<Symbol>;
+                    fn thin_lto_supported(&self) -> bool;
+                    fn has_zstd(&self) -> bool;
+                    fn has_mnemonic(&self, _sess: &Session, _mnemonic: &str) -> bool;
+
                     fn metadata_loader(&self) -> Box<MetadataLoaderDyn>;
 
                     fn provide(&self, providers: &mut Providers);
+
+                    fn target_cpu(&self, sess: &Session) -> String;
 
                     fn join_codegen(
                         &self,
                         ongoing_codegen: Box<dyn Any>,
                         sess: &Session,
                         outputs: &OutputFilenames,
-                    ) -> (CodegenResults, FxIndexMap<WorkProductId, WorkProduct>);
+                        crate_info: &CrateInfo,
+                    ) -> (CompiledModules, WorkProductMap);
+
+                    fn print_pass_timings(&self) ;
+                    fn print_statistics(&self) ;
+                    fn print_statistics_json(&self) -> String ;
 
                     fn link(
                         &self,
                         sess: &Session,
-                        codegen_results: CodegenResults,
+                        compiled_modules: CompiledModules,
+                        crate_info: CrateInfo,
                         metadata: EncodedMetadata,
                         outputs: &OutputFilenames,
                     );
@@ -761,18 +772,15 @@ mod implementation {
 
         pub(super) fn get_backend_maker<T: CompilationPass + Send + Sync + ?Sized + 'static>(
             pass: PassHolder<T>,
-        ) -> Box<
-            dyn FnOnce(&config::Options, &rustc_target::spec::Target) -> Box<dyn CodegenBackend>
-                + Send,
-        > {
-            Box::new(|opts, target| {
+        ) -> Box<dyn FnOnce(&Session) -> Box<dyn CodegenBackend> + Send> {
+            Box::new(|sess| {
                 // This is the default implementation taken from `interface::run_compiler`.
-                let early_dcx = rustc_session::EarlyDiagCtxt::new(opts.error_format);
+                let early_dcx = rustc_session::EarlyDiagCtxt::new(sess.opts.error_format);
                 let backend = rustc_interface::util::get_codegen_backend(
                     &early_dcx,
-                    &opts.sysroot,
-                    opts.unstable_opts.codegen_backend.as_deref(),
-                    &target,
+                    &sess.opts.sysroot,
+                    sess.opts.unstable_opts.codegen_backend.as_deref(),
+                    &sess.target,
                 );
                 Box::new(CodegenBackendWrapper { backend, pass })
             })

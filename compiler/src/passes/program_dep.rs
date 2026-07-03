@@ -53,7 +53,7 @@ impl CompilationPass for ProgramDependenceMapExporter {
             .iter()
             .flat_map(|unit| unit.items())
             .flat_map(|(item, _)| match item {
-                rustc_middle::mir::mono::MonoItem::Fn(instance) => Some(instance.def),
+                rustc_middle::mono::MonoItem::Fn(instance) => Some(instance.def),
                 _ => None,
             })
             .for_each(|instance_kind| {
