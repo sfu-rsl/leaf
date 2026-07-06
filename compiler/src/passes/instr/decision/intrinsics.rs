@@ -81,11 +81,15 @@ macro_rules! of_const_evaluated_funcs {
             type_name,
             type_id,
             type_id_eq,
+            type_id_field_representing_type,
+            type_id_fields,
+            type_id_variants,
+            type_id_vtable,
             ptr_guaranteed_cmp,
             needs_drop,
             align_of_val,
             // FIXME: These two are probably not intrinsics anymore.
-            likely,
+            // likely,
             unlikely,
             forget,
             const_allocate,
@@ -96,17 +100,19 @@ macro_rules! of_const_evaluated_funcs {
             assert_zero_valid,
             assert_mem_uninitialized_valid,
             assume,
+            offset_of,
+            field_offset,
+            field_representing_type_actual_type_id,
+            overflow_checks,
+            size_of_type_id,
+            type_of,
         )
     };
 }
 
 macro_rules! of_contract_funcs {
     ($macro:ident) => {
-        $macro!(
-            contract_check_requires,
-            contract_check_ensures,
-            contract_checks
-        )
+        $macro!(contract_check_requires, contract_check_ensures,)
     };
 }
 
@@ -149,42 +155,42 @@ macro_rules! of_float_arith_funcs {
             round_ties_even_f32,
             round_ties_even_f64,
             round_ties_even_f128,
-            powif64,
-            powif128,
-            powif16,
-            powif32,
-            powf32,
-            powf64,
-            powf128,
-            powf16,
+            log2f16,
+            log2f32,
+            log2f64,
+            log2f128,
+            log10f32,
+            log10f16,
+            log10f64,
+            log10f128,
+            logf16,
+            logf32,
+            logf64,
+            logf128,
+            minimum_number_nsz_f16,
+            minimum_number_nsz_f32,
+            minimum_number_nsz_f64,
+            minimum_number_nsz_f128,
             minimumf16,
             minimumf32,
             minimumf64,
             minimumf128,
-            minnumf16,
-            minnumf32,
-            minnumf64,
-            minnumf128,
-            logf128,
-            logf64,
+            maximum_number_nsz_f16,
+            maximum_number_nsz_f32,
+            maximum_number_nsz_f64,
+            maximum_number_nsz_f128,
             maximumf16,
             maximumf32,
             maximumf64,
             maximumf128,
-            maxnumf16,
-            maxnumf32,
-            maxnumf64,
-            maxnumf128,
-            log10f128,
-            log10f32,
-            log10f16,
-            logf16,
-            log10f64,
-            logf32,
-            log2f128,
-            log2f16,
-            log2f32,
-            log2f64,
+            powif16,
+            powif32,
+            powif64,
+            powif128,
+            powf16,
+            powf32,
+            powf64,
+            powf128,
             fsub_fast,
             frem_fast,
             frem_algebraic,
@@ -206,11 +212,8 @@ macro_rules! of_float_arith_funcs {
             fdiv_fast,
             fadd_fast,
             fdiv_algebraic,
-            fabsf32,
+            fabs,
             fadd_algebraic,
-            fabsf128,
-            fabsf64,
-            fabsf16,
             expf64,
             exp2f128,
             expf32,
@@ -313,8 +316,6 @@ macro_rules! of_simd_op_funcs {
             simd_flog10,
             simd_floor,
             simd_fma,
-            simd_fmax,
-            simd_fmin,
             simd_fsin,
             simd_fsqrt,
             simd_funnel_shl,
@@ -328,6 +329,8 @@ macro_rules! of_simd_op_funcs {
             simd_lt,
             simd_masked_load,
             simd_masked_store,
+            simd_maximum_number_nsz,
+            simd_minimum_number_nsz,
             simd_mul,
             simd_ne,
             simd_neg,
@@ -399,10 +402,15 @@ macro_rules! of_to_be_supported_funcs {
             is_val_statically_known,
             arith_offset,
             carrying_mul_add,
+            carryless_mul,
             autodiff,
             va_arg,
             va_copy,
             va_end,
+            offload,
+            return_address,
+            unchecked_funnel_shl,
+            unchecked_funnel_shr,
         )
     };
 }
@@ -469,7 +477,7 @@ mod sanity_check {
     /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
      * Do not change the count unless some intrinsics are added or removed to Rust.
      */
-    const EXPECTED_COUNT: usize = 293;
+    const EXPECTED_COUNT: usize = 303;
     const _ALL_INTRINSICS: [(); EXPECTED_COUNT] = [(); LISTED_COUNT];
 }
 
