@@ -301,10 +301,11 @@ where
             operand::move_for_local(argument_places_local),
             operand::move_for_local(ret_val_place_local),
         ];
-
         let mut block = if let TyKind::Closure(_, args) = tcx
-            .type_of(self.current_func_id())
-            .instantiate_identity()
+            .normalize_erasing_regions(
+                self.current_typing_env(),
+                tcx.type_of(self.current_func_id()).instantiate_identity(),
+            )
             .kind()
         {
             let (arg_blocks, tupled_args) = self.make_enter_func_tupled_args(args.as_closure());
@@ -660,7 +661,10 @@ mod utils {
         use ShimKind::*;
         let fn_def_ty = match source.instance {
             Item(def_id) => {
-                let ty = tcx.type_of(def_id).instantiate_identity();
+                let ty = tcx.normalize_erasing_regions(
+                    typing_env,
+                    tcx.type_of(def_id).instantiate_identity(),
+                );
                 match ty.kind() {
                     TyKind::FnDef(..) => ty,
                     TyKind::Closure(..) => ty::fn_def_of_closure_call(tcx, ty),
@@ -812,6 +816,7 @@ mod utils {
             .impl_of_assoc(def_id)
             .and_then(|impl_id| tcx.impl_opt_trait_ref(impl_id))
             .map(|trait_ref| trait_ref.instantiate_identity())
+            .map(|trait_ref| tcx.normalize_erasing_regions(typing_env, trait_ref))
             .filter(|trait_ref| tcx.is_dyn_compatible(trait_ref.def_id))
             .filter(|trait_ref| trait_ref.def_id != tcx.lang_items().deref_trait().unwrap())?;
 

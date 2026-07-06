@@ -143,7 +143,10 @@ pub(crate) mod mir {
             let erased =
                 self.erase_and_anonymize_regions(typing_env.as_query_input((def_id, args)));
             if self
-                .try_normalize_erasing_regions(erased.typing_env, erased.value.1)
+                .try_normalize_erasing_regions(
+                    erased.typing_env,
+                    rustc_middle::ty::Unnormalized::new(erased.value.1),
+                )
                 .is_err()
             {
                 return None;

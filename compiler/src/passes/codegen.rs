@@ -84,7 +84,10 @@ fn should_be_internalized<'tcx>(
     let def_id = item.def_id();
     if matches!(tcx.def_kind(def_id), DefKind::Fn)
         && matches!(
-            tcx.fn_sig(def_id).instantiate_identity().abi(),
+            tcx.fn_sig(def_id)
+                .instantiate_identity()
+                .skip_normalization()
+                .abi(),
             rustc_abi::ExternAbi::C { .. }
         )
         && tcx.visibility(def_id).is_public()
