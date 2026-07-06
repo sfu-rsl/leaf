@@ -44,6 +44,7 @@ where
         let arg_num = |def_id| {
             tcx.fn_sig(def_id)
                 .instantiate_identity()
+                .skip_normalization()
                 .inputs()
                 .iter()
                 .count()

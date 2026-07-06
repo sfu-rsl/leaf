@@ -1034,6 +1034,7 @@ pub(super) mod utils {
             // FIXME: Check if additional caching can be beneficial
             tcx.fn_sig(self.def_id)
                 .instantiate(tcx, generic_args)
+                .skip_normalization()
                 .output()
                 .no_bound_vars()
                 .expect(
