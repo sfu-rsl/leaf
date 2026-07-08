@@ -361,6 +361,12 @@ pub mod macros {
           { fn intrinsic_assign_saturating_sub(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
           { fn intrinsic_assign_disjoint_bitor(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
           { fn intrinsic_assign_exact_div(id: AssignmentId, dest: PlaceRef, first: OperandRef, second: OperandRef) }
+          { fn intrinsic_assign_carryless_mul(
+              id: AssignmentId,
+              dest: PlaceRef,
+              first: OperandRef,
+              second: OperandRef,
+          ) }
           { fn intrinsic_assign_bitreverse(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_cttz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_cttz(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
@@ -368,6 +374,35 @@ pub mod macros {
           { fn intrinsic_assign_ctlz_nonzero(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_ctlz(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
           { fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) }
+          { fn intrinsic_assign_funnel_shl(
+              id: AssignmentId,
+              dest: PlaceRef,
+              first: OperandRef,
+              second: OperandRef,
+              shift: OperandRef,
+          ) }
+          { fn intrinsic_assign_funnel_shr(
+              id: AssignmentId,
+              dest: PlaceRef,
+              first: OperandRef,
+              second: OperandRef,
+              shift: OperandRef,
+          ) }
+          { fn intrinsic_assign_select_unpredictable(
+                id: AssignmentId,
+                dest: PlaceRef,
+                condition: OperandRef,
+                true_val: OperandRef,
+                false_val: OperandRef,
+          ) }
+          { fn intrinsic_assign_carrying_mul_add(
+              id: AssignmentId,
+              dest: PlaceRef,
+              multiplier: OperandRef,
+              multiplicand: OperandRef,
+              addend: OperandRef,
+              carry: OperandRef,
+          ) }
           // ----- Atomic -----
           // All atomic operations have an ordering, majority get applied on a pointer.
            #[allow(unused_parens)]
@@ -439,6 +474,31 @@ pub mod macros {
                 ptr_type_id: ($type_id_ty),
                 second_ptr: OperandRef,
                 conc_second_ptr: RawAddress,
+          ) }
+          /* NOTE: The arguments does not have a proper order because of the first three operands that are shared.
+           * while it is easy to fix, it is not currently a serious issue.
+           */
+          #[allow(unused_parens)]
+          { fn intrinsic_assign_raw_eq(
+                id: AssignmentId,
+                first_ref: OperandRef,
+                conc_first_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                dest: PlaceRef,
+                second_ref: OperandRef,
+                conc_second_ptr: RawAddress,
+          ) }
+          /* NOTE: The type id is unnecessary but included for the same reason as above. */
+          { fn intrinsic_assign_compare_bytes(
+                id: AssignmentId,
+                first_ptr: OperandRef,
+                conc_first_ptr: RawAddress,
+                ptr_type_id: ($type_id_ty),
+                dest: PlaceRef,
+                second_ptr: OperandRef,
+                conc_second_ptr: RawAddress,
+                count: OperandRef,
+                conc_count: usize,
           ) }
           // ----- Atomic (Memory) -----
           #[allow(unused_parens)]
@@ -839,6 +899,8 @@ pub mod macros {
             }$modifier!{
                 fn intrinsic_assign_exact_div(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef);
             }$modifier!{
+                fn intrinsic_assign_carryless_mul(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef,);
+            }$modifier!{
                 fn intrinsic_assign_bitreverse(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
                 fn intrinsic_assign_cttz_nonzero(id: AssignmentId,dest: PlaceRef,x: OperandRef);
@@ -853,6 +915,14 @@ pub mod macros {
             }$modifier!{
                 fn intrinsic_assign_bswap(id: AssignmentId,dest: PlaceRef,x: OperandRef);
             }$modifier!{
+                fn intrinsic_assign_funnel_shl(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef,shift: OperandRef,);
+            }$modifier!{
+                fn intrinsic_assign_funnel_shr(id: AssignmentId,dest: PlaceRef,first: OperandRef,second: OperandRef,shift: OperandRef,);
+            }$modifier!{
+                fn intrinsic_assign_select_unpredictable(id: AssignmentId,dest: PlaceRef,condition: OperandRef,true_val: OperandRef,false_val: OperandRef,);
+            }$modifier!{
+                fn intrinsic_assign_carrying_mul_add(id: AssignmentId,dest: PlaceRef,multiplier: OperandRef,multiplicand: OperandRef,addend: OperandRef,carry: OperandRef,);
+            }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_binary_op(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),operator: ($atomic_bin_op_ty),src: OperandRef,prev_dest: PlaceRef,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_fence(ordering: ($atomic_ord_ty),single_thread: bool,);
@@ -866,6 +936,10 @@ pub mod macros {
                 #[allow(unused_parens)]fn intrinsic_memory_set(id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),val: OperandRef,count: OperandRef,conc_count: usize,is_volatile: bool,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_memory_swap(id: AssignmentId,first_ptr: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),second_ptr: OperandRef,conc_second_ptr: RawAddress,);
+            }$modifier!{
+                #[allow(unused_parens)]fn intrinsic_assign_raw_eq(id: AssignmentId,first_ref: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,second_ref: OperandRef,conc_second_ptr: RawAddress,);
+            }$modifier!{
+                fn intrinsic_assign_compare_bytes(id: AssignmentId,first_ptr: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,second_ptr: OperandRef,conc_second_ptr: RawAddress,count: OperandRef,conc_count: usize,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_load(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,);
             }$modifier!{

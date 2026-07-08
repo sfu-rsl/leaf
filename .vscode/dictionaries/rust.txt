@@ -2,6 +2,7 @@ alloc
 bitreverse
 bitvector
 bswap
+carryless
 chrono
 clippy
 ctlz

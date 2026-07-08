@@ -94,6 +94,7 @@ enum_like_type! {
         SHR_UNCHECKED = BinaryOp::SHR.0 | BinaryOp::UNCHECKED;
         ROT_L = 11;
         ROT_R = 12;
+        CARRYLESS_MUL = 13;
         EQ = 21;
         LT = 22;
         LE = 23;

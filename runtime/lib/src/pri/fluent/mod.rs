@@ -988,6 +988,16 @@ where
         Self::assign_binary_op(id, dest, Self::BinaryOp::DivExact, first, second);
     }
 
+    fn intrinsic_assign_carryless_mul(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+    ) {
+        Self::assign_binary_op(id, dest, Self::BinaryOp::CarrylessMul, first, second);
+        todo!()
+    }
+
     fn intrinsic_assign_bitreverse(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
         Self::assign_unary_op(id, dest, Self::UnaryOp::BitReverse, x);
     }
@@ -1014,6 +1024,47 @@ where
 
     fn intrinsic_assign_bswap(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
         Self::assign_unary_op(id, dest, Self::UnaryOp::ByteSwap, x);
+    }
+
+    fn intrinsic_assign_funnel_shl(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+        shift: OperandRef,
+    ) {
+        todo!()
+    }
+
+    fn intrinsic_assign_funnel_shr(
+        id: AssignmentId,
+        dest: PlaceRef,
+        first: OperandRef,
+        second: OperandRef,
+        shift: OperandRef,
+    ) {
+        todo!()
+    }
+
+    fn intrinsic_assign_select_unpredictable(
+        id: AssignmentId,
+        dest: PlaceRef,
+        condition: OperandRef,
+        true_val: OperandRef,
+        false_val: OperandRef,
+    ) {
+        todo!()
+    }
+
+    fn intrinsic_assign_carrying_mul_add(
+        id: AssignmentId,
+        dest: PlaceRef,
+        multiplier: OperandRef,
+        multiplicand: OperandRef,
+        addend: OperandRef,
+        carry: OperandRef,
+    ) {
+        todo!()
     }
 
     fn intrinsic_atomic_binary_op(
@@ -1143,6 +1194,32 @@ where
                 ptr_type_id,
             )
         });
+    }
+
+    fn intrinsic_assign_raw_eq(
+        id: AssignmentId,
+        first_ref: OperandRef,
+        conc_first_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        dest: PlaceRef,
+        second_ref: OperandRef,
+        conc_second_ptr: RawAddress,
+    ) {
+        todo!()
+    }
+
+    fn intrinsic_assign_compare_bytes(
+        id: AssignmentId,
+        first_ptr: OperandRef,
+        conc_first_ptr: RawAddress,
+        ptr_type_id: Self::TypeId,
+        dest: PlaceRef,
+        second_ptr: OperandRef,
+        conc_second_ptr: RawAddress,
+        count: OperandRef,
+        conc_count: usize,
+    ) {
+        todo!()
     }
 
     fn intrinsic_atomic_load(

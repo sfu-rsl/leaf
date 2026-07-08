@@ -231,6 +231,16 @@ pub(crate) trait MemoryIntrinsicHandler<'tcx> {
     fn set(&mut self, val: OperandRef, count_ref: OperandRef, count_value: &Operand<'tcx>);
 
     fn swap(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>);
+
+    fn raw_eq(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>);
+    
+    fn compare_bytes(
+        &mut self,
+        second_ref: OperandRef,
+        second_value: &Operand<'tcx>,
+        count_ref: OperandRef,
+        count_value: &Operand<'tcx>,
+    );
 }
 
 pub(crate) trait AtomicIntrinsicHandler<'tcx> {

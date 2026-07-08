@@ -35,6 +35,8 @@ pub(crate) enum MemoryIntrinsicKind {
     Copy { is_overlapping: bool },
     Set,
     Swap,
+    RawEq,
+    CompareBytes,
 }
 
 macro_rules! of_mir_translated_funcs {
@@ -67,6 +69,7 @@ macro_rules! of_mir_translated_funcs {
             wrapping_sub,
             write_via_move,
             read_via_copy,
+            overflow_checks,
             ub_checks,
         )
     };
@@ -103,7 +106,6 @@ macro_rules! of_const_evaluated_funcs {
             offset_of,
             field_offset,
             field_representing_type_actual_type_id,
-            overflow_checks,
             size_of_type_id,
             type_of,
         )
@@ -381,6 +383,8 @@ macro_rules! of_memory_funcs {
             write_bytes,
             volatile_set_memory,
             typed_swap_nonoverlapping,
+            raw_eq,
+            compare_bytes,
         )
     };
 }
@@ -390,27 +394,20 @@ macro_rules! of_to_be_supported_funcs {
         $macro!(
             vtable_size,
             vtable_align,
-            select_unpredictable,
-            raw_eq,
             ptr_mask,
             ptr_offset_from_unsigned,
             ptr_offset_from,
-            compare_bytes,
             catch_unwind,
             abort,
             size_of_val,
             is_val_statically_known,
             arith_offset,
-            carrying_mul_add,
-            carryless_mul,
             autodiff,
             va_arg,
             va_copy,
             va_end,
             offload,
             return_address,
-            unchecked_funnel_shl,
-            unchecked_funnel_shr,
         )
     };
 }
@@ -424,6 +421,7 @@ macro_rules! of_one_to_one_funcs {
             saturating_add,
             disjoint_bitor,
             exact_div,
+            carryless_mul,
             bitreverse,
             cttz_nonzero,
             cttz,
@@ -432,6 +430,10 @@ macro_rules! of_one_to_one_funcs {
             ctlz,
             bswap,
             black_box,
+            select_unpredictable,
+            unchecked_funnel_shl,
+            unchecked_funnel_shr,
+            carrying_mul_add,
         )
     };
 }
@@ -514,6 +516,7 @@ fn decide_one_to_one_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecisio
         rsym::saturating_sub => psym::intrinsic_assign_saturating_sub,
         rsym::disjoint_bitor => psym::intrinsic_assign_disjoint_bitor,
         rsym::exact_div => psym::intrinsic_assign_exact_div,
+        rsym::carryless_mul => psym::intrinsic_assign_carryless_mul,
         rsym::bitreverse => psym::intrinsic_assign_bitreverse,
         rsym::cttz_nonzero => psym::intrinsic_assign_cttz_nonzero,
         rsym::cttz => psym::intrinsic_assign_cttz,
@@ -521,6 +524,10 @@ fn decide_one_to_one_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecisio
         rsym::ctlz_nonzero => psym::intrinsic_assign_ctlz_nonzero,
         rsym::ctlz => psym::intrinsic_assign_ctlz,
         rsym::bswap => psym::intrinsic_assign_bswap,
+        rsym::unchecked_funnel_shl => psym::intrinsic_assign_funnel_shl,
+        rsym::unchecked_funnel_shr => psym::intrinsic_assign_funnel_shr,
+        rsym::select_unpredictable => psym::intrinsic_assign_select_unpredictable,
+        rsym::carrying_mul_add => psym::intrinsic_assign_carrying_mul_add,
         rsym::black_box => psym::intrinsic_assign_identity,
         _ => unreachable!(),
     };
@@ -586,6 +593,8 @@ fn decide_memory_intrinsic_call(intrinsic: IntrinsicDef) -> IntrinsicDecision {
         rsym::write_bytes => (MemoryIntrinsicKind::Set, false),
         rsym::volatile_set_memory => (MemoryIntrinsicKind::Set, true),
         rsym::typed_swap_nonoverlapping => (MemoryIntrinsicKind::Swap, false),
+        rsym::raw_eq => (MemoryIntrinsicKind::RawEq, Default::default()),
+        rsym::compare_bytes => (MemoryIntrinsicKind::CompareBytes, Default::default()),
         _ => unreachable!(),
     };
     IntrinsicDecision::Memory { kind, is_volatile }

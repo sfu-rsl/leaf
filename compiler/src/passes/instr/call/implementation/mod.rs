@@ -1062,7 +1062,7 @@ mod prelude {
 
     pub(super) mod mir {
         pub use rustc_middle::{
-            mir::{BasicBlockData, Local, Operand, Place, Rvalue, Statement},
+            mir::{BasicBlockData, Local, Operand, Place, ProjectionElem, Rvalue, Statement},
             ty::{Ty, TyCtxt, TyKind},
         };
         pub use rustc_span::def_id::DefId;

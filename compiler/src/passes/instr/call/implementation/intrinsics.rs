@@ -106,8 +106,8 @@ where
         let mut stmts = Vec::new();
 
         let conc_dst_ptr_local = {
-            let (stmt, id_local) = self.make_conc_ptr_assignment(dst_value.clone());
-            stmts.push(stmt);
+            let (ptr_stmts, id_local) = self.make_conc_ptr_assignment(dst_value.to_copy());
+            stmts.extend(ptr_stmts);
             id_local
         };
 
@@ -144,8 +144,8 @@ where
         let mut stmts = Vec::new();
 
         let conc_second_ptr_local = {
-            let (stmt, id_local) = self.make_conc_ptr_assignment(second_value.clone());
-            stmts.push(stmt);
+            let (ptr_stmts, id_local) = self.make_conc_ptr_assignment(second_value.to_copy());
+            stmts.extend(ptr_stmts);
             id_local
         };
 
@@ -154,6 +154,55 @@ where
             vec![
                 operand::move_for_local(second_ref.into()),
                 operand::move_for_local(conc_second_ptr_local),
+            ],
+            stmts,
+            Default::default(),
+        )
+    }
+
+    fn raw_eq(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>) {
+        let mut stmts = Vec::new();
+
+        let conc_second_ptr_local = {
+            let (ptr_stmts, id_local) = self.make_conc_ptr_assignment(second_value.to_copy());
+            stmts.extend(ptr_stmts);
+            id_local
+        };
+
+        self.add_bb_for_memory_op_intrinsic_call(
+            sym::intrinsics::memory::intrinsic_assign_raw_eq,
+            vec![
+                operand::move_for_local(self.dest_ref().into()),
+                operand::move_for_local(second_ref.into()),
+                operand::move_for_local(conc_second_ptr_local),
+            ],
+            stmts,
+            Default::default(),
+        )
+    }
+
+    fn compare_bytes(
+        &mut self,
+        second_ref: OperandRef,
+        second_value: &Operand<'tcx>,
+        count_ref: OperandRef,
+        count_value: &Operand<'tcx>,
+    ) {
+        let mut stmts = Vec::new();
+
+        let conc_second_ptr_local = {
+            let (ptr_stmts, id_local) = self.make_conc_ptr_assignment(second_value.to_copy());
+            stmts.extend(ptr_stmts);
+            id_local
+        };
+        self.add_bb_for_memory_op_intrinsic_call(
+            sym::intrinsics::memory::intrinsic_assign_compare_bytes,
+            vec![
+                operand::move_for_local(self.dest_ref().into()),
+                operand::move_for_local(second_ref.into()),
+                operand::move_for_local(conc_second_ptr_local),
+                operand::move_for_local(count_ref.into()),
+                count_value.to_copy(),
             ],
             stmts,
             Default::default(),
@@ -177,8 +226,8 @@ where
         let mut blocks = additional_blocks;
 
         let [ptr_ref, ptr_value, ptr_type_id] = {
-            let (ptr_block, ptr_stmt, args) = self.make_ptr_pack_args();
-            stmts.push(ptr_stmt);
+            let (ptr_block, ptr_stmts, args) = self.make_ptr_pack_args();
+            stmts.extend(ptr_stmts);
             blocks.push(ptr_block);
             args
         };
@@ -331,8 +380,8 @@ where
         let mut blocks = additional_blocks;
 
         let [ptr_ref, ptr_value, ptr_type_id] = {
-            let (ptr_block, ptr_stmt, args) = self.make_ptr_pack_args();
-            stmts.push(ptr_stmt);
+            let (ptr_block, ptr_stmts, args) = self.make_ptr_pack_args();
+            stmts.extend(ptr_stmts);
             blocks.push(ptr_block);
             args
         };
@@ -389,7 +438,13 @@ where
     Self: MirCallAdder<'tcx>,
     C: Basic<'tcx>,
 {
-    fn make_ptr_pack_args(&mut self) -> (BasicBlockData<'tcx>, Statement<'tcx>, [Operand<'tcx>; 3])
+    fn make_ptr_pack_args(
+        &mut self,
+    ) -> (
+        BasicBlockData<'tcx>,
+        Vec<Statement<'tcx>>,
+        [Operand<'tcx>; 3],
+    )
     where
         C: PointerInfoProvider<'tcx>,
     {
@@ -412,14 +467,18 @@ where
         operand_ref: OperandRef,
         ptr_value: Operand<'tcx>,
         ptr_ty: Ty<'tcx>,
-    ) -> (BasicBlockData<'tcx>, Statement<'tcx>, [Operand<'tcx>; 3]) {
-        let (conc_ptr_assignment, conc_ptr_local) = self.make_conc_ptr_assignment(ptr_value);
+    ) -> (
+        BasicBlockData<'tcx>,
+        Vec<Statement<'tcx>>,
+        [Operand<'tcx>; 3],
+    ) {
+        let (conc_ptr_stmts, conc_ptr_local) = self.make_conc_ptr_assignment(ptr_value);
 
         let (ptr_type_id_block, ptr_type_id_local) = self.make_type_id_of_bb(ptr_ty);
 
         (
             ptr_type_id_block,
-            conc_ptr_assignment,
+            conc_ptr_stmts,
             [
                 operand::move_for_local(operand_ref.into()),
                 operand::move_for_local(conc_ptr_local),
@@ -428,16 +487,52 @@ where
         )
     }
 
-    fn make_conc_ptr_assignment(&mut self, ptr_value: Operand<'tcx>) -> (Statement<'tcx>, Local) {
+    fn make_conc_ptr_assignment(
+        &mut self,
+        ptr_or_ref_value: Operand<'tcx>,
+    ) -> (Vec<Statement<'tcx>>, Local) {
+        let mut stmts = Vec::new();
         let tcx = self.tcx();
-        let raw_addr_ty = Ty::new_imm_ptr(tcx, tcx.types.unit);
-        let local = self.add_local(raw_addr_ty);
-        let assignment = assignment::create(
-            Place::from(local),
-            rvalue::cast_ptr_to_ptr(ptr_value, raw_addr_ty),
-        );
 
-        (assignment, local)
+        let ty = ptr_or_ref_value.ty(self, tcx);
+        assert!(ty.is_raw_ptr() || ty.is_ref());
+        let ptr_ty = if ty.is_raw_ptr() {
+            ty
+        } else {
+            Ty::new_imm_ptr(tcx, ty.peel_refs())
+        };
+
+        let ptr_or_ref_place = if let Some(place) = ptr_or_ref_value.place() {
+            place
+        } else {
+            // let a = ptr_or_ref_value;
+            let ptr_or_ref_local = self.add_local(ty);
+            stmts.push(assignment::create(
+                Place::from(ptr_or_ref_local),
+                Rvalue::Use(ptr_or_ref_value, rustc_middle::mir::WithRetag::No),
+            ));
+            Place::from(ptr_or_ref_local)
+        };
+
+        // let b: *const T = &raw (*a);
+        let raw_ptr_local = self.add_local(ptr_ty);
+        stmts.push(assignment::create(
+            Place::from(raw_ptr_local),
+            Rvalue::RawPtr(
+                rustc_middle::mir::RawPtrKind::Const,
+                ptr_or_ref_place.project_deeper(&[ProjectionElem::Deref], tcx),
+            ),
+        ));
+
+        // let c: *const () = b as *const ();
+        let raw_addr_ty = Ty::new_imm_ptr(tcx, tcx.types.unit);
+        let raw_addr_local = self.add_local(raw_addr_ty);
+        stmts.push(assignment::create(
+            Place::from(raw_addr_local),
+            rvalue::cast_ptr_to_ptr(operand::move_for_local(raw_ptr_local), raw_addr_ty),
+        ));
+
+        (stmts, raw_addr_local)
     }
 }
 

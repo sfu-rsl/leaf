@@ -422,7 +422,7 @@ where
         let func_ref = self.reference_operand(drop_in_place_fn);
 
         let ptr_pack = self.reference_ptr_for_intrinsic(to_drop);
-        let (ptr_type_id_block, conc_ptr_assignment, [ptr_ref, ptr_value, ptr_type_id]) = self
+        let (ptr_type_id_block, conc_ptr_stmts, [ptr_ref, ptr_value, ptr_type_id]) = self
             .make_ptr_triple_args(
                 ptr_pack.ptr_operand_ref(),
                 ptr_pack.ptr_value().clone(),
@@ -440,7 +440,7 @@ where
             ],
         );
 
-        block.statements.push(conc_ptr_assignment);
+        block.statements.extend(conc_ptr_stmts);
 
         blocks.push(block);
 
