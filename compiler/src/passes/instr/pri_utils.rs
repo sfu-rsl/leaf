@@ -74,7 +74,7 @@ pub(crate) mod sym {
 
         common::pri::pass_func_names_to!(symbols_in_pri, all_comma_separated);
 
-        pub(crate) const ALL_MAINS: [LeafSymbol; 134] =
+        pub(crate) const ALL_MAINS: [LeafSymbol; 141] =
             common::pri::pass_func_names_to!(bracket, all_comma_separated);
 
         pub(crate) mod intrinsics {
@@ -104,6 +104,7 @@ pub(crate) mod sym {
                 intrinsic_assign_saturating_sub,
                 intrinsic_assign_disjoint_bitor,
                 intrinsic_assign_exact_div,
+                intrinsic_assign_carryless_mul,
                 intrinsic_assign_bitreverse,
                 intrinsic_assign_cttz_nonzero,
                 intrinsic_assign_cttz,
@@ -111,6 +112,10 @@ pub(crate) mod sym {
                 intrinsic_assign_ctlz_nonzero,
                 intrinsic_assign_ctlz,
                 intrinsic_assign_bswap,
+                intrinsic_assign_funnel_shl,
+                intrinsic_assign_funnel_shr,
+                intrinsic_assign_select_unpredictable,
+                intrinsic_assign_carrying_mul_add,
 
                 intrinsic_atomic_load,
                 intrinsic_atomic_store,
@@ -124,6 +129,8 @@ pub(crate) mod sym {
                 intrinsic_memory_copy,
                 intrinsic_memory_set,
                 intrinsic_memory_swap,
+                intrinsic_assign_raw_eq,
+                intrinsic_assign_compare_bytes,
             }
 
             pub(crate) mod atomic {
@@ -178,6 +185,8 @@ pub(crate) mod sym {
                     intrinsic_memory_copy,
                     intrinsic_memory_set,
                     intrinsic_memory_swap,
+                    intrinsic_assign_raw_eq,
+                    intrinsic_assign_compare_bytes,
                 }
             }
         }

@@ -267,12 +267,16 @@ fn make_config<'tcx>(storage: &mut dyn Storage, tcx: TyCtxt<'tcx>, def_id: DefId
                 wrap_unsafe_binder: top_level
                     .wrap_unsafe_binder
                     .then(|| rules.wrap_unsafe_binder),
-                intrinsic_binary_op: top_level
-                    .intrinsic_binary_op
-                    .then(|| rules.intrinsic_binary_op),
                 intrinsic_unary_op: top_level
                     .intrinsic_unary_op
                     .then(|| rules.intrinsic_unary_op),
+                intrinsic_binary_op: top_level
+                    .intrinsic_binary_op
+                    .then(|| rules.intrinsic_binary_op),
+                intrinsic_ternary_op: top_level
+                    .intrinsic_ternary_op
+                    .then(|| rules.intrinsic_ternary_op),
+                intrinsic_misc_op: top_level.intrinsic_misc_op.then(|| rules.intrinsic_misc_op),
                 intrinsic_memory_op: top_level
                     .intrinsic_memory_op
                     .then(|| rules.intrinsic_memory_op),
@@ -944,11 +948,10 @@ where
     ) {
         let rules = &self.call_adder.config().assignment_filter;
         let filter = match params.args.len() {
-            2 => rules.intrinsic_binary_op,
             1 => rules.intrinsic_unary_op,
-            _ => unreachable!(
-                "One-to-one intrinsic calls are expected to have either 1 or 2 arguments."
-            ),
+            2 => rules.intrinsic_binary_op,
+            3 => rules.intrinsic_ternary_op,
+            _ => rules.intrinsic_misc_op,
         };
 
         match filter {
@@ -1430,7 +1433,7 @@ impl<'tcx, C: ctxtreqs::ForOperandRef<'tcx>> RuntimeCallAdder<C> {
         let reference = self.reference_operand_spanned(operand);
         PointerPackage {
             reference,
-            value: operand.node.clone(),
+            value: operand.node.to_copy(),
             ty: operand.node.ty(self, self.tcx()),
         }
     }
@@ -1454,7 +1457,7 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
             let tcx = call_adder.tcx();
             let mut call_adder = call_adder.before();
 
-            // FIXME: Destination is only used for load operation. But assignment_id is used for all.
+            // FIXME: Destination is only used for some operations. But assignment_id is used for all.
             // These dummy values can be avoided by breaking the context into smaller ones.
             let dest_ref = destination.map_or(PlaceRef::INVALID, |d| call_adder.reference_place(d));
             let dest_ty = destination.map_or(tcx.types.unit, |d| d.ty(&call_adder, tcx).ty);
@@ -1505,6 +1508,17 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
                     let second: &Spanned<Operand<'tcx>> = &args[1];
                     let second_ref = call_adder.reference_operand_spanned(second);
                     call_adder.swap(second_ref, &second.node);
+                }
+                RawEq => {
+                    let second: &Spanned<Operand<'tcx>> = &args[1];
+                    let second_ref = call_adder.reference_operand_spanned(second);
+                    call_adder.raw_eq(second_ref, &second.node);
+                }
+                CompareBytes => {
+                    let second: &Spanned<Operand<'tcx>> = &args[1];
+                    let second_ref = call_adder.reference_operand_spanned(second);
+                    let count_ref = call_adder.reference_operand_spanned(&args[2]);
+                    call_adder.compare_bytes(second_ref, &second.node, count_ref, &args[2].node);
                 }
             }
         }
