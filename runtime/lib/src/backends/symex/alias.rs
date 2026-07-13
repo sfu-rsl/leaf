@@ -17,7 +17,10 @@ use super::{
     ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,
     SymExConstraint, SymExConstraintDecisionCase, SymExPlaceInfo, SymExPlaceValue, SymExValue,
     TraceIndicesProvider, TraceViewProvider,
-    expr::{SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef},
+    expr::{
+        SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef,
+        builders::CarryingMulAddBuilderExt,
+    },
     implication::Implied,
     trace::SymExExeTraceRecorder,
 };
@@ -36,6 +39,21 @@ where
             PtrType = TypeId,
             GenericType = TypeId,
         >,
+{
+}
+impl<EB> SymValueRefExprBuilder for EB where
+    EB: for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>
+        + for<'a> UnaryExprBuilder<ExprRef<'a> = SymValueRef, Expr<'a> = ValueRef>
+        + for<'a> TernaryExprBuilder<ExprRefTriple<'a> = SymTernaryOperands, Expr<'a> = ValueRef>
+        + for<'a> CastExprBuilder<
+            ExprRef<'a> = SymValueRef,
+            Expr<'a> = ValueRef,
+            Metadata<'a> = LazyTypeInfo,
+            IntType = IntType,
+            FloatType = FloatType,
+            PtrType = TypeId,
+            GenericType = TypeId,
+        >
 {
 }
 
@@ -95,8 +113,25 @@ where
 {
 }
 
-pub(super) trait SymExValueExprBuilder: ImpliedValueRefExprBuilder {}
-impl<T: ImpliedValueRefExprBuilder> SymExValueExprBuilder for T {}
+pub(super) trait SymExValueExprBuilder:
+    ImpliedValueRefExprBuilder
+    + for<'a> CarryingMulAddBuilderExt<
+        Operand<'a> = SymExValue,
+        UnsignedExpr<'a> = SymExValue,
+        SelfExpr<'a> = SymExValue,
+    >
+{
+}
+impl<T> SymExValueExprBuilder for T
+where
+    Self: ImpliedValueRefExprBuilder,
+    for<'a> Self: CarryingMulAddBuilderExt<
+            Operand<'a> = SymExValue,
+            UnsignedExpr<'a> = SymExValue,
+            SelfExpr<'a> = SymExValue,
+        >,
+{
+}
 
 pub(super) trait SymExValueUnaryExprBuilder: ImpliedValueRefUnaryExprBuilder {}
 impl<T: ImpliedValueRefUnaryExprBuilder> SymExValueUnaryExprBuilder for T {}

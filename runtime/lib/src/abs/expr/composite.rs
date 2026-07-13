@@ -6,10 +6,10 @@ use super::*;
 /// binary & unary expression builders.
 #[derive(Clone, Default)]
 pub(crate) struct CompositeExprBuilder<
-    B: BinaryExprBuilder,
-    U: UnaryExprBuilder,
-    T: TernaryExprBuilder,
-    C: CastExprBuilder,
+    B, /*Binary*/
+    U, /*Unary*/
+    T, /*Ternary*/
+    C, /*Cast*/
 > {
     pub(crate) binary: B,
     pub(crate) unary: U,
@@ -77,9 +77,6 @@ macro_rules_method_with_optional_args!(impl_cast_expr_method {
 impl<B, U, T, C> BinaryExprBuilder for CompositeExprBuilder<B, U, T, C>
 where
     B: BinaryExprBuilder,
-    U: UnaryExprBuilder,
-    T: TernaryExprBuilder,
-    C: CastExprBuilder,
 {
     type ExprRefPair<'a> = B::ExprRefPair<'a>;
     type Expr<'a> = B::Expr<'a>;
@@ -101,16 +98,14 @@ where
     impl_binary_expr_method!(and or xor);
     impl_binary_expr_method!(shl shl_unchecked shr shr_unchecked);
     impl_binary_expr_method!(rotate_left rotate_right);
+    impl_binary_expr_method!(carryless_mul);
     impl_binary_expr_method!(eq ne lt le gt ge cmp);
     impl_binary_expr_method!(offset + pointee_size: TypeSize);
 }
 
 impl<B, U, T, C> UnaryExprBuilder for CompositeExprBuilder<B, U, T, C>
 where
-    B: BinaryExprBuilder,
     U: UnaryExprBuilder,
-    T: TernaryExprBuilder,
-    C: CastExprBuilder,
 {
     type ExprRef<'a> = U::ExprRef<'a>;
     type Expr<'a> = U::Expr<'a>;
@@ -125,10 +120,7 @@ where
 
 impl<B, U, T, C> TernaryExprBuilder for CompositeExprBuilder<B, U, T, C>
 where
-    B: BinaryExprBuilder,
-    U: UnaryExprBuilder,
     T: TernaryExprBuilder,
-    C: CastExprBuilder,
 {
     type ExprRefTriple<'a> = T::ExprRefTriple<'a>;
     type Expr<'a> = T::Expr<'a>;
@@ -136,13 +128,11 @@ where
     impl_ternary_expr_method!(ternary_op + op: TernaryOp);
 
     impl_ternary_expr_method!(if_then_else);
+    impl_ternary_expr_method!(funnel_shl funnel_shr);
 }
 
 impl<B, U, T, C> CastExprBuilder for CompositeExprBuilder<B, U, T, C>
 where
-    B: BinaryExprBuilder,
-    U: UnaryExprBuilder,
-    T: TernaryExprBuilder,
     C: CastExprBuilder,
 {
     type ExprRef<'a> = C::ExprRef<'a>;

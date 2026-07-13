@@ -10,7 +10,7 @@ fn main() {
     let c = 2u8.mark_symbolic();
     let d = 5u8.mark_symbolic();
 
-    let (e, f) = unsafe { intrinsics::carrying_mul_add(a, b, c, d) };
+    let (e, f) = intrinsics::carrying_mul_add(a, b, c, d);
     use_num(e);
     use_num(f);
 }

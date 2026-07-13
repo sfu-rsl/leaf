@@ -59,13 +59,16 @@ mod toplevel {
     /// or the ones that are fully based on concrete values.
     /// NOTE: In an ideal case, fully concrete expressions should not be asked to created. So in
     /// the future, this top-level builder will be reduced to the symbolic builder.
-    pub(crate) struct TopLevelBuilder {
+    pub(crate) struct TopLevelBuilder
+    where
+        SymbolicBuilder: SymValueRefExprBuilder,
+    {
         sym_builder: SymbolicBuilder,
         conc_builder: ConcreteBuilder,
     }
 
     impl TopLevelBuilder {
-        pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
+        pub(super) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
             Self {
                 sym_builder: SymbolicBuilder::new(type_manager.clone()),
                 conc_builder: ConcreteBuilder::default(),
@@ -79,30 +82,15 @@ mod toplevel {
 
         fn binary_op<'a>(
             &mut self,
-            (first, second): Self::ExprRefPair<'a>,
+            operands: Self::ExprRefPair<'a>,
             op: AbsBinaryOp,
         ) -> Self::Expr<'a> {
-            if first.is_symbolic() {
-                self.sym_builder.binary_op(
-                    BinaryOperands::Orig {
-                        first: SymValueRef::new(first),
-                        second,
-                    },
-                    op,
-                )
-            } else if second.is_symbolic() {
-                self.sym_builder.binary_op(
-                    BinaryOperands::Rev {
-                        first,
-                        second: SymValueRef::new(second),
-                    },
-                    op,
-                )
-            } else {
-                self.conc_builder.binary_op(
+            match SymBinaryOperands::try_from(operands) {
+                Ok(operands) => self.sym_builder.binary_op(operands, op),
+                Err((first, second)) => self.conc_builder.binary_op(
                     (ConcreteValueRef::new(first), ConcreteValueRef::new(second)),
                     op,
-                )
+                ),
             }
         }
 
@@ -195,28 +183,56 @@ mod symbolic {
         SymValueRefExprBuilder,
         adapters::{ConstFolder, ConstSimplifier, CoreBuilder, MiscSimplifier},
         shift::{ShiftConcreteRhsTypeNormalizer, ShiftRhsMasker},
+        translators::FunnelShiftSymbolicTranslator,
         *,
     };
 
     type AndBinaryExprBuilder = Chained<ConstSimplifier, Chained<ConstFolder, CoreBuilder>>;
 
+    type BaseSymbolicBinaryBuilder = ShiftConcreteRhsTypeNormalizer<
+        Chained<
+            ConstSimplifier,
+            Chained<ConstFolder, ShiftRhsMasker<CoreBuilder, AndBinaryExprBuilder>>,
+        >,
+    >;
+
+    type BaseSymbolicCastBuilder = Chained<FatPtrPorterExtractor, CoreBuilder>;
+
+    type FunnelShiftBuilder = FunnelShiftSymbolicTranslator<
+        Composite<BaseSymbolicBinaryBuilder, (), (), BaseSymbolicCastBuilder>,
+    >;
+
+    struct BoundTester
+    where
+        FunnelShiftBuilder:
+            for<'a> TernaryExprBuilder<ExprRefTriple<'a> = SymTernaryOperands, Expr<'a> = ValueRef>,
+        BaseSymbolicBuilder:
+            for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>,
+        BaseSymbolicBuilder:
+            for<'a> UnaryExprBuilder<ExprRef<'a> = SymValueRef, Expr<'a> = ValueRef>,
+        BaseSymbolicBuilder:
+            for<'a> TernaryExprBuilder<ExprRefTriple<'a> = SymTernaryOperands, Expr<'a> = ValueRef>,
+        BaseSymbolicBuilder: for<'a> CastExprBuilder<
+                ExprRef<'a> = SymValueRef,
+                Expr<'a> = ValueRef,
+                Metadata<'a> = LazyTypeInfo,
+                IntType = IntType,
+                FloatType = FloatType,
+                PtrType = TypeId,
+                GenericType = TypeId,
+            >,
+        BaseSymbolicBuilder: SymValueRefExprBuilder;
+
     pub(crate) type BaseSymbolicBuilder = Composite<
         /*Binary:*/
-        ShiftConcreteRhsTypeNormalizer<
-            Chained<
-                ConstSimplifier,
-                Chained<ConstFolder, ShiftRhsMasker<CoreBuilder, AndBinaryExprBuilder>>,
-            >,
-        >,
+        BaseSymbolicBinaryBuilder,
         /*Unary:*/
         Chained<FatPtrPorterExtractor, Chained<MiscSimplifier, CoreBuilder>>,
         /*Ternary:*/
-        Chained<ConstSimplifier, CoreBuilder>,
+        Chained<FunnelShiftBuilder, Chained<ConstSimplifier, CoreBuilder>>,
         /*Cast:*/
-        Chained<FatPtrPorterExtractor, CoreBuilder>,
+        BaseSymbolicCastBuilder,
     >;
-
-    impl SymValueRefExprBuilder for Logger<BaseSymbolicBuilder> {}
 
     pub(crate) type SymbolicBuilder =
         Logger<Chained<UnevaluatedResolver<Logger<BaseSymbolicBuilder>>, BaseSymbolicBuilder>>;
@@ -226,11 +242,21 @@ mod symbolic {
             let fat_ptr_extractor = FatPtrPorterExtractor {
                 type_manager: type_manager.clone(),
             };
+            let cast_expr_builder = Chained::new(fat_ptr_extractor.clone(), Default::default());
+            let funnel_sh_translator = FunnelShiftBuilder::new(
+                type_manager.clone(),
+                Composite {
+                    binary: Default::default(),
+                    unary: Default::default(),
+                    ternary: Default::default(),
+                    cast: cast_expr_builder.clone(),
+                },
+            );
             let base_builder = BaseSymbolicBuilder {
                 binary: Default::default(),
                 unary: Chained::new(fat_ptr_extractor.clone(), Default::default()),
-                ternary: Default::default(),
-                cast: Chained::new(fat_ptr_extractor, Default::default()),
+                ternary: Chained::new(funnel_sh_translator, Default::default()),
+                cast: cast_expr_builder,
             };
             let uneval_resolver = UnevaluatedResolver {
                 type_manager,
@@ -245,7 +271,7 @@ mod symbolic {
     }
 
     #[derive(Clone)]
-    pub(crate) struct UnevaluatedResolver<EB: SymValueRefExprBuilder> {
+    pub(super) struct UnevaluatedResolver<EB: SymValueRefExprBuilder> {
         type_manager: Rc<dyn TypeDatabase>,
         sym_builder: EB,
     }
@@ -371,6 +397,7 @@ mod symbolic {
         ) -> Self::Expr<'a> {
             let expect_scalar = match op {
                 AbsTernaryOp::IfThenElse => (true, false, false),
+                AbsTernaryOp::FunnelShl | AbsTernaryOp::FunnelShr => (true, true, true),
             };
             self.resolve(&mut operands.0, expect_scalar.0);
             self.resolve(&mut operands.1, expect_scalar.1);
@@ -611,7 +638,7 @@ mod adapters {
     }
 
     impl TernaryExprBuilderAdapter for CoreBuilder {
-        type TargetExprRefTriple<'a> = (SymValueRef, ValueRef, ValueRef);
+        type TargetExprRefTriple<'a> = SymTernaryOperands;
         type TargetExpr<'a> = ValueRef;
 
         #[inline]
@@ -672,7 +699,7 @@ mod adapters {
 
     impl TernaryExprBuilderAdapter for ConstSimplifier {
         type TargetExprRefTriple<'a> = SymTernaryOperands;
-        type TargetExpr<'a> = Result<ValueRef, (SymValueRef, ValueRef, ValueRef)>;
+        type TargetExpr<'a> = Result<ValueRef, Self::TargetExprRefTriple<'a>>;
 
         fn adapt<'t, F>(operands: Self::TargetExprRefTriple<'t>, build: F) -> Self::TargetExpr<'t>
         where
@@ -681,14 +708,20 @@ mod adapters {
                     <Self::Target as TernaryExprBuilder>::Expr<'s>,
                 >,
         {
-            let SymTernaryOperands(cond, if_target, else_target) = operands;
-            match cond.as_ref() {
-                Value::Concrete(cond) => match cond {
-                    ConcreteValue::Const(cond) => Ok(build((cond, if_target, else_target))),
-                    _ => panic!("Unexpected non-constant value for the condition {:?}", cond),
-                },
-                _ => Err((SymValueRef::new(cond), if_target, else_target)),
+            // FIXME: Specialized to if-then-else
+            match operands.0.as_ref() {
+                Value::Concrete(ConcreteValue::Const(first)) => {
+                    match build((first, operands.1, operands.2)) {
+                        Ok(result) => return Ok(result),
+                        Err((_, second, third)) => {
+                            return Err(SymTernaryOperands::new(operands.0, second, third));
+                        }
+                    }
+                }
+                _ => {}
             }
+
+            Err(operands)
         }
     }
 
@@ -825,8 +858,6 @@ mod adapters {
         impl_singular_casts_through_general!();
     }
 
-    impl<T: ValueRefExprBuilder> SymValueRefExprBuilder for SymValueRefExprBuilderAdapter<T> {}
-
     mod implied {
         use backend::{
             Implied, Precondition,
@@ -911,7 +942,7 @@ mod adapters {
                 target: CastKind<Self::IntType, Self::FloatType, Self::PtrType, Self::GenericType>,
                 metadata: Self::Metadata<'b>,
             ) -> Self::Expr<'a> {
-                operand.map_value(|value| (self.0.borrow_mut().cast(value, target, metadata)))
+                operand.map_value(|value| self.0.borrow_mut().cast(value, target, metadata))
             }
 
             impl_singular_casts_through_general!();
@@ -924,6 +955,20 @@ mod adapters {
         }
 
         impl<T: ValueRefExprBuilder> ImpliedValueRefExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {}
+
+        impl From<ConstValue> for Implied<ValueRef> {
+            fn from(value: ConstValue) -> Self {
+                Implied::always(value.to_value_ref())
+            }
+        }
+
+        impl<'a> TryFrom<&'a Implied<ValueRef>> for ValueType {
+            type Error = &'a Implied<ValueRef>;
+
+            fn try_from(value: &'a Implied<ValueRef>) -> Result<Self, Self::Error> {
+                ValueType::try_from(&value.value).or(Err(value))
+            }
+        }
     }
     pub(super) use implied::ImpliedValueRefExprBuilderAdapter;
 }
@@ -1130,15 +1175,27 @@ mod core {
     }
 
     impl TernaryExprBuilder for CoreBuilder {
-        type ExprRefTriple<'a> = (SymValueRef, ValueRef, ValueRef);
+        type ExprRefTriple<'a> = SymTernaryOperands;
         type Expr<'a> = Expr;
 
         fn if_then_else<'a>(&mut self, operands: Self::ExprRefTriple<'a>) -> Self::Expr<'a> {
+            debug_assert!(
+                operands.0.is_symbolic(),
+                "An ITE with non-symbolic condition is expected to be simplified at higher levels"
+            );
             Expr::Ite {
-                condition: operands.0,
+                condition: SymValueRef::new(operands.0),
                 if_target: operands.1,
                 else_target: operands.2,
             }
+        }
+
+        fn funnel_shl<'a>(&mut self, _operands: Self::ExprRefTriple<'a>) -> Self::Expr<'a> {
+            unreachable!("Funnel shifts are expected to be translated at higher levels")
+        }
+
+        fn funnel_shr<'a>(&mut self, _operands: Self::ExprRefTriple<'a>) -> Self::Expr<'a> {
+            unreachable!("Funnel shifts are expected to be translated at higher levels")
         }
 
         impl_general_ternary_op_through_singulars!();
@@ -1413,14 +1470,15 @@ mod concrete {
         type Expr<'a> = ValueRef;
 
         #[inline]
-        fn if_then_else<'a>(
+        fn ternary_op<'a>(
             &mut self,
-            (_condition, _if_target, _else_target): Self::ExprRefTriple<'a>,
+            _operands: Self::ExprRefTriple<'a>,
+            _op: AbsTernaryOp,
         ) -> Self::Expr<'a> {
             UnevalValue::Some.to_value_ref()
         }
 
-        impl_general_ternary_op_through_singulars!();
+        impl_singular_ternary_ops_through_general!();
     }
 }
 
@@ -1724,6 +1782,10 @@ mod simp {
             }
         }
 
+        fn carryless_mul<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
+            Err(operands)
+        }
+
         fn eq<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
             if operands.konst() == &ConstValue::Bool(true) {
                 Ok(operands.other_into())
@@ -1810,7 +1872,7 @@ mod simp {
 
     impl TernaryExprBuilder for ConstSimplifier {
         type ExprRefTriple<'a> = (&'a ConstValue, ValueRef, ValueRef);
-        type Expr<'a> = ValueRef;
+        type Expr<'a> = Result<ValueRef, Self::ExprRefTriple<'a>>;
 
         fn if_then_else<'a>(
             &mut self,
@@ -1819,7 +1881,17 @@ mod simp {
             let ConstValue::Bool(condition) = condition else {
                 unreachable!("Condition must be a boolean constant. {:?}", condition)
             };
-            if *condition { if_target } else { else_target }
+            Ok(if *condition { if_target } else { else_target })
+        }
+
+        fn funnel_shl<'a>(&mut self, operands: Self::ExprRefTriple<'a>) -> Self::Expr<'a> {
+            // FIXME: Possible to do some folding
+            Err(operands)
+        }
+
+        fn funnel_shr<'a>(&mut self, operands: Self::ExprRefTriple<'a>) -> Self::Expr<'a> {
+            // FIXME: Possible to do some folding
+            Err(operands)
         }
 
         impl_general_ternary_op_through_singulars!();
@@ -2201,6 +2273,10 @@ mod simp {
             Err(operands)
         }
 
+        fn carryless_mul<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
+            Err(operands)
+        }
+
         fn eq<'a>(&mut self, operands: Self::ExprRefPair<'a>) -> Self::Expr<'a> {
             Err(operands)
         }
@@ -2492,68 +2568,63 @@ mod shift {
             operands: Self::ExprRefPair<'a>,
             op: AbsBinaryOp,
         ) -> Self::Expr<'a> {
-            let operands = match op {
-                AbsBinaryOp::Shl | AbsBinaryOp::Shr => {
-                    // Source: rustc_codegen_ssa::base::build_shift_expr_rhs
-                    let first_ty = ValueType::try_from(operands.first().as_ref())
-                        .unwrap()
-                        .expect_int();
-                    debug_assert_eq!(
-                        ValueType::try_from(operands.first().as_ref()),
-                        ValueType::try_from(operands.second().as_ref())
-                    );
+            let operands = if op.is_shift() {
+                // Source: rustc_codegen_ssa::base::build_shift_expr_rhs
+                let first_ty = ValueType::try_from(operands.first().as_ref())
+                    .unwrap()
+                    .expect_int();
+                debug_assert_eq!(
+                    ValueType::try_from(operands.first().as_ref()),
+                    ValueType::try_from(operands.second().as_ref())
+                );
 
-                    let mask = ConstValue::new_int((1u128 << first_ty.bit_size) - 1, first_ty);
-                    let (x, y, is_reversed) = operands.flatten();
-                    if is_reversed {
-                        let second = x;
-                        let second = self.mask_expr_builder.and(SymBinaryOperands::Orig {
-                            first: second,
-                            second: mask.to_value_ref(),
-                        });
-                        if second.is_symbolic() {
-                            SymBinaryOperands::Rev {
-                                first: y,
-                                second: SymValueRef::new(second),
-                            }
-                        } else {
-                            ::core::hint::cold_path();
-                            if y.is_symbolic() {
-                                SymBinaryOperands::Orig {
-                                    first: SymValueRef::new(y),
-                                    second,
-                                }
-                            } else {
-                                return UnevalValue::Some.to_value_ref();
-                            }
+                let mask = ConstValue::new_int((1u128 << first_ty.bit_size) - 1, first_ty);
+                let (x, y, is_reversed) = operands.flatten();
+                if is_reversed {
+                    let second = x;
+                    let second = self.mask_expr_builder.and(SymBinaryOperands::Orig {
+                        first: second,
+                        second: mask.to_value_ref(),
+                    });
+                    if second.is_symbolic() {
+                        SymBinaryOperands::Rev {
+                            first: y,
+                            second: SymValueRef::new(second),
                         }
                     } else {
-                        let second = y;
-                        let second = match second.as_ref() {
-                            Value::Concrete(ConcreteValue::Const(
-                                second @ ConstValue::Int { .. },
-                            )) => ConstValue::binary_op_arithmetic(
+                        ::core::hint::cold_path();
+                        if y.is_symbolic() {
+                            SymBinaryOperands::Orig {
+                                first: SymValueRef::new(y),
                                 second,
-                                &mask,
-                                SymExBinaryOp::BitAnd,
-                            )
-                            .to_value_ref(),
-                            Value::Concrete(..) => {
-                                panic!("Only const integer values are expected: {:?}", second);
                             }
-                            Value::Symbolic(..) => {
-                                // Const shift amounts (e.g., division) are much more common.
-                                ::core::hint::cold_path();
-                                self.mask_expr_builder.and(SymBinaryOperands::Orig {
-                                    first: SymValueRef::new(second),
-                                    second: mask.to_value_ref(),
-                                })
-                            }
-                        };
-                        SymBinaryOperands::Orig { first: x, second }
+                        } else {
+                            return UnevalValue::Some.to_value_ref();
+                        }
                     }
+                } else {
+                    let second = y;
+                    let second = match second.as_ref() {
+                        Value::Concrete(ConcreteValue::Const(second @ ConstValue::Int { .. })) => {
+                            ConstValue::binary_op_arithmetic(second, &mask, SymExBinaryOp::BitAnd)
+                                .to_value_ref()
+                        }
+                        Value::Concrete(..) => {
+                            panic!("Only const integer values are expected: {:?}", second);
+                        }
+                        Value::Symbolic(..) => {
+                            // Const shift amounts (e.g., division) are much more common.
+                            ::core::hint::cold_path();
+                            self.mask_expr_builder.and(SymBinaryOperands::Orig {
+                                first: SymValueRef::new(second),
+                                second: mask.to_value_ref(),
+                            })
+                        }
+                    };
+                    SymBinaryOperands::Orig { first: x, second }
                 }
-                _ => operands,
+            } else {
+                operands
             };
 
             self.inner.binary_op(operands, op)
@@ -2562,3 +2633,360 @@ mod shift {
         impl_singular_binary_ops_through_general!();
     }
 }
+
+mod translators {
+    use super::*;
+
+    mod funnel_shift {
+        use super::*;
+
+        #[derive(Clone)]
+        pub(in super::super) struct FunnelShiftSymbolicTranslator<EB> {
+            pub(super) type_manager: Rc<dyn TypeDatabase>,
+            pub(super) inner: EB,
+        }
+
+        impl<EB> FunnelShiftSymbolicTranslator<EB> {
+            pub(crate) fn new(type_manager: Rc<dyn TypeDatabase>, inner: EB) -> Self
+            where
+                EB: FunnelShiftTranslatorBuilderReq,
+            {
+                Self {
+                    type_manager,
+                    inner,
+                }
+            }
+        }
+
+        pub(in super::super) trait FunnelShiftTranslatorBuilderReq
+        where
+            Self: for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>
+                + for<'a> CastExprBuilder<
+                    ExprRef<'a> = SymValueRef,
+                    Expr<'a> = ValueRef,
+                    IntType = IntType,
+                    Metadata<'a> = CastMetadata,
+                >,
+        {
+        }
+        impl<EB> FunnelShiftTranslatorBuilderReq for EB where
+            EB: for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>
+                + for<'a> CastExprBuilder<
+                    ExprRef<'a> = SymValueRef,
+                    Expr<'a> = ValueRef,
+                    IntType = IntType,
+                    Metadata<'a> = CastMetadata,
+                >
+        {
+        }
+
+        impl<EB: FunnelShiftTranslatorBuilderReq> TernaryExprBuilder for FunnelShiftSymbolicTranslator<EB> {
+            type ExprRefTriple<'a> = SymTernaryOperands;
+            type Expr<'a> = Result<<EB as BinaryExprBuilder>::Expr<'a>, Self::ExprRefTriple<'a>>;
+
+            fn ternary_op<'a>(
+                &mut self,
+                operands: Self::ExprRefTriple<'a>,
+                op: AbsTernaryOp,
+            ) -> Self::Expr<'a> {
+                if !matches!(op, AbsTernaryOp::FunnelShl | AbsTernaryOp::FunnelShr) {
+                    return Err(operands);
+                }
+
+                let (first, second, shift) = (operands.0, operands.1, operands.2);
+
+                let ty = {
+                    let ty = ValueType::try_from(first.as_ref())
+                        .or_else(|_| ValueType::try_from(second.as_ref()))
+                        .expect("Could not find the type of funnel shift operands")
+                        .expect_int();
+                    (ty, self.type_manager.int_type(ty))
+                };
+                let double_ty: (IntType, LazyTypeInfo) = {
+                    let mut ty = ty.0.clone();
+                    ty.bit_size *= 2;
+                    (ty, self.type_manager.int_type(ty))
+                };
+
+                let shift = if !shift.is_symbolic() {
+                    let shift_val = *shift
+                        .as_conc()
+                        .and_then(|v| v.as_int())
+                        .inspect(|(_, shift_ty)| debug_assert_eq!(*shift_ty, &IntType::U32))
+                        .map(|(val, _)| val)
+                        .unwrap_or_else(|| {
+                            panic!(
+                                "Shift value is expected to be a retrieved scalar: {:?}",
+                                shift
+                            )
+                        });
+                    // Optimization
+                    if let Some(value) =
+                        self.optimize_large_shift(op, &first, &second, ty.0, shift_val)
+                    {
+                        return Ok(value);
+                    }
+
+                    ConstValue::new_int(shift_val, double_ty.0).to_value_ref()
+                } else {
+                    self.inner
+                        .to_int(SymValueRef::new(shift), double_ty.0, double_ty.1.clone())
+                };
+
+                let concatenated = concat_left_sides(first, second, ty.0, &double_ty);
+
+                let operands = SymBinaryOperands::try_from((concatenated, shift)).unwrap();
+                let shifted = match op {
+                    AbsTernaryOp::FunnelShl => self.inner.shl_unchecked(operands),
+                    AbsTernaryOp::FunnelShr => self.inner.shr_unchecked(operands),
+                    _ => unreachable!(),
+                };
+
+                let moved = if op == AbsTernaryOp::FunnelShl {
+                    self.move_to_least_significant_half(shifted, ty.0, double_ty.0)
+                } else {
+                    shifted
+                };
+
+                Ok(self.cast_back(ty, moved))
+            }
+
+            impl_singular_ternary_ops_through_general!();
+        }
+
+        fn expect_const_value(value: &Value) -> &ConstValue {
+            value
+                .as_conc()
+                .and_then(|v| v.as_const())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Unexpected concrete value in a funnel shift operation: {:?}",
+                        value
+                    )
+                })
+        }
+
+        fn concat_left_sides(
+            first: ValueRef,
+            second: ValueRef,
+            ty: IntType,
+            double_ty: &(IntType, LazyTypeInfo),
+        ) -> ValueRef {
+            if !first.is_symbolic() && !second.is_symbolic() {
+                let first = expect_const_value(&first);
+                let second = expect_const_value(&second);
+
+                ConstValue::binary_op_arithmetic(
+                    &ConstValue::binary_op_shift(
+                        &ConstValue::integer_cast(first, double_ty.0),
+                        &ConstValue::integer_cast(&ConstValue::from(ty.bit_size), double_ty.0),
+                        AbsBinaryOp::Shl,
+                    ),
+                    &ConstValue::integer_cast(second, double_ty.0),
+                    BinaryOp::BitOr,
+                )
+                .to_value_ref()
+            } else {
+                // First goes to the most significant half
+                Expr::Concat(ConcatExpr {
+                    values: vec![first, second],
+                    ty: double_ty.1.clone(),
+                })
+                .to_value_ref()
+                .into()
+            }
+        }
+
+        impl<EB> FunnelShiftSymbolicTranslator<EB>
+        where
+            EB: for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>,
+        {
+            fn optimize_large_shift(
+                &mut self,
+                op: AbsTernaryOp,
+                first: &ValueRef,
+                second: &ValueRef,
+                ty: IntType,
+                shift_val: u128,
+            ) -> Option<ValueRef> {
+                if shift_val >= ty.bit_size as u128 {
+                    let to_shift = match op {
+                        AbsTernaryOp::FunnelShl => second,
+                        AbsTernaryOp::FunnelShr => first,
+                        _ => unreachable!(),
+                    };
+                    let shift_amount =
+                        ConstValue::new_int(shift_val - ty.bit_size as u128, ty).to_value_ref();
+                    let operands = SymBinaryOperands::Orig {
+                        first: SymValueRef::new(to_shift.clone()),
+                        second: shift_amount,
+                    };
+                    let result = match op {
+                        AbsTernaryOp::FunnelShl => self.inner.shl_unchecked(operands),
+                        AbsTernaryOp::FunnelShr => self.inner.shr_unchecked(operands),
+                        _ => unreachable!(),
+                    };
+                    return Some(result);
+                }
+
+                None
+            }
+
+            fn move_to_least_significant_half(
+                &mut self,
+                shifted: ValueRef,
+                ty: IntType,
+                double_ty: IntType,
+            ) -> ValueRef {
+                if !shifted.is_symbolic() {
+                    let shifted = expect_const_value(&shifted);
+
+                    ConstValue::binary_op_shift(
+                        &shifted,
+                        &ConstValue::new_int(ty.bit_size, double_ty),
+                        AbsBinaryOp::ShrUnchecked,
+                    )
+                    .to_value_ref()
+                } else {
+                    self.inner.shr_unchecked(SymBinaryOperands::Orig {
+                        first: SymValueRef::new(shifted),
+                        second: ConstValue::new_int(ty.bit_size, double_ty).to_value_ref(),
+                    })
+                }
+            }
+        }
+
+        impl<EB> FunnelShiftSymbolicTranslator<EB>
+        where
+            EB: for<'a> CastExprBuilder<
+                    ExprRef<'a> = SymValueRef,
+                    Expr<'a> = ValueRef,
+                    IntType = IntType,
+                    Metadata<'a> = CastMetadata,
+                >,
+        {
+            fn cast_back(&mut self, ty: (IntType, LazyTypeInfo), moved: ValueRef) -> ValueRef {
+                if !moved.is_symbolic() {
+                    let to_extract = expect_const_value(&moved);
+                    ConstValue::integer_cast(to_extract, ty.0).to_value_ref()
+                } else {
+                    self.inner.to_int(SymValueRef::new(moved), ty.0, ty.1)
+                }
+            }
+        }
+    }
+    pub(super) use funnel_shift::FunnelShiftSymbolicTranslator;
+
+    mod carrying_mul {
+        use common::log_warn;
+
+        use super::*;
+
+        pub(crate) trait CarryingMulAddBuilderExt {
+            type Operand<'a>;
+            type UnsignedExpr<'a>;
+            type SelfExpr<'a>;
+
+            fn carrying_mul_add<'a>(
+                &mut self,
+                multiplier: Self::Operand<'a>,
+                multiplicand: Self::Operand<'a>,
+                addend: Self::Operand<'a>,
+                carry: Self::Operand<'a>,
+                type_manager: &dyn TypeDatabase,
+            ) -> (Self::UnsignedExpr<'a>, Self::SelfExpr<'a>);
+        }
+
+        impl<EB> CarryingMulAddBuilderExt for EB
+        where
+            EB: for<'a> CastExprBuilder<IntType = IntType, Metadata<'a> = CastMetadata>,
+            EB: for<'a> BinaryExprBuilder,
+            // The result of the cast operation will be passed to the binary operations and vice versa.
+            for<'a> <EB as BinaryExprBuilder>::ExprRefPair<'a>: From<(
+                <EB as CastExprBuilder>::Expr<'a>,
+                <EB as CastExprBuilder>::Expr<'a>,
+            )>,
+            for<'a> <EB as CastExprBuilder>::ExprRef<'a>: From<<EB as BinaryExprBuilder>::Expr<'a>>,
+            // Same for the binary operation itself.
+            for<'a> <EB as BinaryExprBuilder>::ExprRefPair<'a>: From<(
+                <EB as BinaryExprBuilder>::Expr<'a>,
+                <EB as CastExprBuilder>::Expr<'a>,
+            )>,
+            // For the extraction
+            for<'a> <EB as BinaryExprBuilder>::Expr<'a>: Clone,
+            for<'a> <EB as CastExprBuilder>::Expr<'a>: From<ConstValue>,
+            for<'a, 'b> ValueType: TryFrom<&'b <EB as CastExprBuilder>::ExprRef<'a>>,
+            for<'a> <EB as CastExprBuilder>::ExprRef<'a>: std::fmt::Debug,
+        {
+            type Operand<'a> = <EB as CastExprBuilder>::ExprRef<'a>;
+            type UnsignedExpr<'a> = <EB as CastExprBuilder>::Expr<'a>;
+            type SelfExpr<'a> = <EB as CastExprBuilder>::Expr<'a>;
+
+            fn carrying_mul_add<'a>(
+                &mut self,
+                multiplier: Self::Operand<'a>,
+                multiplicand: Self::Operand<'a>,
+                addend: Self::Operand<'a>,
+                carry: Self::Operand<'a>,
+                type_manager: &dyn TypeDatabase,
+            ) -> (Self::UnsignedExpr<'a>, Self::SelfExpr<'a>) {
+                let ty: (IntType, LazyTypeInfo) = {
+                    let ty = ValueType::try_from(&multiplier)
+                        .or_else(|_| ValueType::try_from(&multiplicand))
+                        .or_else(|_| ValueType::try_from(&addend))
+                        .or_else(|_| ValueType::try_from(&carry))
+                        .unwrap_or_else(|_| {
+                            log_warn!(
+                                concat!(
+                                    "Could not find type for carrying mul add operations: {:?}. ",
+                                    "Currently, even unevaluated concrete values are expected to carry type. ",
+                                    "A dummy type will be used, but this may lead to incorrect results."
+                                ),
+                                (&multiplier, &multiplicand, &addend, &carry),
+                            );
+                            IntType::USIZE.into()
+                        })
+                        .expect_int();
+                    (ty, type_manager.int_type(ty))
+                };
+                let double_ty: (IntType, LazyTypeInfo) = {
+                    let mut ty = ty.0.clone();
+                    ty.bit_size *= 2;
+                    (ty, type_manager.int_type(ty))
+                };
+                let unsigned_ty: (IntType, LazyTypeInfo) = {
+                    let mut ty = ty.0.clone();
+                    ty.is_signed = false;
+                    (ty, type_manager.int_type(ty))
+                };
+
+                // let wide = (self as $w) * (a as $w) + (b as $w) + (c as $w);
+                let mul_result = {
+                    let multiplier = self.to_int(multiplier, double_ty.0, double_ty.1.clone());
+                    let multiplicand = self.to_int(multiplicand, double_ty.0, double_ty.1.clone());
+                    let addend = self.to_int(addend, double_ty.0, double_ty.1.clone());
+                    let carry = self.to_int(carry, double_ty.0, double_ty.1.clone());
+
+                    let product = self.mul_unchecked((multiplier, multiplicand).into());
+                    let sum = self.add_unchecked((product, addend).into());
+                    let mul_result = self.add_unchecked((sum, carry).into());
+                    mul_result
+                };
+                // (wide as $u, (wide >> Self::BITS) as $t)
+                {
+                    let lower_half =
+                        self.to_int(mul_result.clone().into(), unsigned_ty.0, unsigned_ty.1);
+                    let upper_half = {
+                        let shift = ConstValue::new_int(ty.0.bit_size, double_ty.0);
+                        let shift: <Self as CastExprBuilder>::Expr<'a> = shift.into();
+                        let extracted = self.shr_unchecked((mul_result, shift).into());
+                        self.to_int(extracted.into(), ty.0, ty.1)
+                    };
+                    (lower_half, upper_half)
+                }
+            }
+        }
+    }
+    pub(crate) use carrying_mul::CarryingMulAddBuilderExt;
+}
+pub(crate) use translators::CarryingMulAddBuilderExt;

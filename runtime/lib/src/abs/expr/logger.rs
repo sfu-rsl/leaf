@@ -137,6 +137,7 @@ where
     impl_binary_expr_method!(and or xor);
     impl_binary_expr_method!(shl shl_unchecked shr shr_unchecked);
     impl_binary_expr_method!(rotate_left rotate_right);
+    impl_binary_expr_method!(carryless_mul);
     impl_binary_expr_method!(eq ne lt le gt ge cmp);
     impl_binary_expr_method!(offset + pointee_size: TypeSize);
 }
@@ -170,6 +171,7 @@ where
     impl_ternary_expr_method!(ternary_op + op: TernaryOp);
 
     impl_ternary_expr_method!(if_then_else);
+    impl_ternary_expr_method!(funnel_shl funnel_shr);
 }
 
 impl<B> CastExprBuilder for LoggerExprBuilder<B>

@@ -116,6 +116,7 @@ impl Display for BinaryOp {
             BinaryOp::ShrUnchecked => ">>ᵁ",
             BinaryOp::RotateL => "_<_",
             BinaryOp::RotateR => "_>_",
+            BinaryOp::CarrylessMul => "*^",
             BinaryOp::Eq => "==",
             BinaryOp::Ne => "!=",
             BinaryOp::Lt => "<",
