@@ -3,7 +3,10 @@ use std::borrow::Cow;
 use common::log_warn;
 
 use crate::{
-    abs::{AssignmentId, PlaceUsage, RawAddress, TypeId, TypeSize, expr::BinaryExprBuilder},
+    abs::{
+        AssignmentId, IntType, PlaceUsage, RawAddress, TypeId, TypeSize, expr::BinaryExprBuilder,
+    },
+    backends::symex::expr::LazyTypeInfo,
     pri::fluent::backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
 };
 
@@ -209,6 +212,157 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
         assign!(place_from_first!(PlaceUsage::Write), second_value);
         assign!(place_from_second!(PlaceUsage::Write), first_value);
     }
+
+    fn raw_eq(
+        self,
+        first_ref: Self::Operand,
+        conc_first_ptr: RawAddress,
+        second_ref: Self::Operand,
+        conc_second_ptr: RawAddress,
+        ptr_type_id: TypeId,
+    ) -> Self::Operand {
+        let size = self.pointee_size(ptr_type_id);
+
+        if size == 0 {
+            return Implied::always(ConstValue::Bool(true).to_value_ref());
+        }
+
+        if size > 1 {
+            // Just check if we have symbolic values, and warn as an unsupported case.
+            // FIXME: (Check the real use cases in the standard library before generalizing)
+            let is_symbolic = |ref_val, conc_ptr| {
+                let place =
+                    self.place_from_ptr_inner(ref_val, conc_ptr, ptr_type_id, PlaceUsage::Copy);
+                self.services.vars_state.copy_place(&place).is_symbolic()
+            };
+
+            if is_symbolic(first_ref, conc_first_ptr) || is_symbolic(second_ref, conc_second_ptr) {
+                log_warn!(
+                    concat!(
+                        "Checking equality of multi-byte values byte-by-byte is not supported currently. ",
+                        "Values: @{:p} and @{:p}, Ref type: {}",
+                    ),
+                    conc_first_ptr,
+                    conc_second_ptr,
+                    ptr_type_id,
+                );
+            }
+            return Implied::always(UnevalValue::Some.to_value_ref());
+        }
+
+        let first_values = self
+            .ptr_at_offsets(
+                &first_ref,
+                conc_first_ptr,
+                Implied::always(size as usize),
+                1,
+            )
+            .map(|(first_at_i, conc_first_at_i)| {
+                let first_place_at_i = self.place_from_ptr_inner(
+                    first_at_i,
+                    conc_first_at_i,
+                    ptr_type_id,
+                    PlaceUsage::Copy,
+                );
+                self.services.vars_state.copy_place(&first_place_at_i)
+            });
+
+        let second_values = self
+            .ptr_at_offsets(
+                &second_ref,
+                conc_second_ptr,
+                Implied::always(size as usize),
+                1,
+            )
+            .map(|(second_at_i, conc_second_at_i)| {
+                let second_place_at_i = self.place_from_ptr_inner(
+                    second_at_i,
+                    conc_second_at_i,
+                    ptr_type_id,
+                    PlaceUsage::Copy,
+                );
+                self.services.vars_state.copy_place(&second_place_at_i)
+            });
+
+        let expr_builder = self.services.expr_builder.clone();
+
+        first_values
+            .zip(second_values)
+            .map(|pair| expr_builder.borrow_mut().eq(pair))
+            .reduce(|acc, next| expr_builder.borrow_mut().and((acc, next)))
+            .unwrap()
+    }
+
+    fn compare_bytes(
+        mut self,
+        first_ptr: Self::Operand,
+        conc_first_ptr: RawAddress,
+        second_ptr: Self::Operand,
+        conc_second_ptr: RawAddress,
+        count: Self::Operand,
+        conc_count: usize,
+        ptr_type_id: TypeId,
+    ) -> Self::Operand {
+        self.check_count(&count, conc_count);
+        let count = count.map_value(|_| conc_count);
+
+        if conc_count == 0 {
+            return Implied::always(ConstValue::from(0i32).to_value_ref());
+        }
+
+        let first_values = self
+            .ptr_at_offsets(&first_ptr, conc_first_ptr, count.clone(), 1)
+            .map(|(first_at_i, conc_first_at_i)| {
+                let first_place_at_i = self.place_from_ptr_inner(
+                    first_at_i,
+                    conc_first_at_i,
+                    ptr_type_id,
+                    PlaceUsage::Copy,
+                );
+                self.services.vars_state.copy_place(&first_place_at_i)
+            });
+        let second_values = self
+            .ptr_at_offsets(&second_ptr, conc_second_ptr, count.clone(), 1)
+            .map(|(second_at_i, conc_second_at_i)| {
+                let second_place_at_i = self.place_from_ptr_inner(
+                    second_at_i,
+                    conc_second_at_i,
+                    ptr_type_id,
+                    PlaceUsage::Copy,
+                );
+                self.services.vars_state.copy_place(&second_place_at_i)
+            });
+
+        let expr_builder = self.services.expr_builder.clone();
+
+        let result = first_values
+            .zip(second_values)
+            .map(|pair| expr_builder.borrow_mut().cmp(pair))
+            .rev()
+            .reduce(|acc, prev| {
+                let eq = expr_builder.borrow_mut().eq((
+                    prev.clone(),
+                    Implied::always(ConstValue::from(core::cmp::Ordering::Equal).to_value_ref()),
+                ));
+                expr_builder.borrow_mut().if_then_else((eq, acc, prev))
+            })
+            .unwrap();
+
+        let i8_type: LazyTypeInfo = self.services.type_manager.i8();
+        let x = self.services.expr_builder.borrow_mut().transmute(
+            result,
+            i8_type.id().unwrap(),
+            i8_type,
+        );
+        self.services.expr_builder.borrow_mut().to_int(
+            x,
+            IntType {
+                bit_size: i32::BITS as _,
+                is_signed: true,
+            },
+            self.services.type_manager.i32(),
+        )
+    }
 }
 
 impl<'a, EB> SymExRawMemoryHandler<'a, EB> {
@@ -250,6 +404,9 @@ impl<'a, EB> SymExRawMemoryHandler<'a, EB> {
     }
 }
 
+trait AtOffsetsIterator: ExactSizeIterator + DoubleEndedIterator {}
+impl<T: ExactSizeIterator + DoubleEndedIterator> AtOffsetsIterator for T {}
+
 impl<'a, EB: SymExValueExprBuilder + 'static> SymExRawMemoryHandler<'a, EB> {
     fn ptr_at_offsets(
         &self,
@@ -257,10 +414,10 @@ impl<'a, EB: SymExValueExprBuilder + 'static> SymExRawMemoryHandler<'a, EB> {
         conc_ptr: RawAddress,
         count: Implied<usize>,
         size: TypeSize,
-    ) -> impl Iterator<Item = (SymExValue, RawAddress)> {
+    ) -> impl AtOffsetsIterator<Item = (SymExValue, RawAddress)> {
         let precondition = Precondition::merge([ptr.by.clone(), count.by.clone()]);
 
-        let values: Box<dyn Iterator<Item = ValueRef>> = match ptr.as_ref() {
+        let values: Box<dyn AtOffsetsIterator<Item = ValueRef>> = match ptr.as_ref() {
             Value::Concrete(conc_value) => {
                 let ptr = {
                     if cfg!(debug_assertions) {
