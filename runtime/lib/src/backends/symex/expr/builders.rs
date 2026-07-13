@@ -596,7 +596,8 @@ mod symbolic {
 }
 
 mod adapters {
-    use derive_more::{Deref, DerefMut};
+    use derive_more as dm;
+
     use guards::SymTernaryOperands;
 
     use crate::abs::expr::variance::*;
@@ -608,7 +609,7 @@ mod adapters {
     use TernaryExprBuilder as TEB;
     use UnaryExprBuilder as UEB;
 
-    #[derive(Default, Clone, Deref, DerefMut)]
+    #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
     pub(crate) struct CoreBuilder(core::CoreBuilder);
 
     impl BinaryExprBuilderAdapter for CoreBuilder {
@@ -671,7 +672,7 @@ mod adapters {
     ///
     /// For example, when generating an expression for `x * 1`, `mul(x, 1)` will be called,
     /// and ConstSimplifier will return only `x`, not `Expr::Binary { ... }`.
-    #[derive(Default, Clone, Deref, DerefMut)]
+    #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
     pub(crate) struct ConstSimplifier(simp::ConstSimplifier);
 
     impl BinaryExprBuilderAdapter for ConstSimplifier {
@@ -731,7 +732,7 @@ mod adapters {
     /// For example, when generating an expression for `x * 2 * 3`,
     /// `mul(mul(x, 1), 2)` will be called, and ConstFolder will return the
     /// result equivalent to `x * 6` instead of ((x * 2) * 3).
-    #[derive(Default, Clone, Deref, DerefMut)]
+    #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
     pub(crate) struct ConstFolder(simp::ConstFolder);
 
     impl BinaryExprBuilderAdapter for ConstFolder {
@@ -775,7 +776,7 @@ mod adapters {
         }
     }
 
-    #[derive(Default, Clone, Deref, DerefMut)]
+    #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
     pub(crate) struct MiscSimplifier(simp::MiscSimplifier);
 
     impl UnaryExprBuilderAdapter for MiscSimplifier {
@@ -791,7 +792,7 @@ mod adapters {
         }
     }
 
-    #[derive(Default, Clone, Deref, DerefMut)]
+    #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
     pub(crate) struct SymValueRefExprBuilderAdapter<T: ValueRefExprBuilder>(pub(super) RRef<T>);
 
     impl<T: ValueRefExprBuilder> BinaryExprBuilder for SymValueRefExprBuilderAdapter<T> {
@@ -867,7 +868,7 @@ mod adapters {
 
         use super::*;
 
-        #[derive(Default, Clone, Deref, DerefMut)]
+        #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
         pub(crate) struct ImpliedValueRefExprBuilderAdapter<T: ValueRefExprBuilder>(
             pub(in super::super) RRef<T>,
         );
@@ -949,7 +950,7 @@ mod adapters {
         }
 
         impl<T: ValueRefExprBuilder> ValueRefExprBuilderWrapper for ImpliedValueRefExprBuilderAdapter<T> {
-            fn inner(&mut self) -> impl DerefMut<Target = impl ValueRefExprBuilder> {
+            fn inner(&mut self) -> impl ::core::ops::DerefMut<Target = impl ValueRefExprBuilder> {
                 self.0.borrow_mut()
             }
         }
@@ -980,7 +981,6 @@ mod core {
     use simp::CastSimplifier;
 
     use super::*;
-    use std::ops::Not;
 
     /// This is the base expression builder. It implements the lowest level for
     /// all the binary and unary functions. At this point all optimizations are
@@ -1089,7 +1089,7 @@ mod core {
             let value = wrapping_value;
             let value = if let Some(overflow_expr) = make_check_expr_if_possible(true) {
                 let max_value = ConstValue::Int {
-                    bit_rep: min_of_ty.not(),
+                    bit_rep: !min_of_ty,
                     ty,
                 };
                 Expr::Ite {
@@ -2916,7 +2916,7 @@ mod translators {
             for<'a> <EB as BinaryExprBuilder>::Expr<'a>: Clone,
             for<'a> <EB as CastExprBuilder>::Expr<'a>: From<ConstValue>,
             for<'a, 'b> ValueType: TryFrom<&'b <EB as CastExprBuilder>::ExprRef<'a>>,
-            for<'a> <EB as CastExprBuilder>::ExprRef<'a>: std::fmt::Debug,
+            for<'a> <EB as CastExprBuilder>::ExprRef<'a>: ::core::fmt::Debug,
         {
             type Operand<'a> = <EB as CastExprBuilder>::ExprRef<'a>;
             type UnsignedExpr<'a> = <EB as CastExprBuilder>::Expr<'a>;
