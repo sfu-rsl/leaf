@@ -62,6 +62,7 @@ where
     delegate_binary_op!(and or xor);
     delegate_binary_op!(shl shl_unchecked shr shr_unchecked);
     delegate_binary_op!(rotate_left rotate_right);
+    delegate_binary_op!(carryless_mul);
     delegate_binary_op!(eq ne lt le gt ge cmp);
     delegate_binary_op!(offset + pointee_size: TypeSize);
 }
@@ -150,6 +151,7 @@ where
     delegate_ternary_op!(ternary_op + op: TernaryOp);
 
     delegate_ternary_op!(if_then_else);
+    delegate_ternary_op!(funnel_shl funnel_shr);
 }
 
 pub(crate) trait CastExprBuilderAdapter: DerefMut

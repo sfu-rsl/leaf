@@ -177,6 +177,39 @@ impl<EB: SymExValueExprBuilder> AssignmentHandler for SymExAssignmentHandler<'_,
         self.set(result_value)
     }
 
+    fn ternary_op_between(
+        mut self,
+        operator: abs::TernaryOp,
+        first: Self::Operand,
+        second: Self::Operand,
+        third: Self::Operand,
+    ) {
+        let result_value = self
+            .expr_builder()
+            .ternary_op((first, second, third), operator);
+        self.set(result_value)
+    }
+
+    fn carrying_mul_add(
+        mut self,
+        multiplier: Self::Operand,
+        multiplicand: Self::Operand,
+        addend: Self::Operand,
+        carry: Self::Operand,
+    ) {
+        let result_value = self.expr_builder().carrying_mul_add(
+            multiplier,
+            multiplicand,
+            addend,
+            carry,
+            self.type_manager(),
+        );
+        self.set_adt_value(
+            AdtKind::Struct,
+            [result_value.0, result_value.1].into_iter().map(Some),
+        )
+    }
+
     fn discriminant_from(mut self, place: Self::DiscriminablePlace) {
         let discr_value = match place {
             DiscriminantPossiblePlace::None => {

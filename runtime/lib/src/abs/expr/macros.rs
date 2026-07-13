@@ -38,6 +38,7 @@ macro_rules! impl_general_binary_op_through_singulars {
                 ShrUnchecked => self.shr_unchecked(operands),
                 RotateL => self.rotate_left(operands),
                 RotateR => self.rotate_right(operands),
+                CarrylessMul => self.carryless_mul(operands),
                 Eq => self.eq(operands),
                 Lt => self.lt(operands),
                 Le => self.le(operands),
@@ -90,6 +91,7 @@ macro_rules! impl_singular_binary_ops_through_general {
             (shr_unchecked = $crate::abs::expr::BinaryOp::ShrUnchecked)
             (rotate_left = $crate::abs::expr::BinaryOp::RotateL)
             (rotate_right = $crate::abs::expr::BinaryOp::RotateR)
+            (carryless_mul = $crate::abs::expr::BinaryOp::CarrylessMul)
             (eq = $crate::abs::expr::BinaryOp::Eq)
             (lt = $crate::abs::expr::BinaryOp::Lt)
             (le = $crate::abs::expr::BinaryOp::Le)
@@ -178,6 +180,8 @@ macro_rules! impl_general_ternary_op_through_singulars {
             use $crate::abs::expr::TernaryOp::*;
             match op {
                 IfThenElse => self.if_then_else(operands),
+                FunnelShl => self.funnel_shl(operands),
+                FunnelShr => self.funnel_shr(operands),
             }
         }
     };
@@ -200,6 +204,8 @@ macro_rules! impl_singular_ternary_ops_through_general {
         repeat_macro_for!(
             impl_singular_ternary_op_through_general;
             (if_then_else = $crate::abs::expr::TernaryOp::IfThenElse)
+            (funnel_shl = $crate::abs::expr::TernaryOp::FunnelShl)
+            (funnel_shr = $crate::abs::expr::TernaryOp::FunnelShr)
         );
     };
 }

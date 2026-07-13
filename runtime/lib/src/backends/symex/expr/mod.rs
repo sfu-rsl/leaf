@@ -75,14 +75,6 @@ impl Value {
     pub(crate) fn is_symbolic(&self) -> bool {
         self.as_sym().is_some()
     }
-
-    #[inline]
-    pub(crate) fn as_sym(&self) -> Option<&SymValue> {
-        match self {
-            Value::Symbolic(sym) => Some(sym),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, dm::From)]
@@ -743,6 +735,7 @@ mod operators {
             Shr,
             RotateL,
             RotateR,
+            CarrylessMul,
 
             Eq,
             Lt,
@@ -1178,6 +1171,13 @@ mod convert {
     impl_from_int_type!(false, u8, u16, u32, u64, u128, usize);
     impl_from_int_type!(true, i8, i16, i32, i64, i128, isize);
 
+    impl From<core::cmp::Ordering> for ConstValue {
+        fn from(value: core::cmp::Ordering) -> Self {
+            // FIXME: It can be problematic, as in definition they are different types.
+            Self::from(value as i8)
+        }
+    }
+
     macro_rules! impl_conc_to_value_ref {
         ($($ty: ty),* $(,)?) => {
             $(
@@ -1229,6 +1229,28 @@ mod convert {
         ConcatExpr,
     );
 
+    impl TryFrom<(ValueRef, ValueRef)> for SymBinaryOperands {
+        type Error = (ValueRef, ValueRef);
+
+        #[inline]
+        fn try_from(value: (ValueRef, ValueRef)) -> Result<Self, Self::Error> {
+            let (first, second) = value;
+            if first.is_symbolic() {
+                Ok(Self::Orig {
+                    first: SymValueRef::new(first),
+                    second,
+                })
+            } else if second.is_symbolic() {
+                Ok(Self::Rev {
+                    first,
+                    second: SymValueRef::new(second),
+                })
+            } else {
+                Err((first, second))
+            }
+        }
+    }
+
     impl<'a> TryFrom<&'a Value> for ValueType {
         type Error = &'a Value;
 
@@ -1237,6 +1259,14 @@ mod convert {
                 Value::Concrete(con_val) => ValueType::try_from(con_val).or(Err(value)),
                 Value::Symbolic(sym_val) => ValueType::try_from(sym_val).or(Err(value)),
             }
+        }
+    }
+
+    impl<'a> TryFrom<&'a ValueRef> for ValueType {
+        type Error = &'a ValueRef;
+
+        fn try_from(value: &'a ValueRef) -> Result<Self, Self::Error> {
+            ValueType::try_from(value.as_ref()).or(Err(value))
         }
     }
 
@@ -1255,7 +1285,7 @@ mod convert {
                             Add | Sub | Mul | Div | Rem | BitXor | BitAnd | BitOr => {
                                 ValueType::try_from(operands).map_err(|_| value)
                             }
-                            Shl | Shr | RotateL | RotateR => {
+                            Shl | Shr | RotateL | RotateR | CarrylessMul => {
                                 ValueType::try_from(operands.first().as_ref()).map_err(|_| value)
                             }
                             Cmp => {
@@ -1346,6 +1376,51 @@ mod convert {
     impl From<MultiValueLeaf> for MultiValueTree {
         fn from(value: MultiValueLeaf) -> Self {
             SymbolicReadTree::Single(value)
+        }
+    }
+}
+
+mod subtype {
+    use super::*;
+
+    impl Value {
+        pub(crate) fn as_conc(&self) -> Option<&ConcreteValue> {
+            match self {
+                Value::Concrete(conc) => Some(conc),
+                _ => None,
+            }
+        }
+
+        #[inline]
+        pub(crate) fn as_sym(&self) -> Option<&SymValue> {
+            match self {
+                Value::Symbolic(sym) => Some(sym),
+                _ => None,
+            }
+        }
+    }
+
+    impl ConcreteValue {
+        #[inline]
+        pub(crate) fn as_const(&self) -> Option<&ConstValue> {
+            match self {
+                ConcreteValue::Const(const_val) => Some(const_val),
+                _ => None,
+            }
+        }
+
+        #[inline]
+        pub(crate) fn as_int(&self) -> Option<(&u128, &IntType)> {
+            self.as_const().and_then(|const_val| const_val.as_int())
+        }
+    }
+
+    impl ConstValue {
+        fn as_int(&self) -> Option<(&u128, &IntType)> {
+            match self {
+                Self::Int { bit_rep, ty } => Some((&bit_rep.0, ty)),
+                _ => None,
+            }
         }
     }
 }

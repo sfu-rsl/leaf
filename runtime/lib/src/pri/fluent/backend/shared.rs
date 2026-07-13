@@ -235,6 +235,24 @@ pub(crate) mod noop {
 
         fn unary_op_on(self, _operator: UnaryOp, _operand: Self::Operand) {}
 
+        fn ternary_op_between(
+            self,
+            _operator: TernaryOp,
+            _first: Self::Operand,
+            _second: Self::Operand,
+            _third: Self::Operand,
+        ) {
+        }
+
+        fn carrying_mul_add(
+            self,
+            _multiplier: Self::Operand,
+            _multiplicand: Self::Operand,
+            _addend: Self::Operand,
+            _carry: Self::Operand,
+        ) {
+        }
+
         fn discriminant_from(self, _place: Self::DiscriminablePlace) {}
 
         fn array_from(self, _items: impl Iterator<Item = Self::Operand>) {}

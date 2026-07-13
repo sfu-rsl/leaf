@@ -43,6 +43,7 @@ pub enum BinaryOp {
     ShrUnchecked = common::pri::BinaryOp::SHR_UNCHECKED.to_raw(),
     RotateL = common::pri::BinaryOp::ROT_L.to_raw(),
     RotateR = common::pri::BinaryOp::ROT_R.to_raw(),
+    CarrylessMul = common::pri::BinaryOp::CARRYLESS_MUL.to_raw(),
 
     Eq = common::pri::BinaryOp::EQ.to_raw(),
     Lt = common::pri::BinaryOp::LT.to_raw(),
@@ -68,6 +69,14 @@ pub enum UnaryOp {
     NonZeroLeadingZeros = common::pri::UnaryOp::CTLZ_NONZERO.to_raw(),
     LeadingZeros = common::pri::UnaryOp::CTLZ.to_raw(),
     ByteSwap = common::pri::UnaryOp::BSWAP.to_raw(),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum TernaryOp {
+    IfThenElse = 1,
+    FunnelShl = 2,
+    FunnelShr = 3,
 }
 
 #[derive(Clone, Copy, Debug)]

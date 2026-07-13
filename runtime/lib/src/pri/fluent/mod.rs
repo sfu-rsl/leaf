@@ -995,7 +995,6 @@ where
         second: OperandRef,
     ) {
         Self::assign_binary_op(id, dest, Self::BinaryOp::CarrylessMul, first, second);
-        todo!()
     }
 
     fn intrinsic_assign_bitreverse(id: AssignmentId, dest: PlaceRef, x: OperandRef) {
@@ -1033,7 +1032,12 @@ where
         second: OperandRef,
         shift: OperandRef,
     ) {
-        todo!()
+        let first = Self::take_back_operand(first);
+        let second = Self::take_back_operand(second);
+        let shift = Self::take_back_operand(shift);
+        Self::assign_to(id, dest, |h| {
+            h.ternary_op_between(abs::TernaryOp::FunnelShl, first, second, shift)
+        })
     }
 
     fn intrinsic_assign_funnel_shr(
@@ -1043,7 +1047,12 @@ where
         second: OperandRef,
         shift: OperandRef,
     ) {
-        todo!()
+        let first = Self::take_back_operand(first);
+        let second = Self::take_back_operand(second);
+        let shift = Self::take_back_operand(shift);
+        Self::assign_to(id, dest, |h| {
+            h.ternary_op_between(abs::TernaryOp::FunnelShr, first, second, shift)
+        })
     }
 
     fn intrinsic_assign_select_unpredictable(
@@ -1053,7 +1062,12 @@ where
         true_val: OperandRef,
         false_val: OperandRef,
     ) {
-        todo!()
+        let condition = Self::take_back_operand(condition);
+        let true_val = Self::take_back_operand(true_val);
+        let false_val = Self::take_back_operand(false_val);
+        Self::assign_to(id, dest, |h| {
+            h.ternary_op_between(abs::TernaryOp::IfThenElse, condition, true_val, false_val)
+        })
     }
 
     fn intrinsic_assign_carrying_mul_add(
@@ -1064,7 +1078,13 @@ where
         addend: OperandRef,
         carry: OperandRef,
     ) {
-        todo!()
+        let multiplier = Self::take_back_operand(multiplier);
+        let multiplicand = Self::take_back_operand(multiplicand);
+        let addend = Self::take_back_operand(addend);
+        let carry = Self::take_back_operand(carry);
+        Self::assign_to(id, dest, |h| {
+            h.carrying_mul_add(multiplier, multiplicand, addend, carry)
+        })
     }
 
     fn intrinsic_atomic_binary_op(

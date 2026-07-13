@@ -470,6 +470,15 @@ pub(crate) mod z3 {
                                 let gt = self.translate_ite_expr(gt_check, greater, equal);
                                 self.translate_ite_expr(lt_check, less, gt)
                             })),
+                            (BinaryOp::CarrylessMul, _) => {
+                                assert!(
+                                    !is_signed,
+                                    "Carryless multiplication is only expected for unsigned integers."
+                                );
+                                Some(Box::new(|left, right| {
+                                    self.translate_carryless_mul_expr(left, right, is_signed)
+                                }))
+                            }
                             _ => None,
                         };
                         f.map(|f| f(left.clone(), right.clone()))
@@ -751,6 +760,35 @@ pub(crate) mod z3 {
                 .reduce(|acc, byte| ast::BV::concat(&byte, &acc))
                 .unwrap();
             BVNode::new(swapped_bv, bv.is_signed()).into()
+        }
+
+        fn translate_carryless_mul_expr(
+            &mut self,
+            left: AstNode<'ctx>,
+            right: AstNode<'ctx>,
+            is_signed: bool,
+        ) -> AstNode<'ctx> {
+            assert!(
+                !is_signed,
+                "Carryless multiplication is only expected for unsigned integers."
+            );
+            let left = left.as_bit_vector();
+            let right = right.as_bit_vector();
+            let size = left.get_size();
+            let zero = ast::BV::from_u64(self.context, 0, size);
+            let one = ast::BV::from_u64(self.context, 1, 1);
+
+            let mut result = zero.clone();
+            for i in 0..size {
+                // Reference: Documentation for uN::carryless_mul
+                // (rhs >> i) & 1
+                let enable = right.extract(i, i)._eq(&one);
+                // (lhs << i)
+                let shifted = left.bvshl(&ast::BV::from_u64(self.context, i as u64, size));
+                // result ^= (rhs >> i) & 1 ? (lhs << i) : 0
+                result = result.bvxor(&enable.ite(&shifted, &zero));
+            }
+            BVNode::new(result, false).into()
         }
 
         fn translate_concat_expr(

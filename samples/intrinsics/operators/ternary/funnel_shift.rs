@@ -11,15 +11,16 @@ fn main() {
 
     let l = unsafe { intrinsics::unchecked_funnel_shl(a, b, 2) };
     let r = unsafe { intrinsics::unchecked_funnel_shr(a, b, 2) };
-    use_num(l);
-    use_num(r);
+    if (a.count_ones() == 1) & (b.count_ones() == 1) & (l == r) {
+        use_num(0);
+    }
 
-    let num = 0b11001100u8;
+    let num = 0b11000011u8;
     let shift_l = 3.mark_symbolic();
     let shift_r = 2.mark_symbolic();
-    let l = unsafe { intrinsics::unchecked_funnel_shl(num, 0b1u8, shift_l) };
-    let r = unsafe { intrinsics::unchecked_funnel_shr(num, 0b1u8, shift_r) };
-    if l == r {
+    let l = unsafe { intrinsics::unchecked_funnel_shl(num, 0b11u8, shift_l) };
+    let r = unsafe { intrinsics::unchecked_funnel_shr(num, 0b11u8, shift_r) };
+    if (shift_l < 8) & (shift_r < 8) & (l == r) {
         use_num(0);
     }
 }

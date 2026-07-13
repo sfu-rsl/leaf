@@ -4,8 +4,8 @@ pub(crate) mod shared;
 
 use crate::abs::{
     AssertKind, AssignmentId, BasicBlockIndex, BinaryOp, CalleeDef, CastKind, Constant, FieldIndex,
-    FuncDef, Local, PlaceUsage, Projection, RawAddress, SwitchCaseIndex, SymVariable, Tag, TypeId,
-    TypeSize, UnaryOp, ValueType, VariantIndex, backend::Shutdown,
+    FuncDef, Local, PlaceUsage, Projection, RawAddress, SwitchCaseIndex, SymVariable, Tag,
+    TernaryOp, TypeId, TypeSize, UnaryOp, ValueType, VariantIndex, backend::Shutdown,
 };
 
 pub(crate) trait RuntimeBackend: Shutdown {
@@ -223,6 +223,26 @@ pub(crate) trait AssignmentHandler: Sized {
     }
 
     fn unary_op_on(self, _operator: UnaryOp, _operand: Self::Operand) {
+        self.some()
+    }
+
+    fn ternary_op_between(
+        self,
+        _operator: TernaryOp,
+        _first: Self::Operand,
+        _second: Self::Operand,
+        _third: Self::Operand,
+    ) {
+        self.some()
+    }
+
+    fn carrying_mul_add(
+        self,
+        _multiplier: Self::Operand,
+        _multiplicand: Self::Operand,
+        _addend: Self::Operand,
+        _carry: Self::Operand,
+    ) {
         self.some()
     }
 

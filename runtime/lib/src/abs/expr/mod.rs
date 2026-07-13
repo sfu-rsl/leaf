@@ -25,6 +25,7 @@ aug_enum! {
         BitXor, BitAnd, BitOr,
         Shl, ShlUnchecked, Shr, ShrUnchecked,
         RotateL, RotateR,
+        CarrylessMul,
         Eq, Lt, Le, Ne, Ge, Gt, Cmp,
         +
         Offset(TypeSize),
@@ -97,11 +98,7 @@ super_enum! {
     }
 }
 
-#[repr(u8)]
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum TernaryOp {
-    IfThenElse = 1,
-}
+pub(crate) use super::TernaryOp;
 
 mod fmt {
     use core::fmt::{Display, Formatter, Result};
@@ -178,6 +175,7 @@ pub(crate) trait BinaryExprBuilder {
     bin_fn_signature!(and or xor);
     bin_fn_signature!(shl shl_unchecked shr shr_unchecked);
     bin_fn_signature!(rotate_left rotate_right);
+    bin_fn_signature!(carryless_mul);
     bin_fn_signature!(eq ne lt le gt ge cmp);
     bin_fn_signature!(offset + pointee_size: TypeSize);
 }
@@ -201,6 +199,7 @@ pub(crate) trait TernaryExprBuilder {
     tri_fn_signature!(ternary_op + op: TernaryOp);
 
     tri_fn_signature!(if_then_else);
+    tri_fn_signature!(funnel_shl funnel_shr);
 }
 
 pub(crate) trait CastExprBuilder {
