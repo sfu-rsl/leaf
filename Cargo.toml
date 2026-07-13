@@ -32,15 +32,15 @@ runtime_symex_li_no_implicit = { path = "runtime/flavors/symex_li_no_implicit" }
 runtime_noop = { path = "runtime/flavors/noop" }
 libafl_leaf = { path = "integration/libafl/lib" }
 
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.6.1", features = ["derive"] }
 config = "0.15.7"
 const_format = "0.2.34"
 delegate = "0.13.2"
-derive_more = { version = "1.0.0", features = ["full"] }
-itertools = "0.14.0"
+derive_more = { version = "2.1", features = ["full"] }
+itertools = "0.15.0"
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-tracing-tree = "0.4.0"
+tracing-tree = "0.4.1"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0" }
 rkyv = { version = "0.8" }
