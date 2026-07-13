@@ -357,6 +357,26 @@ pub(crate) trait RawMemoryHandler {
         conc_count: usize,
         ptr_type_id: TypeId,
     );
+
+    fn raw_eq(
+        self,
+        first_ref: Self::Operand,
+        conc_first_ptr: RawAddress,
+        second_ref: Self::Operand,
+        conc_second_ptr: RawAddress,
+        ptr_type_id: TypeId,
+    ) -> Self::Operand;
+
+    fn compare_bytes(
+        self,
+        first_ptr: Self::Operand,
+        conc_first_ptr: RawAddress,
+        second_ptr: Self::Operand,
+        conc_second_ptr: RawAddress,
+        count: Self::Operand,
+        conc_count: usize,
+        ptr_type_id: TypeId,
+    ) -> Self::Operand;
 }
 
 pub(crate) trait ConstraintHandler {

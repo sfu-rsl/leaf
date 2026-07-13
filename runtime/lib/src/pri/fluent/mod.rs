@@ -1225,7 +1225,18 @@ where
         second_ref: OperandRef,
         conc_second_ptr: RawAddress,
     ) {
-        todo!()
+        let first_ref = Self::take_back_operand(first_ref);
+        let second_ref = Self::take_back_operand(second_ref);
+        let result = Self::raw_memory(|h| {
+            h.raw_eq(
+                first_ref,
+                conc_first_ptr,
+                second_ref,
+                conc_second_ptr,
+                ptr_type_id,
+            )
+        });
+        Self::assign_to(id, dest, |h| h.use_of(result))
     }
 
     fn intrinsic_assign_compare_bytes(
@@ -1239,7 +1250,21 @@ where
         count: OperandRef,
         conc_count: usize,
     ) {
-        todo!()
+        let first_ptr = Self::take_back_operand(first_ptr);
+        let second_ptr = Self::take_back_operand(second_ptr);
+        let count = Self::take_back_operand(count);
+        let result = Self::raw_memory(|h| {
+            h.compare_bytes(
+                first_ptr,
+                conc_first_ptr,
+                second_ptr,
+                conc_second_ptr,
+                count,
+                conc_count,
+                ptr_type_id,
+            )
+        });
+        Self::assign_to(id, dest, |h| h.use_of(result))
     }
 
     fn intrinsic_atomic_load(

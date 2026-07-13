@@ -7,7 +7,7 @@ use crate::{
 
 use super::alias::backend;
 use backend::{
-    MdMemoryState, MdSanBackend, MdSanPlaceValue, MdSanValue,
+    MdMemoryState, MdSanBackend, MdSanPlaceInspector, MdSanPlaceValue, MdSanValue, PlaceInspector,
     assignment::{self, AssignmentServices},
     state::MemoryRegion,
 };
@@ -130,6 +130,42 @@ impl<'a> RawMemoryHandler for MdSanRawMemoryHandler<'a> {
 
         assign!(place_from_first!(PlaceUsage::Write), second_value);
         assign!(place_from_second!(PlaceUsage::Write), first_value);
+    }
+
+    fn raw_eq(
+        self,
+        _first_ref: Self::Operand,
+        _conc_first_ptr: RawAddress,
+        _second_ref: Self::Operand,
+        _conc_second_ptr: RawAddress,
+        _ptr_type_id: TypeId,
+    ) -> Self::Operand {
+        // No inspection required as we the references are already inspected when they are created.
+        MdSanValue::non_rel()
+    }
+
+    fn compare_bytes(
+        self,
+        _first_ptr: Self::Operand,
+        conc_first_ptr: RawAddress,
+        _second_ptr: Self::Operand,
+        conc_second_ptr: RawAddress,
+        _count: Self::Operand,
+        _conc_count: usize,
+        ptr_type_id: TypeId,
+    ) -> Self::Operand {
+        let inspector = MdSanPlaceInspector::new(self.services.vars_state);
+        for i in 0.._conc_count {
+            for ptr in [conc_first_ptr, conc_second_ptr] {
+                inspector.inspect_place_for_access(&self.place_from_ptr_inner(
+                    ptr.wrapping_byte_add(i),
+                    ptr_type_id,
+                    PlaceUsage::Copy,
+                ));
+            }
+        }
+
+        MdSanValue::non_rel()
     }
 }
 

@@ -303,7 +303,7 @@ pub(crate) mod noop {
     #[derive(Default)]
     pub(crate) struct NoOpRawMemoryHandler<P, O>(PhantomData<(P, O)>);
 
-    impl<P: Default, O> RawMemoryHandler for NoOpRawMemoryHandler<P, O> {
+    impl<P: Default, O: Default> RawMemoryHandler for NoOpRawMemoryHandler<P, O> {
         type Place = P;
         type Operand = O;
 
@@ -353,6 +353,30 @@ pub(crate) mod noop {
             _conc_count: usize,
             _ptr_type_id: TypeId,
         ) {
+            Default::default()
+        }
+
+        fn raw_eq(
+            self,
+            _first_ref: Self::Operand,
+            _conc_first_ptr: RawAddress,
+            _second_ref: Self::Operand,
+            _conc_second_ptr: RawAddress,
+            _ptr_type_id: TypeId,
+        ) -> Self::Operand {
+            Default::default()
+        }
+
+        fn compare_bytes(
+            self,
+            _first_ptr: Self::Operand,
+            _conc_first_ptr: RawAddress,
+            _second_ptr: Self::Operand,
+            _conc_second_ptr: RawAddress,
+            _count: Self::Operand,
+            _conc_count: usize,
+            _ptr_type_id: TypeId,
+        ) -> Self::Operand {
             Default::default()
         }
     }
