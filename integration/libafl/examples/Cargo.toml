@@ -1,9 +1,0 @@
-[workspace]
-resolver = "2"
-members = ["basic_pro_conc", "basic_pro_conc/fuzz"]
-
-[workspace.dependencies]
-libfuzzer-sys = { package = "libafl_libfuzzer", path = "../libfuzzer" }
-
-[workspace.lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(leafc)'] }
