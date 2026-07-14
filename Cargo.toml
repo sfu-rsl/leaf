@@ -1,22 +1,7 @@
 [workspace]
 resolver = "2"
-members = [
-    "common",
-    "compiler",
-    "runtime/lib",
-    "runtime/flavors/*",
-    "integration/libafl/lib",
-    "integration/libafl/libfuzzer",
-    "integration/libafl/fuzzers/pure_concolic",
-    "macros",
-    "orchestrator",
-]
-exclude = [
-    "runtime/shim",
-    "integration/libafl/fuzzers/*",
-    "samples/crates/",
-    "scripts",
-]
+members = ["common", "compiler", "runtime/lib", "runtime/flavors/*", "macros"]
+exclude = ["runtime/shim", "samples/crates/", "scripts", ".notes/*"]
 
 [workspace.package]
 license = "MIT OR Apache-2.0"
