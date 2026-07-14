@@ -53,9 +53,6 @@ static _TYPE_ID_OF_REFERENCER: fn() -> TypeId = type_id_of::<u32>;
 static _SIZE_OF_REFERENCER: fn() -> TypeSize = size_of::<u32>;
 
 #[used]
-static _SWITCH_INFO_REFERENCER: fn(BasicBlockIndex, OperandRef) -> SwitchInfo = switch_info;
-
-#[used]
 static _CONST_BINARY_OP_OF_REFERENCER: fn(u8) -> BinaryOp = const_binary_op_of;
 
 #[used]
@@ -87,16 +84,6 @@ pub const fn type_id_of<T: ?Sized + 'static>() -> TypeId {
 #[inline(always)]
 pub const fn size_of<T>() -> TypeSize {
     const { intrinsics::size_of::<T>() as TypeSize }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[cfg_attr(core_build, rustc_const_stable(feature = "rust1", since = "1.0.0"))]
-#[inline(always)]
-pub const fn switch_info(node_location: BasicBlockIndex, discriminant: OperandRef) -> SwitchInfo {
-    SwitchInfo {
-        node_location,
-        discriminant,
-    }
 }
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]

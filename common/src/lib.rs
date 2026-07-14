@@ -1,19 +1,14 @@
 #![feature(macro_metavar_expr)]
+#![allow(internal_features)]
 #![feature(core_intrinsics)]
-#![feature(ptr_metadata)]
-#![feature(const_type_id)]
-#![feature(cold_path)]
-#![feature(likely_unlikely)]
 #![cfg_attr(not(core_build), feature(register_tool))]
 #![cfg_attr(not(core_build), register_tool(leaf_attr))]
-#![cfg_attr(all(not(core_build), feature = "answers"), feature(path_add_extension))]
 #![cfg_attr(all(not(core_build), feature = "building"), feature(exit_status_error))]
+#![cfg_attr(any(feature = "serde"), feature(likely_unlikely))]
 #![no_std]
 
 #[cfg(feature = "std")]
 extern crate std;
-#[cfg(feature = "std")]
-use std::prelude::rust_2021::*;
 
 #[cfg(feature = "answers")]
 pub mod answers;

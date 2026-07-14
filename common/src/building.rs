@@ -1,4 +1,4 @@
-use std::prelude::rust_2021::*;
+use std::prelude::rust_2024::*;
 
 pub mod utils {
     use std::{
@@ -27,9 +27,9 @@ pub mod utils {
 
     pub fn recreate_dir(dir: &Path) {
         if dir.exists() {
-            fs::remove_dir_all(dir).unwrap_or_else(|_| panic!("Failed to remove {:?}", dir));
+            fs::remove_dir_all(dir).unwrap_or_else(|_| core::panic!("Failed to remove {:?}", dir));
         }
-        fs::create_dir_all(dir).unwrap_or_else(|_| panic!("Failed to create {:?}", dir));
+        fs::create_dir_all(dir).unwrap_or_else(|_| core::panic!("Failed to create {:?}", dir));
     }
 
     pub fn output_dir() -> PathBuf {

@@ -1,5 +1,5 @@
 use core::{error::Error, fmt::Display};
-use std::prelude::rust_2021::*;
+use std::prelude::rust_2024::*;
 
 use super::{log_debug, log_info, log_warn};
 

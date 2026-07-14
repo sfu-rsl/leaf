@@ -1,5 +1,5 @@
 use core::hash::Hash;
-use std::{collections::HashMap, fs::OpenOptions, prelude::rust_2021::*};
+use std::{collections::HashMap, fs::OpenOptions, prelude::rust_2024::*};
 
 use macros::cond_derive_serde_rkyv;
 
@@ -82,6 +82,7 @@ pub mod rw {
 
         use super::*;
 
+        #[cfg(info_db_fmt = "json")]
         type SerializedMap = PlainProgramDependenceMap;
 
         pub(super) const FILENAME: &str = "program_dep.json";

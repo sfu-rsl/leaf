@@ -131,25 +131,6 @@ enum_like_type! {
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct SwitchInfo {
-    pub node_location: BasicBlockIndex,
-    pub discriminant: OperandRef,
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-impl Default for SwitchInfo {
-    #[inline(always)]
-    fn default() -> Self {
-        SwitchInfo {
-            node_location: 0,
-            discriminant: 0,
-        }
-    }
-}
-
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-#[repr(C)]
-#[derive(Clone, Copy, Debug)]
 pub struct AssertionInfo {
     pub location: BasicBlockIndex,
     pub condition: OperandRef,

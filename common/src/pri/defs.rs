@@ -489,6 +489,7 @@ pub mod macros {
                 conc_second_ptr: RawAddress,
           ) }
           /* NOTE: The type id is unnecessary but included for the same reason as above. */
+          #[allow(unused_parens)]
           { fn intrinsic_assign_compare_bytes(
                 id: AssignmentId,
                 first_ptr: OperandRef,
@@ -939,7 +940,7 @@ pub mod macros {
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_assign_raw_eq(id: AssignmentId,first_ref: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,second_ref: OperandRef,conc_second_ptr: RawAddress,);
             }$modifier!{
-                fn intrinsic_assign_compare_bytes(id: AssignmentId,first_ptr: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,second_ptr: OperandRef,conc_second_ptr: RawAddress,count: OperandRef,conc_count: usize,);
+                #[allow(unused_parens)]fn intrinsic_assign_compare_bytes(id: AssignmentId,first_ptr: OperandRef,conc_first_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,second_ptr: OperandRef,conc_second_ptr: RawAddress,count: OperandRef,conc_count: usize,);
             }$modifier!{
                 #[allow(unused_parens)]fn intrinsic_atomic_load(ordering: ($atomic_ord_ty),id: AssignmentId,ptr: OperandRef,conc_ptr: RawAddress,ptr_type_id: ($type_id_ty),dest: PlaceRef,);
             }$modifier!{
