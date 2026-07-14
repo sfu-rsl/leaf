@@ -1,4 +1,4 @@
-use std::prelude::rust_2021::*;
+use std::prelude::rust_2024::*;
 
 use derive_more as dm;
 use serde::{Deserialize, Serialize};
@@ -99,7 +99,7 @@ impl<'ctx> AstNode<'ctx> {
                 .map(|ast| Self::Array(ArrayNode(ast, sort.clone()))),
         }
         .unwrap_or_else(|| {
-            panic!(
+            core::panic!(
                 "Sort of ${:?} is not compatible with the expected one.",
                 ast
             )
@@ -111,21 +111,21 @@ impl<'ctx> AstNode<'ctx> {
     pub fn as_bool(&self) -> &ast::Bool<'ctx> {
         match self {
             Self::Bool(ast) => ast,
-            _ => panic!("Expected the value to be a boolean expression."),
+            _ => core::panic!("Expected the value to be a boolean expression."),
         }
     }
 
     pub fn as_bit_vector(&self) -> &ast::BV<'ctx> {
         match self {
             Self::BitVector(BVNode(ast, _)) => ast,
-            _ => panic!("Expected the value to be a bit vector: {:?}", self),
+            _ => core::panic!("Expected the value to be a bit vector: {:?}", self),
         }
     }
 
     pub fn unwrap_as_bit_vector(self) -> ast::BV<'ctx> {
         match self {
             Self::BitVector(BVNode(ast, _)) => ast,
-            _ => panic!("Expected the value to be a bit vector: {:?}", self),
+            _ => core::panic!("Expected the value to be a bit vector: {:?}", self),
         }
     }
 }

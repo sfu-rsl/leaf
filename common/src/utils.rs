@@ -1,5 +1,5 @@
 #[cfg(feature = "std")]
-use std::prelude::rust_2021::*;
+use std::prelude::rust_2024::*;
 
 use super::types::TypeId;
 
@@ -73,6 +73,7 @@ pub fn try_join_path(
     if path.exists() { Some(path) } else { None }
 }
 
+#[cfg(any(feature = "type_info"))]
 macro_rules! array_backed_struct {
     (
         $(#[$($attr: meta)*])*
@@ -152,6 +153,7 @@ macro_rules! array_backed_struct {
         }
     };
 }
+#[cfg(any(feature = "type_info"))]
 pub(crate) use array_backed_struct;
 
 #[cfg(any(feature = "type_info_rw", feature = "directed"))]

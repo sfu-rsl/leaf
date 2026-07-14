@@ -16,6 +16,7 @@ nonoverlapping
 peekable
 Reborrowing
 repr
+rkyv
 rposition
 RUSTUP
 serde

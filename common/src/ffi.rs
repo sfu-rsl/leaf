@@ -156,17 +156,14 @@ mod std_convert_impls {
     impl<T> From<U128Pack<T>> for u128 {
         #[inline(always)]
         fn from(value: U128Pack<T>) -> Self {
-            unsafe { core::mem::transmute(value.0) }
+            u128::from_ne_bytes(value.0)
         }
     }
     #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
     impl<T> From<u128> for U128Pack<T> {
         #[inline(always)]
         fn from(value: u128) -> Self {
-            Self(
-                unsafe { core::mem::transmute(value) },
-                core::marker::PhantomData,
-            )
+            Self(u128::to_ne_bytes(value), core::marker::PhantomData)
         }
     }
     #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]

@@ -10,8 +10,10 @@ dynamization
 Dynamize
 Flippable
 funcs
+idom
 Instrumentor
 Internalizer
+konst
 LEAFC
 leafrt
 mdsan
@@ -24,12 +26,15 @@ proj
 projectable
 projs
 Referencer
+rkyving
 satisfiability
 serdes
 SESE
+smtlib
 streamable
 Symbolizable
 symex
 tyexp
 Uneval
 unsat
+unsync

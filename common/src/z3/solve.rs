@@ -4,7 +4,7 @@ use z3::{
     ast::{self, Ast},
 };
 
-use std::prelude::rust_2021::*;
+use std::prelude::rust_2024::*;
 use std::{collections::HashMap, hash::Hash};
 
 use super::super::{

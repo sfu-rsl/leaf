@@ -1,5 +1,5 @@
 use core::ops::RangeInclusive;
-use std::{collections::HashMap, fs::OpenOptions, prelude::rust_2021::*};
+use std::{collections::HashMap, fs::OpenOptions, prelude::rust_2024::*};
 
 use macros::cond_derive_serde_rkyv;
 
@@ -213,7 +213,7 @@ pub trait TypeDatabase<'t> {
 
     fn get_type(&self, key: &TypeId) -> &'t TypeInfo {
         self.opt_get_type(key)
-            .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
+            .unwrap_or_else(|| core::panic!("Type information was not found. TypeId: {}", key))
     }
 
     fn get_size(&self, key: &TypeId) -> Option<TypeSize> {
@@ -402,10 +402,9 @@ pub mod rw {
             }
 
             fn expect_type(&self, key: &TypeId) -> &ArchivedTypeInfo {
-                self.access()
-                    .all_types
-                    .get(&key.into())
-                    .unwrap_or_else(|| panic!("Type information was not found. TypeId: {}", key))
+                self.access().all_types.get(&key.into()).unwrap_or_else(|| {
+                    core::panic!("Type information was not found. TypeId: {}", key)
+                })
             }
         }
 

@@ -1,4 +1,4 @@
-use std::{path::PathBuf, prelude::rust_2021::*};
+use std::{path::PathBuf, prelude::rust_2024::*};
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

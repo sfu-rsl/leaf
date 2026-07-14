@@ -1,6 +1,6 @@
 use core::hash::Hash;
 use core::{iter, str::FromStr};
-use std::prelude::rust_2021::*;
+use std::prelude::rust_2024::*;
 use std::{collections::HashMap, ffi, format};
 
 use derive_more as dm;
@@ -78,7 +78,7 @@ impl<'ctx, I: ToString + FromStr> AstAndVars<'ctx, I> {
             .iter()
             .map(|(id, decl)| {
                 (
-                    I::from_str(id).unwrap_or_else(|_| panic!("Invalid id: {id}")),
+                    I::from_str(id).unwrap_or_else(|_| core::panic!("Invalid id: {id}")),
                     parse_var_decl(context, decl),
                 )
             })
@@ -102,7 +102,7 @@ impl SmtLibExpr {
             .decls
             .iter()
             .map(|(id, decl)| {
-                let id = I::from_str(id).unwrap_or_else(|_| panic!("Invalid id: {id}"));
+                let id = I::from_str(id).unwrap_or_else(|_| core::panic!("Invalid id: {id}"));
                 let decl = vars
                     .entry(id.clone())
                     .or_insert_with(|| parse_var_decl(context, decl))
