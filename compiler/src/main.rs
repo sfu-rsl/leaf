@@ -4,9 +4,6 @@
 #![deny(rustc::internal)]
 #![feature(iter_order_by)]
 #![feature(macro_metavar_expr)]
-#![feature(box_into_inner)]
-#![feature(core_intrinsics)]
-#![feature(option_into_flat_iter)]
 #![feature(exitcode_exit_method)]
 
 mod config;
@@ -582,20 +579,12 @@ mod driver_args {
     }
 
     pub(super) trait ArgsExt {
-        fn set_if_absent(&mut self, key: &str, get_value: impl FnOnce() -> String);
-
         fn add_pair(&mut self, key: &str, value: String);
 
         fn parse_crate_options(&self) -> CrateOptions;
     }
 
     impl<T: AsRef<Vec<String>> + AsMut<Vec<String>>> ArgsExt for T {
-        fn set_if_absent(&mut self, key: &str, get_value: impl FnOnce() -> String) {
-            if !self.as_mut().iter().any(|arg| arg.starts_with(key)) {
-                self.add_pair(key, get_value());
-            }
-        }
-
         fn add_pair(&mut self, key: &str, value: String) {
             self.as_mut().push(key.to_owned());
             self.as_mut().push(value);

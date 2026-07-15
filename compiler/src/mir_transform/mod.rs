@@ -3,14 +3,13 @@ mod instr;
 mod jump;
 mod misc;
 
-pub(crate) use jump::TAG_BB_JUMP;
-
 use rustc_middle::mir::{BasicBlock, BasicBlockData, HasLocalDecls, Local, LocalDecl};
 
 pub(crate) use self::instr::BodyInstrumentationUnit;
 use self::jump::JumpTargetAttribute;
-pub(crate) use self::misc::noop_blocks_with;
-pub(crate) use self::misc::split_blocks_with;
+pub(crate) use self::jump::TAG_BB_JUMP;
+pub(crate) use self::misc::{noop_blocks_with, split_blocks_with};
+
 pub(crate) const NEXT_BLOCK: BasicBlock = BasicBlock::MAX;
 
 #[derive(derive_more::From)]
@@ -45,20 +44,6 @@ pub(crate) enum JumpModificationConstraint {
 }
 
 pub(crate) trait JumpTargetModifier {
-    fn modify_jump_target(
-        &mut self,
-        terminator_location: BasicBlock,
-        from: BasicBlock,
-        to: BasicBlock,
-    ) {
-        self.modify_jump_target_where(
-            terminator_location,
-            from,
-            to,
-            JumpModificationConstraint::None,
-        )
-    }
-
     fn modify_jump_target_where(
         &mut self,
         terminator_location: BasicBlock,

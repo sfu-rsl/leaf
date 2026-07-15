@@ -81,7 +81,7 @@ pub(crate) trait OperandReferencer<'tcx> {
     fn reference_operand(&mut self, operand: &Operand<'tcx>) -> OperandRef;
 }
 
-pub(crate) trait Assigner<'tcx>: AssignmentInfoProvider<'tcx> {
+pub(super) trait Assigner<'tcx>: AssignmentInfoProvider {
     type Cast<'a>: CastAssigner<'tcx>
     where
         Self: 'a;
@@ -194,7 +194,7 @@ pub(crate) trait FunctionHandler<'tcx> {
 
     fn after_call_func(&mut self)
     where
-        Self: AssignmentInfoProvider<'tcx>;
+        Self: AssignmentInfoProvider;
 }
 
 pub(crate) trait DropHandler<'tcx> {
@@ -233,7 +233,7 @@ pub(crate) trait MemoryIntrinsicHandler<'tcx> {
     fn swap(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>);
 
     fn raw_eq(&mut self, second_ref: OperandRef, second_value: &Operand<'tcx>);
-    
+
     fn compare_bytes(
         &mut self,
         second_ref: OperandRef,
@@ -320,5 +320,4 @@ pub(crate) struct Config {
 
 mod implementation;
 
-pub(super) use implementation::RuntimeCallAdder;
-pub(super) use implementation::ctxt_reqs as ctxtreqs;
+pub(super) use implementation::{RuntimeCallAdder, ctxt_reqs};

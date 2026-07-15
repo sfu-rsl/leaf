@@ -194,7 +194,9 @@ pub(crate) mod sym {
     pub(crate) use mains::*;
 
     pub(super) mod helpers {
-        use super::*;
+        use const_format::concatcp;
+
+        use super::{LS, compiler_helpers};
 
         macro_rules! make_pass_compiler_helpers_to_macro {
             (funcs: [$($fname:ident),+,], others: [$($o_name:ident),+,]) => {
@@ -262,8 +264,6 @@ pub(crate) mod sym {
 
                 PLACE_REF_TYPE_HOLDER,
                 OPERAND_REF_TYPE_HOLDER,
-                BINARY_OP_TYPE_HOLDER,
-                UNARY_OP_TYPE_HOLDER,
             ]
         }
 
@@ -285,7 +285,7 @@ pub(crate) mod sym {
 
         pass_compiler_helpers_to!(symbols_in_compiler_helpers);
 
-        pub(crate) const ALL_HELPERS: [LS; 36] = pass_compiler_helpers_to!(bracket);
+        pub(crate) const ALL_HELPERS: [LS; 34] = pass_compiler_helpers_to!(bracket);
     }
     pub(super) use helpers::pass_compiler_helpers_to;
 
@@ -324,8 +324,6 @@ impl TypeHolder {
 pub(super) struct PriTypes {
     place_ref: TypeHolder,
     operand_ref: TypeHolder,
-    binary_op: TypeHolder,
-    unary_op: TypeHolder,
 }
 
 impl PriTypes {
@@ -534,8 +532,6 @@ pub(super) fn collect_helper_types<'tcx>(helper_def_ids: &HashMap<LeafSymbol, De
     PriTypes {
         place_ref: get_type_holder(sym::helpers::PLACE_REF_TYPE_HOLDER),
         operand_ref: get_type_holder(sym::helpers::OPERAND_REF_TYPE_HOLDER),
-        binary_op: get_type_holder(sym::helpers::BINARY_OP_TYPE_HOLDER),
-        unary_op: get_type_holder(sym::helpers::UNARY_OP_TYPE_HOLDER),
     }
 }
 

@@ -1,4 +1,5 @@
 // Source: https://github.com/cognitive-engineering-lab/rustc_plugin/blob/main/crates/rustc_utils/src/mir/control_dependencies.rs
+#![allow(unused)]
 
 //! An algorithm to compute control-dependencies between MIR blocks.
 //!

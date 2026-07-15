@@ -1,4 +1,3 @@
-use ignore::WalkBuilder;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -23,10 +22,7 @@ const RUST_FLAGS: [&str; 2] = ["-Awarnings", "-Coverflow-checks=off"];
 
 const PATH_LEAFC: &str = env!("CARGO_BIN_EXE_leafc");
 
-const DIR_SAMPLES_ROOT: &str = "samples";
 const FILENAME_TYPES: &str = common::type_info::rw::FILENAME_DB;
-const FILENAME_EXECUTION_IGNORE: &str = ".test_execution_rs.ignore";
-const FILENAME_COMPILE_IGNORE: &str = ".test_compile_rs.ignore";
 
 #[gen_tests_rs("folder=samples,ignore_files=[.test_compile_rs.ignore]")]
 fn test_compile_rs(fic: &str) {

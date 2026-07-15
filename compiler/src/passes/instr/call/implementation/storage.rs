@@ -1,8 +1,6 @@
 use core::debug_assert_matches;
 
-use crate::passes::instr::ctxtreqs::ForStorageMarking;
-
-use super::{InsertionLocation, StorageMarker, prelude::*};
+use super::{InsertionLocation, StorageMarker, ctxt_reqs::ForStorageMarking, prelude::*};
 
 impl<'tcx, C> StorageMarker for RuntimeCallAdder<C>
 where

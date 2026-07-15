@@ -1,10 +1,10 @@
 use core::{any::Any, ops::Deref};
 
-use paste::paste;
-use rustc_hir::def_id::{self, DefId};
-use rustc_middle::ty::TyCtxt;
-
 use delegate::delegate;
+use paste::paste;
+
+use rustc_hir::def_id::DefId;
+use rustc_middle::ty::TyCtxt;
 
 use crate::{
     config::rules::{InclusionRules, LogicFormula},

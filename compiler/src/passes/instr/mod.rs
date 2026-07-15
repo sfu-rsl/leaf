@@ -34,10 +34,7 @@ use common::{
 
 use crate::{
     mir_transform::{self, BodyInstrumentationUnit, JumpTargetModifier},
-    passes::{
-        StorageExt,
-        instr::call::{Config, context::ConfigProvider},
-    },
+    passes::StorageExt,
     utils::mir::{BodyExt, TyCtxtExt},
     visit::*,
 };
@@ -47,15 +44,16 @@ use super::{CompilationPass, OverrideFlags, Storage};
 use self::{
     call::{
         AssertionHandler, Assigner, AtomicIntrinsicHandler, BranchingHandler, BranchingReferencer,
-        CastAssigner, DropHandler, EntryFunctionHandler, FunctionHandler,
+        CastAssigner, Config, DropHandler, EntryFunctionHandler, FunctionHandler,
         InsertionLocation::*,
         IntrinsicHandler, MemoryIntrinsicHandler, OperandRef, OperandReferencer, PlaceRef,
         PlaceReferencer, RuntimeCallAdder, StorageMarker,
+        context::ConfigProvider,
         context::{
             AtLocationContext, BlockIndexProvider, BlockOriginalIndexProvider, BodyProvider,
             PointerPackage, PriItems, PriItemsProvider, SourceInfoProvider, TyContextProvider,
         },
-        ctxtreqs,
+        ctxt_reqs as cr,
     },
     decision::AtomicIntrinsicKind,
     pri_utils::sym::intrinsics::LeafIntrinsicSymbol,
@@ -398,7 +396,7 @@ fn requires_immediate_instr_after(stmt: &Statement) -> bool {
 
 fn handle_body_pre_blocks<'tcx, C>(call_adder: &mut RuntimeCallAdder<C>)
 where
-    C: ctxtreqs::ForFunctionCalling<'tcx> + ctxtreqs::ForStorageMarking<'tcx>,
+    C: cr::ForFunctionCalling<'tcx> + cr::ForStorageMarking<'tcx>,
 {
     call_adder.enter_func();
 
@@ -415,7 +413,7 @@ where
 
 fn handle_entry_function_pre<'tcx, C>(call_adder: &mut RuntimeCallAdder<C>, body: &Body<'tcx>)
 where
-    C: ctxtreqs::Basic<'tcx>,
+    C: cr::Basic<'tcx>,
 {
     let mut call_adder = call_adder.in_entry_fn();
     let first_block = body.basic_blocks.indices().next().unwrap();
@@ -426,7 +424,7 @@ where
 
 fn handle_entry_function_post<'tcx, C>(call_adder: &mut RuntimeCallAdder<C>, body: &Body<'tcx>)
 where
-    C: ctxtreqs::Basic<'tcx>,
+    C: cr::Basic<'tcx>,
 {
     let mut call_adder = call_adder.in_entry_fn();
     body.basic_blocks
@@ -447,7 +445,7 @@ impl VisitorFactory {
         call_adder: &'c mut RuntimeCallAdder<C>,
     ) -> impl Visitor<'tcx> + 'c
     where
-        C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
+        C: cr::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
         let assignment_ids =
             assignment_id::assignment_ids_split_agnostic(call_adder.tcx(), call_adder.body())
@@ -465,7 +463,7 @@ impl VisitorFactory {
         assignment_ids: Rc<AssignmentIdMap>,
     ) -> impl Visitor<'tcx> + 'c
     where
-        C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
+        C: cr::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
     {
         LeafBasicBlockVisitor {
             call_adder: call_adder.at(Before(block)),
@@ -478,7 +476,7 @@ impl VisitorFactory {
         assignment_id: Option<AssignmentId>,
     ) -> impl StatementKindVisitor<'tcx, ()> + 'b
     where
-        C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx>,
+        C: cr::ForPlaceRef<'tcx> + cr::ForOperandRef<'tcx>,
     {
         LeafStatementKindVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
@@ -491,10 +489,10 @@ impl VisitorFactory {
         assignment_id: Option<AssignmentId>,
     ) -> impl TerminatorKindVisitor<'tcx, ()> + 'b
     where
-        C: ctxtreqs::ForPlaceRef<'tcx>
-            + ctxtreqs::ForOperandRef<'tcx>
-            + ctxtreqs::ForBranching<'tcx>
-            + ctxtreqs::ForReturning<'tcx>,
+        C: cr::ForPlaceRef<'tcx>
+            + cr::ForOperandRef<'tcx>
+            + cr::ForBranching<'tcx>
+            + cr::ForReturning<'tcx>,
     {
         LeafTerminatorKindVisitor {
             call_adder: RuntimeCallAdder::borrow_from(call_adder),
@@ -508,7 +506,7 @@ impl VisitorFactory {
         destination: &Place<'tcx>,
     ) -> impl RvalueVisitor<'tcx, ()> + 'b
     where
-        C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx>,
+        C: cr::ForPlaceRef<'tcx> + cr::ForOperandRef<'tcx>,
         'tcx: 'b,
     {
         LeafAssignmentFilteredVisitor {
@@ -536,7 +534,7 @@ make_general_visitor!(LeafBodyVisitor {
 
 impl<'tcx, C> Visitor<'tcx> for LeafBodyVisitor<C>
 where
-    C: ctxtreqs::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
+    C: cr::Basic<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier,
 {
     fn visit_basic_block_data(&mut self, block: BasicBlock, data: &BasicBlockData<'tcx>) {
         if data.is_cleanup {
@@ -560,7 +558,7 @@ make_general_visitor!(LeafBasicBlockVisitor {
 
 impl<'tcx, C> Visitor<'tcx> for LeafBasicBlockVisitor<C>
 where
-    C: ctxtreqs::Basic<'tcx> + BlockIndexProvider + BlockOriginalIndexProvider + JumpTargetModifier,
+    C: cr::Basic<'tcx> + BlockIndexProvider + BlockOriginalIndexProvider + JumpTargetModifier,
 {
     fn visit_statement(
         &mut self,
@@ -601,7 +599,7 @@ make_general_visitor!(LeafStatementKindVisitor {
 
 impl<'tcx, C> StatementKindVisitor<'tcx, ()> for LeafStatementKindVisitor<C>
 where
-    C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx>,
+    C: cr::ForPlaceRef<'tcx> + cr::ForOperandRef<'tcx>,
 {
     fn visit_assign(&mut self, place: &Place<'tcx>, rvalue: &Rvalue<'tcx>) {
         VisitorFactory::make_assignment_visitor(
@@ -615,11 +613,7 @@ where
     fn visit_set_discriminant(&mut self, place: &Place<'tcx>, variant_index: &VariantIdx) {
         let destination = self.call_adder.reference_place(place);
         self.call_adder
-            .assign(
-                self.assignment_id.unwrap(),
-                destination,
-                place.ty(&self.call_adder, self.call_adder.tcx()).ty,
-            )
+            .assign(self.assignment_id.unwrap(), destination)
             .its_discriminant_to(variant_index)
     }
 
@@ -669,18 +663,18 @@ where
     }
 }
 
-make_general_visitor!(pub(crate) LeafTerminatorKindVisitor {
+make_general_visitor!(LeafTerminatorKindVisitor {
     assignment_id: Option<AssignmentId>,
 });
 
 impl<'tcx, C> TerminatorKindVisitor<'tcx, ()> for LeafTerminatorKindVisitor<C>
 where
-    C: ctxtreqs::ForOperandRef<'tcx>
-        + ctxtreqs::ForPlaceRef<'tcx>
-        + ctxtreqs::ForBranching<'tcx>
-        + ctxtreqs::ForReturning<'tcx>
-        + ctxtreqs::ForFunctionCalling<'tcx>
-        + ctxtreqs::ForDropping<'tcx>,
+    C: cr::ForOperandRef<'tcx>
+        + cr::ForPlaceRef<'tcx>
+        + cr::ForBranching<'tcx>
+        + cr::ForReturning<'tcx>
+        + cr::ForFunctionCalling<'tcx>
+        + cr::ForDropping<'tcx>,
 {
     fn visit_switch_int(&mut self, discr: &Operand<'tcx>, targets: &mir::SwitchTargets) {
         if !self.call_adder.config().switch_filter.control
@@ -844,9 +838,7 @@ struct CallParams<'a, 'tcx> {
 
 impl<'tcx, C> LeafTerminatorKindVisitor<C>
 where
-    C: ctxtreqs::ForOperandRef<'tcx>
-        + ctxtreqs::ForPlaceRef<'tcx>
-        + ctxtreqs::ForFunctionCalling<'tcx>,
+    C: cr::ForOperandRef<'tcx> + cr::ForPlaceRef<'tcx> + cr::ForFunctionCalling<'tcx>,
 {
     fn instrument_intrinsic_call(
         &mut self,
@@ -958,10 +950,8 @@ where
             Some(include_info) => {
                 let mut call_adder = self.call_adder.before();
                 let dest_ref = call_adder.reference_place(params.destination);
-                let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
                 let args = Self::ref_args(&mut call_adder, params.args);
-                let mut call_adder =
-                    call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
+                let mut call_adder = call_adder.assign(self.assignment_id.unwrap(), dest_ref);
 
                 if include_info {
                     call_adder.intrinsic_one_to_one_by(def_id, func_name, args.into_iter());
@@ -1033,9 +1023,8 @@ where
                     }
                     Load | Store | Exchange | CompareExchange { .. } | BinOp(..) => {
                         let dest_ref = call_adder.reference_place(params.destination);
-                        let dest_ty = params.destination.ty(&call_adder, call_adder.tcx()).ty;
                         let mut call_adder =
-                            call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
+                            call_adder.assign(self.assignment_id.unwrap(), dest_ref);
 
                         if include_info {
                             let ptr_arg = params.args.get(0).unwrap();
@@ -1140,8 +1129,7 @@ where
         if target.is_some() {
             let mut call_adder = call_adder.after();
             let dest_ref = call_adder.reference_place(destination);
-            let dest_ty = destination.ty(&call_adder, call_adder.tcx()).ty;
-            let mut call_adder = call_adder.assign(self.assignment_id.unwrap(), dest_ref, dest_ty);
+            let mut call_adder = call_adder.assign(self.assignment_id.unwrap(), dest_ref);
             call_adder.after_call_func();
         } else {
             // This branch is only triggered by hitting a divergent function:
@@ -1168,7 +1156,7 @@ struct LeafAssignmentFilteredVisitor<'tcx, C> {
 
 impl<'tcx, C> RvalueVisitor<'tcx, ()> for LeafAssignmentFilteredVisitor<'tcx, C>
 where
-    C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx>,
+    C: cr::ForPlaceRef<'tcx> + cr::ForOperandRef<'tcx>,
 {
     fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>) {
         log_debug!(target: TAG_INSTR, "Visiting Rvalue: {:#?}", rvalue);
@@ -1192,10 +1180,7 @@ where
         match filter {
             Some(include_info) => {
                 let dest_ref = self.call_adder.reference_place(&self.place);
-                let dest_ty = self.place.ty(&self.call_adder, self.call_adder.tcx()).ty;
-                let mut call_adder = self
-                    .call_adder
-                    .assign(self.assignment_id, dest_ref, dest_ty);
+                let mut call_adder = self.call_adder.assign(self.assignment_id, dest_ref);
                 if include_info {
                     LeafAssignmentVisitor { call_adder }.super_rvalue(rvalue)
                 } else {
@@ -1213,7 +1198,7 @@ make_general_visitor!(LeafAssignmentVisitor);
 
 impl<'tcx, C> RvalueVisitor<'tcx, ()> for LeafAssignmentVisitor<C>
 where
-    C: ctxtreqs::ForPlaceRef<'tcx> + ctxtreqs::ForOperandRef<'tcx> + ctxtreqs::ForAssignment<'tcx>,
+    C: cr::ForPlaceRef<'tcx> + cr::ForOperandRef<'tcx> + cr::ForAssignment<'tcx>,
 {
     fn visit_rvalue(&mut self, rvalue: &Rvalue<'tcx>) {
         self.super_rvalue(rvalue)
@@ -1388,14 +1373,14 @@ where
 
 impl<'tcx, C> LeafAssignmentVisitor<C>
 where
-    C: ctxtreqs::ForAssignment<'tcx>,
+    C: cr::ForAssignment<'tcx>,
 {
     fn instrument_ref(
         call_adder: &mut RuntimeCallAdder<C>,
         borrow_kind: &BorrowKind,
         place: &Place<'tcx>,
     ) where
-        C: ctxtreqs::ForPlaceRef<'tcx>,
+        C: cr::ForPlaceRef<'tcx>,
     {
         let place_ref = call_adder.reference_place(place);
         call_adder.by_ref(place_ref, matches!(borrow_kind, BorrowKind::Mut { .. }))
@@ -1406,7 +1391,7 @@ where
         op: &mir::BinOp,
         operands: &(Operand<'tcx>, Operand<'tcx>),
     ) where
-        C: ctxtreqs::ForOperandRef<'tcx>,
+        C: cr::ForOperandRef<'tcx>,
     {
         let first_ref = self.call_adder.reference_operand(&operands.0);
         let second_ref = self.call_adder.reference_operand(&operands.1);
@@ -1414,7 +1399,7 @@ where
     }
 }
 
-impl<'tcx, C: ctxtreqs::ForOperandRef<'tcx>> RuntimeCallAdder<C> {
+impl<'tcx, C: cr::ForOperandRef<'tcx>> RuntimeCallAdder<C> {
     fn reference_operand_spanned(&mut self, operand: &Spanned<Operand<'tcx>>) -> OperandRef {
         let source_scope = self.source_info().scope;
         let mut call_adder = self.before();
@@ -1447,21 +1432,19 @@ fn instrument_memory_intrinsic_call<'tcx, 'a, C>(
     kind: decision::MemoryIntrinsicKind,
     is_volatile: bool,
 ) where
-    C: ctxtreqs::ForOperandRef<'tcx> + ctxtreqs::ForPlaceRef<'tcx>,
+    C: cr::ForOperandRef<'tcx> + cr::ForPlaceRef<'tcx>,
 {
     use decision::MemoryIntrinsicKind::*;
 
     let filter = (&call_adder.config().assignment_filter).intrinsic_memory_op;
     match filter {
         Some(include_info) => {
-            let tcx = call_adder.tcx();
             let mut call_adder = call_adder.before();
 
             // FIXME: Destination is only used for some operations. But assignment_id is used for all.
             // These dummy values can be avoided by breaking the context into smaller ones.
             let dest_ref = destination.map_or(PlaceRef::INVALID, |d| call_adder.reference_place(d));
-            let dest_ty = destination.map_or(tcx.types.unit, |d| d.ty(&call_adder, tcx).ty);
-            let mut call_adder = call_adder.assign(assignment_id, dest_ref, dest_ty);
+            let mut call_adder = call_adder.assign(assignment_id, dest_ref);
 
             if !include_info {
                 if destination.is_none() {

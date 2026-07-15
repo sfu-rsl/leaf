@@ -12,7 +12,6 @@ use crate::mir_transform::*;
 use crate::passes::Storage;
 use crate::utils::mir::TyCtxtExt;
 
-use self::ctxtreqs::*;
 use super::{
     context::*,
     pri_utils::{
@@ -27,11 +26,14 @@ use utils::*;
 mod assertion;
 mod assign;
 mod branch;
+pub(crate) mod ctxt_reqs;
 mod func;
 mod intrinsics;
 mod operand;
 mod place;
 mod storage;
+
+use ctxt_reqs::{ForEntryFunction, ForInsertion};
 
 pub(crate) struct RuntimeCallAdder<C> {
     context: C,
@@ -189,14 +191,8 @@ impl<C> RuntimeCallAdder<C> {
         &'b mut self,
         id: AssignmentId,
         dest_ref: PlaceRef,
-        dest_ty: Ty<'tcx>,
-    ) -> RuntimeCallAdder<AssignmentContext<'b, 'tcx, C>> {
-        self.with_context(|base| AssignmentContext {
-            base,
-            id,
-            dest_ref,
-            dest_ty,
-        })
+    ) -> RuntimeCallAdder<AssignmentContext<'b, C>> {
+        self.with_context(|base| AssignmentContext { base, id, dest_ref })
     }
 
     pub fn branch<'tcx, 'b>(
@@ -328,15 +324,14 @@ where
         }
     }
 }
-impl<'tcx, C> AssignmentInfoProvider<'tcx> for RuntimeCallAdder<C>
+impl<'tcx, C> AssignmentInfoProvider for RuntimeCallAdder<C>
 where
-    C: AssignmentInfoProvider<'tcx>,
+    C: AssignmentInfoProvider,
 {
     delegate! {
         to self.context {
             fn assignment_id(&self) -> AssignmentId;
             fn dest_ref(&self) -> PlaceRef;
-            fn dest_ty(&self) -> Ty<'tcx>;
         }
     }
 }
@@ -856,16 +851,6 @@ pub(super) mod utils {
                 attributes: Default::default(),
             }
         }
-
-        pub fn goto<'tcx>(target: Option<BasicBlock>) -> Terminator<'tcx> {
-            Terminator {
-                source_info: SourceInfo::outermost(DUMMY_SP),
-                kind: TerminatorKind::Goto {
-                    target: target.unwrap_or(NEXT_BLOCK),
-                },
-                attributes: Default::default(),
-            }
-        }
     }
 
     pub(super) fn prepare_operand_for_slice<'tcx>(
@@ -1043,8 +1028,6 @@ pub(super) mod utils {
         }
     }
 }
-
-pub(crate) mod ctxt_reqs;
 
 mod prelude {
     pub(super) use super::{
