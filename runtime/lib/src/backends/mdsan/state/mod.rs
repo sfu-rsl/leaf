@@ -67,7 +67,7 @@ pub(crate) struct MemoryRegion {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct WritablePlace {
+struct WritablePlace {
     addr: RawAddress,
     type_id: DirectOrPointerTypeId,
 }
@@ -122,7 +122,7 @@ pub(crate) enum PlaceValue {
 }
 
 impl PlaceValue {
-    pub(crate) fn is_md(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> Option<bool> {
+    pub(super) fn is_md(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> Option<bool> {
         match self {
             PlaceValue::AccessedMdWrapped { .. } => Some(false),
             PlaceValue::LifetimeMarkedMd { .. } => Some(true),
@@ -133,7 +133,7 @@ impl PlaceValue {
         }
     }
 
-    pub(crate) fn type_id(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> Option<TypeId> {
+    pub(super) fn type_id(&self, type_manager: &(impl TypeDatabase + ?Sized)) -> Option<TypeId> {
         match self {
             PlaceValue::AccessedMdWrapped { .. } => None,
             PlaceValue::LifetimeMarkedMd { .. } => None,

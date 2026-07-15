@@ -1,3 +1,6 @@
+#![deprecated(since = "0.1.0")]
+#![allow(unused)]
+
 #[derive(Debug, Clone)]
 pub(crate) enum ProjectionOn<H, FA, HI, DC> {
     Deref(H),

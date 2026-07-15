@@ -1,4 +1,4 @@
-use common::{log_debug, log_info};
+use common::log_info;
 
 use crate::{abs::ConstraintKind, utils::alias::RRef};
 

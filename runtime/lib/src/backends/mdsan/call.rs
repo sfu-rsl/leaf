@@ -50,7 +50,6 @@ impl<'a> MdSanCallHandler<'a> {
 impl<'a> CallHandler for MdSanCallHandler<'a> {
     type Place = MdSanPlaceValue;
     type Operand = MdSanValue;
-    type MetadataHandler = ();
 
     fn before_call(self, def: CalleeDef, _call_site: BasicBlockIndex) {
         self.flow_manager.prepare_for_calling(def);
@@ -119,10 +118,6 @@ impl<'a> CallHandler for MdSanCallHandler<'a> {
         let return_val = self.flow_manager.give_return_value(token);
 
         CallShadowMemory::set_place(self.variables_state, &result_dest, return_val);
-    }
-
-    fn metadata(self) -> Self::MetadataHandler {
-        Default::default()
     }
 }
 

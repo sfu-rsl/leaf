@@ -11,7 +11,7 @@ use super::Solver;
 pub(crate) struct MappedSolver<F, MTo, S: Solver> {
     inner: S,
     f: F,
-    _phantom: core::marker::PhantomData<(MTo)>,
+    _phantom: core::marker::PhantomData<(MTo,)>,
 }
 
 impl<F, MTo, S: Solver> Solver for MappedSolver<F, MTo, S>

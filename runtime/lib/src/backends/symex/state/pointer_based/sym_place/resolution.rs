@@ -25,8 +25,6 @@
 
 use derive_more::From;
 
-use common::log_debug;
-
 use crate::abs::expr::sym_place::SymbolicReadResolver;
 
 use super::*;
@@ -296,10 +294,6 @@ mod implementation {
                 result.push(DeterPlaceValueRef::new(place.to_value_ref()).into());
             }
             result
-        }
-
-        pub(super) fn expand_symbolic(&self, value: &SymValue) -> SymbolicPlaceResult {
-            todo!()
         }
     }
 

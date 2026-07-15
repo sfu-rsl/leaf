@@ -48,8 +48,6 @@ impl CallHandler for CftCallHandler<'_> {
     type Place = NullPlace;
     type Operand = NullOperand;
 
-    type MetadataHandler = ();
-
     fn before_call(self, def: CalleeDef, call_site: BasicBlockIndex) {
         self.flow_manager.prepare_for_calling(def);
         self.recorder
@@ -96,10 +94,6 @@ impl CallHandler for CftCallHandler<'_> {
         let token = self.flow_manager.finalize_call();
         self.recorder
             .finish_return(token.sanity().is_broken().unwrap());
-    }
-
-    fn metadata(self) -> Self::MetadataHandler {
-        Default::default()
     }
 }
 

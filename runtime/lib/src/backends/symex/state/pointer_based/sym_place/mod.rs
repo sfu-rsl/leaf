@@ -228,9 +228,8 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 from_end: true,
             } => self
                 .opt_sym_index_val_from_end(host.as_ref(), *offset)
-                .map(|index_val| {
-                    let index_place = todo!("#480: Index metadata is required for concretization");
-                    index_val
+                .map(|_| {
+                    let _index_place = todo!("#480: Index metadata is required for concretization");
                 }),
             _ => unreachable!("Expecting only index projections. Got: {:?}", index_proj),
         };
@@ -285,9 +284,8 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 host,
                 offset
             );
-            let len = self.retrieve_len_value(sym_host);
-            let index: SymValueRef = todo!("#485");
-            return Some(index);
+            let _len = self.retrieve_len_value(sym_host);
+            let _index: SymValueRef = todo!("#485");
         }
 
         None

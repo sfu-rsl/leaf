@@ -21,14 +21,12 @@ use std::{cell::RefCell, rc::Rc};
 
 use common::{
     log_info,
-    pri::{AssignmentId, BasicBlockIndex, FieldIndex},
+    pri::{AssignmentId, BasicBlockIndex},
     types::InstanceKindId,
 };
 
 use crate::{
-    abs::{
-        PlaceUsage, PointerOffset, SymVariable, Tag, TypeId, TypeSize, VariantIndex, backend::*,
-    },
+    abs::{PlaceUsage, SymVariable, Tag, TypeId, TypeSize, backend::*},
     pri::fluent::backend::*,
     utils::{HasIndex, RefView, alias::RRef},
 };

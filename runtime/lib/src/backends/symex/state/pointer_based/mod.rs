@@ -19,7 +19,7 @@ use backend::{
     implication::{
         Antecedents, Implied, Precondition, PreconditionConstraints, PreconditionConstruct,
     },
-    place::{LocalWithMetadata, PlaceWithMetadata, Projection},
+    place::{PlaceWithMetadata, Projection},
     state::{SymPlaceSymEntity, sym_place::strategies::DerefBypassSymPlaceHandler},
 };
 
@@ -27,7 +27,6 @@ mod memory;
 pub(super) mod sym_place;
 use memory::*;
 
-type Local = LocalWithMetadata;
 type Place = PlaceWithMetadata;
 
 type SymPlaceHandlerObject = RRef<SymExSymPlaceHandler>;
