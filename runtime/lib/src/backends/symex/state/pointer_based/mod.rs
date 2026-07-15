@@ -173,11 +173,6 @@ impl<EB: SymValueRefExprBuilder> GenericVariablesState for RawPointerVariableSta
     type PlaceValue = PlaceValueRef;
     type Value = Implied<ValueRef>;
 
-    fn id(&self) -> usize {
-        // FIXME
-        0
-    }
-
     #[tracing::instrument(level = "debug", skip(self))]
     fn ref_place(&self, place: &Place, usage: PlaceUsage) -> PlaceValueRef {
         self.get_place(place, usage)

@@ -274,12 +274,6 @@ pub(crate) enum PlaceUsage {
     Mark,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) enum PlaceAsOperandUsage {
-    Copy,
-    Move,
-}
-
 mod conversions {
     use super::*;
 

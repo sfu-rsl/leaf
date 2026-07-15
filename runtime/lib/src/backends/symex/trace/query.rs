@@ -44,8 +44,6 @@ pub(crate) fn default_trace_querier(
 
 /// The set of properties used for querying.
 trait ExeRecord {
-    fn is_call(&self, callee: InstanceKindId) -> bool;
-
     fn is_in(&self, body_id: InstanceKindId) -> bool;
 
     fn depth(&self) -> usize;
@@ -198,13 +196,6 @@ mod helpers {
     }
 
     impl ExeRecord for SymExExeTraceRecord {
-        fn is_call(&self, callee: InstanceKindId) -> bool {
-            match self.borrow() {
-                ExeTraceRecord::Call { to, .. } if to.eq(&callee) => true,
-                _ => false,
-            }
-        }
-
         fn is_in(&self, body_id: InstanceKindId) -> bool {
             match self.borrow() {
                 ExeTraceRecord::Call { to, .. } => to,

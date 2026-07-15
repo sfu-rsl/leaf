@@ -404,14 +404,17 @@ impl<'a, EB> SymExRawMemoryHandler<'a, EB> {
 trait AtOffsetsIterator: ExactSizeIterator + DoubleEndedIterator {}
 impl<T: ExactSizeIterator + DoubleEndedIterator> AtOffsetsIterator for T {}
 
-impl<'a, EB: SymExValueExprBuilder + 'static> SymExRawMemoryHandler<'a, EB> {
+impl<EB> SymExRawMemoryHandler<'_, EB> {
     fn ptr_at_offsets(
         &self,
         ptr: &SymExValue,
         conc_ptr: RawAddress,
         count: Implied<usize>,
         size: TypeSize,
-    ) -> impl AtOffsetsIterator<Item = (SymExValue, RawAddress)> {
+    ) -> impl AtOffsetsIterator<Item = (SymExValue, RawAddress)>
+    where
+        EB: SymExValueExprBuilder + 'static,
+    {
         let precondition = Precondition::merge([ptr.by.clone(), count.by.clone()]);
 
         let values: Box<dyn AtOffsetsIterator<Item = ValueRef>> = match ptr.as_ref() {

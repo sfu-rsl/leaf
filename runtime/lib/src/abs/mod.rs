@@ -1,3 +1,5 @@
+use core::{num::NonZeroU64, panic, ptr::NonNull};
+
 use derive_more as dm;
 
 pub(crate) mod backend;
@@ -6,13 +8,10 @@ pub(crate) mod place;
 mod serdes;
 pub(crate) mod utils;
 
-pub(crate) use common::pri::Tag;
-pub(crate) use common::types::trace::*;
-pub(crate) use common::types::*;
-
-use core::num::NonZeroU64;
-use core::panic;
-use core::ptr::NonNull;
+pub(crate) use common::{
+    pri::Tag,
+    types::{trace::*, *},
+};
 
 #[derive(Clone, Copy, Debug)]
 #[repr(u8)]
@@ -103,18 +102,10 @@ pub enum AtomicBinaryOp {
     Max = common::pri::AtomicBinaryOp::MAX.to_raw(),
 }
 
-pub(crate) use place::{
-    Local, LocalWithMetadata, PlaceAsOperandUsage, PlaceUsage, PlaceWithMetadata,
-};
+pub(crate) use place::{Local, LocalWithMetadata, PlaceUsage, PlaceWithMetadata};
+
 pub(crate) type Place<L = Local, P = Projection<L>> = place::Place<L, P>;
 pub(crate) type Projection<L> = place::Projection<L>;
-
-#[derive(Debug)]
-pub(crate) enum Operand<P, C, S> {
-    Place(P, PlaceAsOperandUsage),
-    Const(C),
-    Symbolic(S),
-}
 
 #[derive(Debug, dm::From)]
 pub(crate) enum Constant {
@@ -136,32 +127,23 @@ pub(crate) enum Constant {
     Some,
 }
 
-impl<P, C, S> From<Constant> for Operand<P, C, S>
-where
-    C: From<Constant>,
-{
-    fn from(value: Constant) -> Self {
-        Self::Const(value.into())
-    }
-}
-
 pub(crate) struct SymVariable<C> {
     pub(crate) ty: ValueType,
     pub(crate) conc_value: Option<C>,
 }
 
 #[derive(Debug)]
-pub enum AssertKind<Operand> {
-    BoundsCheck { len: Operand, index: Operand },
-    Overflow(BinaryOp, Operand, Operand),
-    OverflowNeg(Operand),
-    DivisionByZero(Operand),
-    RemainderByZero(Operand),
-    ResumedAfterReturn(Operand), // NOTE: TODO: check if these exist in HIR only
-    ResumedAfterPanic(Operand),  // NOTE: TODO: check if these exist in HIR only
-    MisalignedPointerDereference { required: Operand, found: Operand },
+pub enum AssertKind<O> {
+    BoundsCheck { len: O, index: O },
+    Overflow(BinaryOp, O, O),
+    OverflowNeg(O),
+    DivisionByZero(O),
+    RemainderByZero(O),
+    ResumedAfterReturn(O), // NOTE: TODO: check if these exist in HIR only
+    ResumedAfterPanic(O),  // NOTE: TODO: check if these exist in HIR only
+    MisalignedPointerDereference { required: O, found: O },
     NullPointerDereference,
-    InvalidEnumConstruction(Operand),
+    InvalidEnumConstruction(O),
 }
 
 #[derive(Clone, Copy, Debug)]

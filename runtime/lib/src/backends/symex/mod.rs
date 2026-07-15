@@ -303,8 +303,6 @@ trait GenericVariablesState {
     type PlaceValue;
     type Value;
 
-    fn id(&self) -> usize;
-
     /// Returns a value that corresponds to the place itself.
     /// The returned value does not necessarily access the actual value but
     /// should be dereferenceable to get the actual value.
