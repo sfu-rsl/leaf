@@ -167,38 +167,6 @@ pub(crate) struct AdtValue {
     pub kind: AdtKind,
     pub fields: Vec<AdtField>,
 }
-impl AdtValue {
-    /// creates an ADT that is the result of a checked operation that overflowed
-    fn checked_overflow() -> Self {
-        Self {
-            kind: AdtKind::Struct,
-            fields: vec![
-                Self::field_for_checked(None),
-                Self::field_for_checked(Some(true.into())),
-            ],
-        }
-    }
-
-    /// creates an ADT that represents the result of a successful checked operation (no overflow)
-    fn checked_success(result: Wrapping<u128>, ty: IntType) -> Self {
-        Self {
-            kind: AdtKind::Struct,
-            fields: vec![
-                Self::field_for_checked(Some(ConstValue::Int {
-                    bit_rep: result,
-                    ty,
-                })),
-                Self::field_for_checked(Some(false.into())),
-            ],
-        }
-    }
-
-    fn field_for_checked(value: Option<ConstValue>) -> AdtField {
-        AdtField {
-            value: value.map(ConstValue::to_value_ref),
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, dm::From)]
 pub(crate) struct AdtField {
@@ -1154,94 +1122,6 @@ mod ops {
                 }
 
                 _ => unreachable!(),
-            }
-        }
-
-        fn binary_op_with_overflow_arithmetic(
-            first: &Self,
-            second: &Self,
-            operator: AbsBinaryOp,
-        ) -> AdtValue {
-            /// use logic to determine whether the operation will overflow or underflow or be in bounds
-            fn checked_op(
-                operator: AbsBinaryOp,
-                first: &Wrapping<u128>,
-                second: &Wrapping<u128>,
-                ty @ IntType { is_signed, .. }: IntType, // pattern matching in function args, cool!
-            ) -> Option<u128> {
-                // we don't want any wrapping in this function, so we take the 0th parameter
-                let (first, second) = (first.0, second.0);
-                if is_signed {
-                    // casting between same sized integers is a no-op (see rust docs)
-                    let first = first as i128;
-                    let second = second as i128;
-
-                    let result = match operator {
-                        AbsBinaryOp::Add => first.checked_add(second),
-                        AbsBinaryOp::Sub => first.checked_sub(second),
-                        AbsBinaryOp::Mul => first.checked_mul(second),
-                        _ => unreachable!("unsupported by rust"),
-                    };
-
-                    if let Some(result) = result {
-                        // case: i128 has not overflowed, so result is valid. Ensure we're in our type's bounds
-                        if ConstValue::in_bounds(result as u128, &ty) {
-                            Some(result as u128)
-                        } else {
-                            None
-                        }
-                    } else {
-                        // case: i128 overflowed, so any smaller type also overflowed
-                        None
-                    }
-                } else {
-                    let result = match operator {
-                        AbsBinaryOp::Add => first.checked_add(second),
-                        AbsBinaryOp::Sub => first.checked_sub(second),
-                        AbsBinaryOp::Mul => first.checked_mul(second),
-                        _ => unreachable!("unsupported by rust"),
-                    };
-
-                    // If u128 overflows, any smaller type also overflows.
-                    result.filter(|result| {
-                        // u128 has not overflowed, check if we're higher than our max.
-                        ConstValue::in_bounds(*result, &ty)
-                    })
-                }
-            }
-
-            // only integers are supported, as per the rust docs:
-            // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/syntax/enum.Rvalue.html#variant.CheckedBinaryOp
-            match (first, second) {
-                (
-                    Self::Int {
-                        bit_rep: first,
-                        ty:
-                            ty @ IntType {
-                                bit_size: first_size,
-                                is_signed: first_signed,
-                            },
-                    },
-                    Self::Int {
-                        bit_rep: second,
-                        ty: ty_second @ IntType { .. },
-                    },
-                ) => {
-                    assert_eq!(*ty, *ty_second);
-
-                    let result = checked_op(operator, first, second, *ty);
-                    match result {
-                        Some(result) => {
-                            let ty = IntType {
-                                bit_size: *first_size,
-                                is_signed: *first_signed,
-                            };
-                            AdtValue::checked_success(Wrapping(result), ty)
-                        }
-                        None => AdtValue::checked_overflow(),
-                    }
-                }
-                _ => unreachable!("only integers are supported by rust"),
             }
         }
 
