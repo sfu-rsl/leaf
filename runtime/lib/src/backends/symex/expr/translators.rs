@@ -13,7 +13,7 @@ pub(crate) mod z3 {
         ast::{self, Ast},
     };
 
-    use crate::abs::{IntType, ValueType, expr::sym_place::SelectTarget};
+    use crate::abs::{IntType, ValueType};
 
     use common::log_debug;
     use common::z3::*;
@@ -579,6 +579,7 @@ pub(crate) mod z3 {
              * Bound constraints are automatically implied by the bound checks compiler adds.
              * Also, we don't need to worry about the empty arrays for the same reason. */
 
+            use super::super::sym_place::SelectTarget;
             match &select.target {
                 SelectTarget::Array(possible_values) => {
                     let ArrayNode(

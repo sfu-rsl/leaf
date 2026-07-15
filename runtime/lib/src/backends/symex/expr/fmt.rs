@@ -216,13 +216,13 @@ impl Display for SliceIndex<SymValueRef> {
 
 impl Display for super::UnaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        abs::expr::UnaryOp::from(self).fmt(f)
+        super::builders::abs::UnaryOp::from(self).fmt(f)
     }
 }
 
 impl Display for super::BinaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        abs::expr::BinaryOp::from(self).fmt(f)
+        super::builders::abs::BinaryOp::from(self).fmt(f)
     }
 }
 
@@ -304,5 +304,42 @@ impl Display for DeterministicProjection {
 impl Display for SymTernaryOperands {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "({:?}, {:?}, {:?})", self.0, self.1, self.2)
+    }
+}
+
+impl<I, V> Display for Select<I, V>
+where
+    I: Display,
+    V: Display,
+{
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        write!(f, "select({}, {})", self.target, self.index)
+    }
+}
+
+impl<V, S> Display for SelectTarget<V, S>
+where
+    V: Display,
+    S: Display,
+{
+    fn fmt(&self, f: &mut Formatter) -> Result {
+        match self {
+            SelectTarget::Array(values) => write!(f, "[{}]", comma_separated(values.iter())),
+            SelectTarget::Nested(box select) => write!(f, "{select}"),
+        }
+    }
+}
+
+impl<I, V> Display for SymbolicReadTree<I, V>
+where
+    I: Display,
+    V: Display,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            SymbolicReadTree::SymRead(select) => write!(f, "{select}"),
+            SymbolicReadTree::Array(values) => write!(f, "[{}]", comma_separated(values.iter())),
+            SymbolicReadTree::Single(value) => write!(f, "<{value}>"),
+        }
     }
 }

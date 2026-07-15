@@ -3,22 +3,19 @@ use std::borrow::Cow;
 use common::log_warn;
 
 use crate::{
-    abs::{
-        AssignmentId, IntType, PlaceUsage, RawAddress, TypeId, TypeSize, expr::BinaryExprBuilder,
-    },
-    backends::symex::expr::LazyTypeInfo,
+    abs::{AssignmentId, IntType, PlaceUsage, RawAddress, TypeId, TypeSize},
     pri::fluent::backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
 };
 
 use super::alias::backend;
 use backend::{
-    SymExBackend, SymExExprBuilder, SymExPlaceValue, SymExSymPlaceHandler, SymExValue,
-    TypeDatabase,
+    LazyTypeInfo, SymExBackend, SymExExprBuilder, SymExPlaceValue, SymExSymPlaceHandler,
+    SymExValue, TypeDatabase,
     alias::SymExValueExprBuilder,
     assignment::{self, AssignmentServices},
     expr::prelude::{
-        ConcatExpr, ConcreteValue, ConcreteValueRef, ConstValue, SymValueRef, UnevalValue, Value,
-        ValueRef,
+        BinaryExprBuilder, ConcatExpr, ConcreteValue, ConcreteValueRef, ConstValue, SymValueRef,
+        UnevalValue, Value, ValueRef,
     },
     implication::{Implied, Precondition, PreconditionConstruct},
     state::SymPlaceSymEntity,

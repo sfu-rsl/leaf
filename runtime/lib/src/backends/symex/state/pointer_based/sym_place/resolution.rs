@@ -25,12 +25,13 @@
 
 use derive_more::From;
 
-use crate::abs::expr::sym_place::SymbolicReadResolver;
+use super::backend;
+use backend::expr::builders::sym_place::SymbolicReadResolver;
 
 use super::*;
 
 type SymIndex = SymValueRef;
-pub(crate) type Select<V = SymbolicPlaceResult> = crate::abs::expr::sym_place::Select<SymIndex, V>;
+pub(crate) type Select<V = SymbolicPlaceResult> = backend::expr::Select<SymIndex, V>;
 
 /// # Remarks about Array (old)
 /// Although both `Select` and `SingleResult` can hold array of values, there are semantical
@@ -46,8 +47,7 @@ pub(crate) type Select<V = SymbolicPlaceResult> = crate::abs::expr::sym_place::S
 /// consistent behavior, intermediate single values that are expected to be array need to be
 /// resolved (expanded) to be able to iterate over their values. Again, this variant is
 /// necessary to hold the expanded view.
-pub(crate) type SymbolicPlaceResult =
-    crate::abs::expr::sym_place::SymbolicReadTree<SymIndex, SinglePlaceResult>;
+pub(crate) type SymbolicPlaceResult = backend::expr::SymbolicReadTree<SymIndex, SinglePlaceResult>;
 
 impl From<Vec<Self>> for SymbolicPlaceResult {
     fn from(value: Vec<Self>) -> Self {
@@ -96,15 +96,16 @@ impl<'a> DefaultSymPlaceResolver<'a> {
 }
 
 mod implementation {
-    use crate::{
-        abs::expr::sym_place::{
-            SelectTarget, SymbolicReadResolver, SymbolicReadTreeLeafMutator::*,
-        },
-        type_info::TypeInfoExt,
-    };
+    use common::{log_warn, type_info::ArrayShape};
+
+    use crate::type_info::TypeInfoExt;
 
     use super::*;
-    use common::{log_warn, type_info::ArrayShape};
+
+    use backend::expr::{
+        SelectTarget,
+        builders::sym_place::{SymbolicReadResolver, SymbolicReadTreeLeafMutator::*},
+    };
 
     impl SymbolicPlaceResolver for DefaultSymPlaceResolver<'_> {
         #[tracing::instrument(level = "debug", skip(self))]
