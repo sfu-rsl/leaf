@@ -64,10 +64,9 @@ pub(crate) trait SourceInfoProvider {
     fn source_info(&self) -> SourceInfo;
 }
 
-pub(crate) trait AssignmentInfoProvider<'tcx> {
+pub(crate) trait AssignmentInfoProvider {
     fn assignment_id(&self) -> AssignmentId;
     fn dest_ref(&self) -> PlaceRef;
-    fn dest_ty(&self) -> Ty<'tcx>;
 }
 
 pub(crate) trait CastOperandProvider {
@@ -317,24 +316,19 @@ impl<B> SourceInfoProvider for SourceInfoContext<'_, B> {
     }
 }
 
-pub(crate) struct AssignmentContext<'b, 'tcx, B> {
+pub(crate) struct AssignmentContext<'b, B> {
     pub(super) base: &'b mut B,
     pub(super) id: AssignmentId,
     pub(super) dest_ref: PlaceRef,
-    pub(super) dest_ty: Ty<'tcx>,
 }
 
-impl<'tcx, B> AssignmentInfoProvider<'tcx> for AssignmentContext<'_, 'tcx, B> {
+impl<B> AssignmentInfoProvider for AssignmentContext<'_, B> {
     fn assignment_id(&self) -> AssignmentId {
         self.id
     }
 
     fn dest_ref(&self) -> PlaceRef {
         self.dest_ref
-    }
-
-    fn dest_ty(&self) -> Ty<'tcx> {
-        self.dest_ty
     }
 }
 
@@ -583,11 +577,10 @@ make_impl_macro! {
 
 make_impl_macro! {
     impl_dest_ref_provider,
-    AssignmentInfoProvider<'tcx>,
+    AssignmentInfoProvider,
     self,
     fn assignment_id(&self) -> AssignmentId;
     fn dest_ref(&self) -> PlaceRef;
-    fn dest_ty(&self) -> Ty<'tcx>;
 }
 
 make_impl_macro! {
@@ -708,7 +701,7 @@ impl_traits!(all - [ impl_body_provider impl_orig_location_provider ] for InBody
 impl_traits!(all - [ impl_in_entry_function ] for EntryFunctionMarkerContext);
 impl_traits!(all - [ impl_location_provider impl_insertion_location_provider ] for AtLocationContext);
 impl_traits!(all - [ impl_source_info_provider ] for SourceInfoContext);
-impl_traits!(all - [ impl_dest_ref_provider ] for AssignmentContext<'tcxd>);
+impl_traits!(all - [ impl_dest_ref_provider ] for AssignmentContext);
 impl_traits!(all - [ impl_cast_operand_provider ] for CastAssignmentContext);
 impl_traits!(all - [ impl_discr_info_provider ] for BranchingContext<'tcxd>);
 impl_traits!(all - [ impl_ptr_info_provider impl_atomic_intrinsic_params_provider ] for AtomicIntrinsicContext<'tcxd>);

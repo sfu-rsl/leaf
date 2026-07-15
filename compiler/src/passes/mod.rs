@@ -44,10 +44,6 @@ pub(crate) use type_info::TypeInfoExporter;
 
 pub(super) type Callbacks = dyn CallbacksExt + Send;
 
-pub(crate) trait HasResult<R> {
-    fn into_result(self) -> R;
-}
-
 macro_rules! visit_before_after {
     (fn $name:ident $($sig:tt)*) => {
         paste!{
@@ -304,10 +300,6 @@ mod implementation {
         fn new(pass: T) -> Self {
             Self(Arc::new(Mutex::new(pass)))
         }
-
-        fn into_pass(self) -> T {
-            Arc::into_inner(self.0).unwrap().into_inner().unwrap()
-        }
     }
 
     impl<T: CompilationPass + ?Sized> PassHolder<T> {
@@ -458,7 +450,7 @@ mod implementation {
     }
 
     impl<T: CompilationPass + Send + ?Sized> CompilationPassAdapter<T> {
-        fn optimized_mir(tcx: TyCtxt, id: LocalDefId) -> &mir::Body {
+        fn optimized_mir<'tcx>(tcx: TyCtxt<'tcx>, id: LocalDefId) -> &'tcx mir::Body<'tcx> {
             // NOTE: It is possible that this function is called before the callbacks.
             global::set_ctxt_id(tcx);
 
@@ -479,7 +471,7 @@ mod implementation {
             tcx.arena.alloc(body)
         }
 
-        fn extern_optimized_mir(tcx: TyCtxt, id: DefId) -> &mir::Body {
+        fn extern_optimized_mir<'tcx>(tcx: TyCtxt<'tcx>, id: DefId) -> &'tcx mir::Body<'tcx> {
             // NOTE: It is possible that this function is called before the callbacks.
             global::set_ctxt_id(tcx);
 
@@ -559,10 +551,6 @@ mod implementation {
                 leaf_config: None,
                 config_callbacks: Vec::new(),
             }
-        }
-
-        pub(crate) fn into_pass(self) -> T {
-            self.pass.into_pass()
         }
     }
 

@@ -4,8 +4,8 @@ use rustc_abi::VariantIdx;
 use rustc_data_structures::graph::dominators::{Dominators, dominators};
 use rustc_middle::{
     mir::{
-        AggregateKind, BasicBlock, BasicBlocks, Body, Local, Location, ProjectionElem, Rvalue,
-        StatementKind, TerminatorKind,
+        AggregateKind, BasicBlock, BasicBlocks, Body, Local, Location, Rvalue, StatementKind,
+        TerminatorKind,
     },
     ty::TyCtxt,
 };
@@ -15,11 +15,12 @@ use common::{
     program_dep::{AssignmentsInfo, ControlDependencyGraph, PlainProgramDependenceMap},
 };
 
-use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
 use crate::{
     passes::instr::assignment_id::{AssignmentDestination, assignment_ids_split_agnostic},
     utils::{control_dependence::PostDominators, file::TyCtxtFileExt, mir::InstanceKindExt},
 };
+
+use super::{CompilationPass, OverrideFlags, Storage, StorageExt};
 
 #[derive(Default)]
 pub(crate) struct ProgramDependenceMapExporter;

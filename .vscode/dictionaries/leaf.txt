@@ -16,6 +16,9 @@ Internalizer
 konst
 LEAFC
 leafrt
+leafrtsh
+libleafrt
+libleafrtsh
 mdsan
 MIRAI
 nctfe
@@ -26,6 +29,7 @@ proj
 projectable
 projs
 Referencer
+reqs
 rkyving
 satisfiability
 serdes

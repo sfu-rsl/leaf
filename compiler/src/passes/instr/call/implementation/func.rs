@@ -4,21 +4,15 @@ use rustc_type_ir::ClosureArgs;
 
 use core::{debug_assert_matches, iter};
 
-use crate::{
-    passes::instr::{
-        call::{
-            PlaceReferencer,
-            context::{ConfigProvider, PointerInfoProvider},
-        },
-        ctxtreqs::ForPlaceRef,
-    },
-    utils::mir::BodyExt,
-};
+use crate::utils::mir::BodyExt;
 
 use super::{
-    DropHandler, FunctionHandler, InsertionLocation, OperandReferencer,
-    context::{AssignmentInfoProvider, BodyProvider, SourceInfoProvider},
-    ctxt_reqs::{Basic, ForDropping, ForFunctionCalling},
+    DropHandler, FunctionHandler, InsertionLocation, OperandReferencer, PlaceReferencer,
+    context::{
+        AssignmentInfoProvider, BodyProvider, ConfigProvider, PointerInfoProvider,
+        SourceInfoProvider,
+    },
+    ctxt_reqs::{Basic, ForDropping, ForFunctionCalling, ForPlaceRef},
     prelude::{mir::*, *},
 };
 
@@ -78,7 +72,7 @@ where
 
     fn after_call_func(&mut self)
     where
-        Self: AssignmentInfoProvider<'tcx>,
+        Self: AssignmentInfoProvider,
     {
         let block = self.make_bb_for_call(
             sym::after_call_func,
@@ -475,11 +469,11 @@ mod utils {
     };
 
     pub(super) use super::super::utils::{
-        assignment, operand, prepare_operand_for_slice, ptr_to_place, terminator, ty::TyExt,
+        assignment, operand, prepare_operand_for_slice, ptr_to_place, ty::TyExt,
     };
     use super::super::{
-        BlocksAndResult, BodyLocalManager, BodyProvider, HasLocalDecls, MirCallAdder,
-        PriItemsProvider, StorageProvider,
+        BodyLocalManager, BodyProvider, HasLocalDecls, MirCallAdder, PriItemsProvider,
+        StorageProvider,
     };
 
     pub(super) mod rvalue {
@@ -562,7 +556,7 @@ mod utils {
         ///
         /// [`ty`]: coroutine type
         pub fn fn_def_of_coroutine_await<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> Ty<'tcx> {
-            let TyKind::Coroutine(def_id, args) = ty.kind() else {
+            let TyKind::Coroutine(def_id, _args) = ty.kind() else {
                 panic!("Expected coroutine type but received: {}", ty)
             };
             assert!(
@@ -570,9 +564,6 @@ mod utils {
                 "Expected async coroutine kind but received: {:?}",
                 tcx.coroutine_kind(*def_id),
             );
-
-            log_debug!("Getting FnDef type of async coroutine: {:?}", ty);
-            let args = args.as_coroutine();
 
             // Finding `resume` method in `Coroutine` trait.
             let future_trait_fn_id = tcx.lang_items().future_poll_fn().unwrap();

@@ -5,6 +5,7 @@ bswap
 carryless
 chrono
 clippy
+concatcp
 ctlz
 ctpop
 cttz
@@ -12,6 +13,7 @@ cxchg
 Deque
 dylib
 isize
+Nand
 nonoverlapping
 peekable
 Reborrowing

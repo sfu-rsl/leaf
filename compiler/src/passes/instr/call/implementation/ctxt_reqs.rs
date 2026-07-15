@@ -2,85 +2,51 @@
 //! certain feature will be available in `RuntimeCallAdder` when its context
 //! implement that set of traits.
 
-use super::{context::*, *};
+use super::*;
 
-pub(crate) trait Basic<'tcx>: BaseContext<'tcx> + BodyProvider<'tcx> {}
-impl<'tcx, C> Basic<'tcx> for C where C: BaseContext<'tcx> + BodyProvider<'tcx> {}
-
-pub(crate) trait ForInsertion<'tcx>:
-    Basic<'tcx> + InsertionLocationProvider + SourceInfoProvider
-{
-}
-impl<'tcx, C> ForInsertion<'tcx> for C where
-    C: Basic<'tcx> + InsertionLocationProvider + SourceInfoProvider
-{
+macro_rules! ctxt_req_trait {
+    ($name:ident<'tcx> : $($bounds:tt)+) => {
+        pub(in super::super::super) trait $name<'tcx>: $($bounds)+ {}
+        impl<'tcx, C> $name<'tcx> for C where C: $($bounds)+ {}
+    };
 }
 
-pub(crate) trait ForPlaceRef<'tcx>: ForInsertion<'tcx> {}
-impl<'tcx, C> ForPlaceRef<'tcx> for C where C: ForInsertion<'tcx> {}
+ctxt_req_trait!(Basic<'tcx>: BaseContext<'tcx> + BodyProvider<'tcx>);
 
-pub(crate) trait ForOperandRef<'tcx>: ForPlaceRef<'tcx> {}
-impl<'tcx, C> ForOperandRef<'tcx> for C where C: ForPlaceRef<'tcx> {}
+ctxt_req_trait!(ForInsertion<'tcx>: Basic<'tcx> + InsertionLocationProvider + SourceInfoProvider);
 
-pub(crate) trait ForAssignment<'tcx>:
-    ForInsertion<'tcx> + AssignmentInfoProvider<'tcx>
-{
-}
-impl<'tcx, C> ForAssignment<'tcx> for C where C: ForInsertion<'tcx> + AssignmentInfoProvider<'tcx> {}
+ctxt_req_trait!(ForPlaceRef<'tcx>: ForInsertion<'tcx>);
 
-pub(crate) trait ForCasting<'tcx>: CastOperandProvider + ForAssignment<'tcx> {}
-impl<'tcx, C> ForCasting<'tcx> for C where C: CastOperandProvider + ForAssignment<'tcx> {}
+ctxt_req_trait!(ForOperandRef<'tcx>: ForPlaceRef<'tcx>);
 
-pub(crate) trait ForBranching<'tcx>:
-    ForInsertion<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier
-{
-}
-impl<'tcx, C> ForBranching<'tcx> for C where
-    C: ForInsertion<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier
-{
-}
+ctxt_req_trait!(ForAssignment<'tcx>: ForInsertion<'tcx> + AssignmentInfoProvider);
 
-pub(crate) trait ForAssertion<'tcx>:
-    ForOperandRef<'tcx> + BlockOriginalIndexProvider
-{
-}
-impl<'tcx, C> ForAssertion<'tcx> for C where C: ForOperandRef<'tcx> + BlockOriginalIndexProvider {}
+ctxt_req_trait!(ForCasting<'tcx>: CastOperandProvider + ForAssignment<'tcx>);
 
-pub(crate) trait ForFunctionCalling<'tcx>:
-    ForInsertion<'tcx> + JumpTargetModifier + BlockOriginalIndexProvider
-{
-}
-impl<'tcx, C> ForFunctionCalling<'tcx> for C where
-    C: ForInsertion<'tcx> + JumpTargetModifier + BlockOriginalIndexProvider
-{
-}
+ctxt_req_trait!(
+    ForBranching<'tcx>: ForInsertion<'tcx> + BlockOriginalIndexProvider + JumpTargetModifier
+);
 
-pub(crate) trait ForDropping<'tcx>: ForInsertion<'tcx> + BlockOriginalIndexProvider {}
-impl<'tcx, C> ForDropping<'tcx> for C where C: ForInsertion<'tcx> + BlockOriginalIndexProvider {}
+ctxt_req_trait!(ForAssertion<'tcx>: ForOperandRef<'tcx> + BlockOriginalIndexProvider);
 
-pub(crate) trait ForReturning<'tcx>: ForInsertion<'tcx> {}
-impl<'tcx, C> ForReturning<'tcx> for C where C: ForInsertion<'tcx> {}
+ctxt_req_trait!(
+    ForFunctionCalling<'tcx>: ForInsertion<'tcx> + JumpTargetModifier + BlockOriginalIndexProvider
+);
 
-pub(crate) trait ForEntryFunction<'tcx>: ForInsertion<'tcx> + InEntryFunction {}
-impl<'tcx, C> ForEntryFunction<'tcx> for C where C: ForInsertion<'tcx> + InEntryFunction {}
+ctxt_req_trait!(ForDropping<'tcx>: ForInsertion<'tcx> + BlockOriginalIndexProvider);
 
-pub(crate) trait ForAtomicIntrinsic<'tcx>:
-    ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
-{
-}
-impl<'tcx, C> ForAtomicIntrinsic<'tcx> for C where
-    C: ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
-{
-}
+ctxt_req_trait!(ForReturning<'tcx>: ForInsertion<'tcx>);
 
-pub(crate) trait ForMemoryIntrinsic<'tcx>:
-    ForAssignment<'tcx> + MemoryIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
-{
-}
-impl<'tcx, C> ForMemoryIntrinsic<'tcx> for C where
-    C: ForAssignment<'tcx> + MemoryIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
-{
-}
+ctxt_req_trait!(ForEntryFunction<'tcx>: ForInsertion<'tcx> + InEntryFunction);
 
-pub(crate) trait ForStorageMarking<'tcx>: ForInsertion<'tcx> {}
-impl<'tcx, C> ForStorageMarking<'tcx> for C where C: ForInsertion<'tcx> {}
+ctxt_req_trait!(
+    ForAtomicIntrinsic<'tcx>:
+        ForInsertion<'tcx> + AtomicIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
+);
+
+ctxt_req_trait!(
+    ForMemoryIntrinsic<'tcx>:
+        ForAssignment<'tcx> + MemoryIntrinsicParamsProvider<'tcx> + PointerInfoProvider<'tcx>
+);
+
+ctxt_req_trait!(ForStorageMarking<'tcx>: ForInsertion<'tcx>);

@@ -15,7 +15,7 @@ use rustc_span::{Span, Spanned};
 
 macro_rules! make_statement_kind_visitor {
     ($visitor_trait_name:ident, $($mutability:ident)?) => {
-        #[allow(unused_variables)]
+        #[allow(unused)]
         pub trait $visitor_trait_name<'tcx, T: Default> {
             fn visit_statement_kind(&mut self, kind: & $($mutability)? StatementKind<'tcx>) -> T {
                 self.super_statement_kind(kind)
@@ -333,7 +333,7 @@ make_terminator_kind_visitor!(TerminatorKindMutVisitor, mut);
 
 macro_rules! make_rvalue_visitor {
     ($visitor_trait_name:ident, $($mutability:ident)?) => {
-        #[allow(unused_variables)]
+        #[allow(unused)]
         pub trait $visitor_trait_name<'tcx, T: Default> {
             fn visit_rvalue(&mut self, rvalue: & $($mutability)? Rvalue<'tcx>) -> T {
                 self.super_rvalue(rvalue)

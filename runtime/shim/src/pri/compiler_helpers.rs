@@ -7,7 +7,7 @@ use core::{
 use super::common::{
     self,
     pri::{refs::encoding as r_enc, *},
-    types::{BasicBlockLocation, DefId, InstanceKindDiscr, InstanceKindId},
+    types::{DefId, InstanceKindDiscr, InstanceKindId},
 };
 
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
@@ -19,10 +19,6 @@ pub static CH_MODULE_MARKER: u8 = 0;
 pub static PLACE_REF_TYPE_HOLDER: PlaceRef = 0;
 #[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
 pub static OPERAND_REF_TYPE_HOLDER: OperandRef = 0;
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-pub static BINARY_OP_TYPE_HOLDER: BinaryOp = BinaryOp::ADD;
-#[cfg_attr(core_build, stable(feature = "rust1", since = "1.0.0"))]
-pub static UNARY_OP_TYPE_HOLDER: UnaryOp = UnaryOp::NEG;
 
 /* NOTE: The const version of this conversion is unstable
  * and causes errors during the compilation of the core library.
