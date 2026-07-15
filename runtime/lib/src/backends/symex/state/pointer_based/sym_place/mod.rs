@@ -4,15 +4,16 @@ use core::{iter, ops::Bound};
 
 use common::log_debug;
 
-use crate::abs::{
-    expr::sym_place::{SymbolicReadResolver, SymbolicReadTreeLeafMutator},
-    place::HasMetadata,
-};
+use crate::abs::place::HasMetadata;
 
 use super::*;
 
 use backend::{
-    expr::{MultiValue as ValueSelect, SliceIndex, place::*},
+    expr::{
+        MultiValue as ValueSelect, SliceIndex,
+        builders::sym_place::{SymbolicReadResolver, SymbolicReadTreeLeafMutator},
+        place::*,
+    },
     place::PlaceMetadata,
 };
 

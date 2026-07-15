@@ -5,11 +5,7 @@ use common::type_info::TypeInfo;
 // https://github.com/rust-lang/rust/issues/119776
 pub(super) use crate::backends::symex as backend;
 use crate::{
-    abs::{
-        self, FloatType, IntType, TypeId,
-        backend::*,
-        expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder},
-    },
+    abs::{self, FloatType, IntType, TypeId, backend::*},
     utils::Indexed,
 };
 
@@ -18,8 +14,11 @@ use super::{
     SymExConstraint, SymExConstraintDecisionCase, SymExPlaceInfo, SymExPlaceValue, SymExValue,
     TraceIndicesProvider, TraceViewProvider,
     expr::{
-        SymBinaryOperands, SymTernaryOperands, SymValueRef, ValueRef,
-        builders::CarryingMulAddBuilderExt,
+        SymBinaryOperands, SymTernaryOperands,
+        prelude::{
+            BinaryExprBuilder, CarryingMulAddBuilderExt, CastExprBuilder, SymValueRef,
+            TernaryExprBuilder, UnaryExprBuilder, ValueRef,
+        },
     },
     implication::Implied,
     trace::SymExExeTraceRecorder,

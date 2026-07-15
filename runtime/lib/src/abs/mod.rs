@@ -1,7 +1,6 @@
 use derive_more as dm;
 
 pub(crate) mod backend;
-pub(crate) mod expr;
 pub(crate) mod fmt;
 pub(crate) mod place;
 mod serdes;

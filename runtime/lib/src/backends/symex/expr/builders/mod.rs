@@ -1,14 +1,6 @@
-use crate::{
-    abs::{
-        CastKind,
-        expr::{
-            BinaryExprBuilder, BinaryOp as AbsBinaryOp, CastExprBuilder, ChainedExprBuilder,
-            CompositeExprBuilder, LoggerExprBuilder, TernaryExprBuilder, TernaryOp as AbsTernaryOp,
-            UnaryExprBuilder, UnaryOp as AbsUnaryOp, macros::*,
-        },
-    },
-    utils::alias::RRef,
-};
+pub(super) mod abs;
+
+use crate::{abs::CastKind, utils::alias::RRef};
 
 use backend::alias::{
     ImpliedValueRefUnaryExprBuilder, SymValueRefExprBuilder, TypeDatabase,
@@ -16,6 +8,15 @@ use backend::alias::{
 };
 
 use super::{BinaryOp as SymExBinaryOp, UnaryOp as SymExUnaryOp, *};
+
+pub(crate) use self::abs::{
+    BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder, UnaryExprBuilder, sym_place,
+};
+
+use self::abs::{
+    BinaryOp as AbsBinaryOp, ChainedExprBuilder, CompositeExprBuilder, LoggerExprBuilder,
+    TernaryOp as AbsTernaryOp, UnaryOp as AbsUnaryOp, macros::*,
+};
 
 type Composite<Binary, Unary, Ternary, Cast> = CompositeExprBuilder<Binary, Unary, Ternary, Cast>;
 type Chained<Current, Next, Expr = ValueRef, CurrentExpr = Expr> =
@@ -603,7 +604,7 @@ mod adapters {
 
     use guards::SymTernaryOperands;
 
-    use crate::abs::expr::variance::*;
+    use super::abs::variance::*;
 
     use super::*;
 
@@ -977,7 +978,6 @@ mod adapters {
 }
 
 mod core {
-    use abs::expr::CastExprBuilder;
     use common::utils::type_id_of;
 
     use simp::CastSimplifier;

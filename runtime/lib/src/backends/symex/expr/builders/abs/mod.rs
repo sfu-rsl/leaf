@@ -1,23 +1,24 @@
-pub(crate) mod chained;
-pub(crate) mod composite;
-pub(crate) mod logger;
-pub(crate) mod macros;
-pub(crate) mod proj;
+pub(super) mod chained;
+pub(super) mod composite;
+pub(super) mod logger;
+pub(super) mod macros;
+pub(super) mod proj;
 pub(crate) mod sym_place;
-pub(crate) mod variance;
+pub(super) mod variance;
 
 use common::pri::TypeSize;
 
-use crate::utils::meta::{aug_enum, super_enum};
+use crate::{
+    abs::{CastKind, FloatType, IntType, TypeId},
+    utils::meta::{aug_enum, super_enum},
+};
 
 use self::macros::macro_rules_method_with_optional_args;
-
-use super::{CastKind, FloatType, IntType, TypeId};
 
 aug_enum! {
     #[repr(u8)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub(crate) enum BinaryOp from super::BinaryOp {
+    pub(crate) enum BinaryOp from crate::abs::BinaryOp {
         Add, AddUnchecked, AddWithOverflow, AddSaturating,
         Sub, SubUnchecked, SubWithOverflow, SubSaturating,
         Mul, MulUnchecked, MulWithOverflow,
@@ -82,7 +83,7 @@ impl BinaryOp {
 super_enum! {
     #[repr(u8)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub(crate) enum UnaryOp from super::UnaryOp {
+    pub(crate) enum UnaryOp from crate::abs::UnaryOp {
         Not,
         Neg,
         PtrMetadata,
@@ -98,7 +99,7 @@ super_enum! {
     }
 }
 
-pub(crate) use super::TernaryOp;
+pub(crate) use crate::abs::TernaryOp;
 
 mod fmt {
     use core::fmt::{Display, Formatter, Result};
@@ -107,7 +108,7 @@ mod fmt {
 
     impl Display for BinaryOp {
         fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-            write!(f, "{}", super::super::BinaryOp::from(self))
+            write!(f, "{}", crate::abs::BinaryOp::from(self))
         }
     }
 
@@ -115,7 +116,7 @@ mod fmt {
         fn fmt(&self, f: &mut Formatter<'_>) -> Result {
             match self {
                 UnaryOp::NoOp => write!(f, ""),
-                _ => write!(f, "{}", super::super::UnaryOp::try_from(self).unwrap()),
+                _ => write!(f, "{}", crate::abs::UnaryOp::try_from(self).unwrap()),
             }
         }
     }
@@ -225,6 +226,6 @@ pub(crate) trait CastExprBuilder {
     cast_fn_signature!(subtype + ty: Self::GenericType);
 }
 
-pub(crate) use {
+pub(super) use {
     chained::ChainedExprBuilder, composite::CompositeExprBuilder, logger::LoggerExprBuilder,
 };

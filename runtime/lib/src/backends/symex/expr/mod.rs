@@ -3,6 +3,7 @@ mod fmt;
 pub(crate) mod lazy;
 pub(super) mod place;
 pub(crate) mod prelude;
+mod sym_place;
 pub(super) mod translators;
 mod utils;
 
@@ -16,13 +17,6 @@ use derive_more as dm;
 
 use common::type_info::TypeInfo;
 
-use crate::abs::{
-    self,
-    expr::{
-        BinaryOp as AbsBinaryOp, UnaryOp as AbsUnaryOp,
-        sym_place::{Select, SymbolicReadTree},
-    },
-};
 pub(crate) use crate::abs::{
     FloatType, IntType, PointerOffset, RawAddress, TypeId, TypeSize, ValueType, VariantIndex,
 };
@@ -30,7 +24,12 @@ use crate::utils::meta::define_reversible_pair;
 
 use super::alias::backend;
 
-use place::SymIndexPlaceValueRef;
+use self::{
+    builders::abs::{BinaryOp as AbsBinaryOp, UnaryOp as AbsUnaryOp},
+    place::SymIndexPlaceValueRef,
+};
+
+pub(super) use self::sym_place::{Select, SelectTarget, SymbolicReadTree};
 
 #[derive(Clone, PartialEq, Eq, dm::Deref, dm::DerefMut, dm::Debug, dm::Display)]
 pub(crate) struct ValueRef(Rc<Value>);
