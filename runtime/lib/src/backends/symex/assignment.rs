@@ -6,7 +6,6 @@ use crate::{
     abs::{
         self, AssignmentId, BinaryOp, CastKind, FieldIndex, InstanceKindId, IntType, UnaryOp,
         VariantIndex,
-        expr::{BinaryExprBuilder, CastExprBuilder, TernaryExprBuilder},
     },
     pri::fluent::backend::AssignmentHandler,
     type_info::{TypeLayoutResolver, TypeLayoutResolverExt},
@@ -380,13 +379,15 @@ impl<'a, EB> SymExAssignmentHandler<'_, 'a, EB> {
     }
 }
 
-impl<'s, EB: SymExValueExprBuilder> SymExAssignmentHandler<'_, '_, EB> {
+impl<EB> SymExAssignmentHandler<'_, '_, EB> {
     #[cfg_attr(not(feature = "implicit_flow"), allow(unused))]
     fn set_adt_value(
         &mut self,
         kind: AdtKind,
         fields: impl Iterator<Item = Option<<Self as AssignmentHandler>::Operand>>,
-    ) {
+    ) where
+        EB: SymExValueExprBuilder,
+    {
         let (preconditions, values) = fields
             .map(|f| -> (Option<Precondition>, Option<ValueRef>) {
                 f.map(Implied::into_tuple).unzip()
@@ -416,7 +417,10 @@ impl<'s, EB: SymExValueExprBuilder> SymExAssignmentHandler<'_, '_, EB> {
         tag_encoding: &TagEncodingInfo,
         discr_ty_info: &LazyTypeInfo,
         tag_ty_info: &LazyTypeInfo,
-    ) -> SymValueRef {
+    ) -> SymValueRef
+    where
+        EB: SymExValueExprBuilder,
+    {
         use TagEncodingInfo::*;
         match tag_encoding {
             Direct => tag_value,
@@ -485,7 +489,10 @@ impl<'s, EB: SymExValueExprBuilder> SymExAssignmentHandler<'_, '_, EB> {
         }
     }
 
-    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: SymExValue) -> SymExValue {
+    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: SymExValue) -> SymExValue
+    where
+        EB: SymExValueExprBuilder,
+    {
         if !data_ptr.is_symbolic() {
             return data_ptr;
         }
@@ -506,8 +513,8 @@ impl<'s, EB: SymExValueExprBuilder> SymExAssignmentHandler<'_, '_, EB> {
         &self,
         operator: BinaryOp,
         has_symbolic: bool,
-    ) -> abs::expr::BinaryOp {
-        match crate::abs::expr::BinaryOp::try_from(operator) {
+    ) -> ExprBuilderBinaryOp {
+        match ExprBuilderBinaryOp::try_from(operator) {
             Ok(operator) => operator,
             Err(offset) => offset.with_size(if has_symbolic {
                 self.type_manager()

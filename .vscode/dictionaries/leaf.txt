@@ -38,6 +38,7 @@ smtlib
 streamable
 Symbolizable
 symex
+Trunc
 tyexp
 Uneval
 unsat

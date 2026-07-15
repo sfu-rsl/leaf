@@ -4,8 +4,8 @@ pub(crate) mod backend;
 
 use common::pri::{
     AssertionInfo, AssignmentId, BasicBlockIndex, DynRawMetadata, FieldIndex, InstanceKindId,
-    LocalIndex, OperandRef, PlaceRef, ProgramRuntimeInterface, RawAddress, SwitchCaseIndex,
-    SwitchInfo, TypeId, TypeSize, VariantIndex, refs::encoding as ref_enc,
+    LocalIndex, OperandRef, PlaceRef, ProgramRuntimeInterface, RawAddress, SwitchCaseIndex, TypeId,
+    TypeSize, VariantIndex, refs::encoding as ref_enc,
 };
 use common::{log_debug, log_info};
 use leaf_macros::trait_log_fn;
@@ -527,7 +527,7 @@ where
     }
 
     fn take_branch_false(node_loc: BasicBlockIndex, discr: OperandRef) {
-        // Self::switch(info, |h| h.take(false.into()))
+        // Self::switch(discr, node_loc, |h| h.take(0, Some(false.into())))
         let discriminant = Self::take_back_operand(discr);
         Self::constraint_at(node_loc, |c| {
             let handler = c.switch(Some(discriminant));
@@ -1401,9 +1401,7 @@ impl<IM: InstanceManager> FluentPri<IM> {
     #[inline]
     fn constraint_at<T>(
         location: BasicBlockIndex,
-        constraint_action: impl for<'a> FnOnce(
-            <IM::Backend as RuntimeBackend>::ConstraintHandler<'a>,
-        ) -> T,
+        constraint_action: impl FnOnce(<IM::Backend as RuntimeBackend>::ConstraintHandler<'_>) -> T,
     ) -> T {
         IM::perform_on_backend(|r| {
             let handler = r.constraint_at(location);
@@ -1411,19 +1409,21 @@ impl<IM: InstanceManager> FluentPri<IM> {
         })
     }
 
+    // FIXME: There's a problem with the signature that does not let calling it with a closure directly.
+    /*
     #[inline]
     fn switch<T>(
-        info: SwitchInfo,
-        switch_action: impl for<'a> FnOnce(
-        <<IM::Backend as RuntimeBackend>::ConstraintHandler<'a> as ConstraintHandler>::SwitchHandler,
-    ) -> T,
+        discriminant: OperandRef,
+        node_location: BasicBlockIndex,
+        switch_action: impl FnOnce(<<IM::Backend as RuntimeBackend>::ConstraintHandler<'_> as ConstraintHandler>::SwitchHandler) -> T,
     ) -> T {
-        let discriminant = Self::take_back_operand(info.discriminant);
-        Self::constraint_at(info.node_location, |c| {
+        let discriminant = Self::take_back_operand(discriminant);
+        Self::constraint_at(node_location, |c| {
             let handler = c.switch(Some(discriminant));
             switch_action(handler)
         })
     }
+    */
 
     #[inline]
     fn func_control<T>(

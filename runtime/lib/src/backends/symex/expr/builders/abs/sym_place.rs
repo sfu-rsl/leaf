@@ -151,23 +151,6 @@ impl<I, V> SymbolicReadTree<I, V> {
         self.map_expand(&f_index, &mut |v| SymbolicReadTree::Single(f(v)))
     }
 
-    pub(crate) fn mutate_leaves<'m>(
-        &mut self,
-        mut f: SymbolicReadTreeLeafMutator<'m, I, V>,
-        expander: impl Fn(&V) -> Self + Copy,
-    ) {
-        match self {
-            Self::SymRead(select) => select.mutate_leaves(f, expander),
-            Self::Array(values) => values
-                .iter_mut()
-                .for_each(|v| v.internal_mutate_leaves(0, &mut f, &expander)),
-            Self::Single(value) => match f {
-                Mutator(f) => f(value),
-                Replacer(f) => *self = f(value),
-            },
-        }
-    }
-
     /// Applies the given function on the leaves (single value(s)) of this tree.
     /// - Expands the value if the expected dimension is more than one.
     /// - Recurses over subtrees.
