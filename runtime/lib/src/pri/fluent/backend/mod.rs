@@ -407,7 +407,6 @@ pub(crate) enum ArgsTupling {
 pub(crate) trait CallHandler {
     type Place;
     type Operand;
-    type MetadataHandler;
 
     fn before_call(self, def: CalleeDef, call_site: BasicBlockIndex);
 
@@ -434,8 +433,6 @@ pub(crate) trait CallHandler {
     fn ret(self, ret_point: BasicBlockIndex);
 
     fn after_call(self, assignment_id: AssignmentId, result_dest: Self::Place);
-
-    fn metadata(self) -> Self::MetadataHandler;
 }
 
 pub(crate) trait DropHandler {

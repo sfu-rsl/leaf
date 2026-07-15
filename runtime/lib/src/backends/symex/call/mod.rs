@@ -2,7 +2,7 @@ use std::cell::RefMut;
 
 use crate::{
     abs::{
-        AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef, Local,
+        AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef,
         backend::PhasedCallTraceRecorder, utils::BasicBlockLocationExt,
     },
     call::{
@@ -63,7 +63,6 @@ impl<'a> SymExCallHandler<'a> {
 impl<'a> CallHandler for SymExCallHandler<'a> {
     type Place = PlaceValueRef;
     type Operand = SymExValue;
-    type MetadataHandler = ();
 
     fn before_call(mut self, def: CalleeDef, call_site: BasicBlockIndex) {
         let call_site = self.current_func().at_basic_block(call_site);
@@ -166,10 +165,6 @@ impl<'a> CallHandler for SymExCallHandler<'a> {
             return_val,
         );
     }
-
-    fn metadata(self) -> Self::MetadataHandler {
-        Default::default()
-    }
 }
 
 // Currently, we have no special mechanism for dropping beyond calling the (possible) glue
@@ -218,7 +213,6 @@ mod tupling {
     };
 
     pub(crate) struct TuplingHelperImpl<'a> {
-        type_manager: &'a dyn TypeDatabase,
         temp_vars_state: SymExVariablesState,
         type_utils: TuplingHelperTypeUtils<'a, LazyTypeInfo>,
     }
@@ -274,7 +268,6 @@ mod tupling {
             temp_vars_state: SymExVariablesState,
         ) -> Self {
             Self {
-                type_manager,
                 temp_vars_state,
                 type_utils: TuplingHelperTypeUtils::new(
                     tuple_type,

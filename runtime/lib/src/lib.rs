@@ -4,6 +4,7 @@
 #![feature(unboxed_closures)]
 #![feature(fn_traits)]
 #![feature(btree_cursors)]
+#![allow(internal_features)]
 #![feature(core_intrinsics)]
 #![feature(iter_map_windows)]
 #![feature(seek_stream_len)]

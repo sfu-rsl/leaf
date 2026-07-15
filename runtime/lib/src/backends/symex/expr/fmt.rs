@@ -208,11 +208,6 @@ impl Expr {
     }
 }
 
-#[inline]
-fn end_symbol(from_end: &bool) -> &str {
-    if *from_end { "^" } else { "" }
-}
-
 impl Display for SliceIndex<SymValueRef> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         write!(f, "{}{}ˢ", self.index, if self.from_end { "^" } else { "" })

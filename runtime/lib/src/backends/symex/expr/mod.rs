@@ -137,368 +137,6 @@ impl ConstValue {
             _ => unreachable!("Only numerical values can be checked for one."),
         }
     }
-
-    pub fn unary_op(this: &Self, operator: UnaryOp) -> ConstValue {
-        match operator {
-            UnaryOp::Neg => match this {
-                Self::Int {
-                    bit_rep,
-                    ty:
-                        ty @ IntType {
-                            is_signed: true, ..
-                        },
-                } => Self::Int {
-                    bit_rep: !bit_rep + Wrapping(1),
-                    ty: *ty,
-                },
-                Self::Float { .. } => unimplemented!(),
-                _ => unreachable!("Negation is meant only for signed integers and floats."),
-            },
-            UnaryOp::Not => match this {
-                Self::Bool(value) => Self::Bool(!value),
-                Self::Int { bit_rep, ty } => Self::Int {
-                    bit_rep: !bit_rep,
-                    ty: *ty,
-                },
-                _ => unreachable!("Not operand only works on boolean and integers."),
-            },
-            _ => unimplemented!("This function over constant values will be dropped soon."),
-        }
-    }
-
-    pub fn binary_op(first: &Self, second: &Self, operator: AbsBinaryOp) -> ConcreteValue {
-        use AbsBinaryOp::*;
-        match operator {
-            Add | Sub | Mul | Div | Rem | BitXor | BitAnd | BitOr => ConcreteValue::Const(
-                Self::binary_op_arithmetic(first, second, operator.try_into().unwrap()),
-            ),
-            Shl | Shr => ConcreteValue::Const(Self::binary_op_shift(first, second, operator)),
-            AddWithOverflow | SubWithOverflow | MulWithOverflow => ConcreteValue::Adt(
-                Self::binary_op_with_overflow_arithmetic(first, second, operator),
-            ),
-            AddUnchecked | SubUnchecked | MulUnchecked => {
-                todo!("#197")
-            }
-            Eq | Lt | Le | Ne | Ge | Gt => ConcreteValue::Const(ConstValue::Bool(
-                Self::binary_op_cmp(first, second, operator.try_into().unwrap()),
-            )),
-            _ => unimplemented!("{:?} {:?} {:?}", first, second, operator),
-        }
-    }
-
-    pub fn integer_cast(this: &Self, to: IntType) -> Self {
-        match this {
-            /* This seems overly simple but when the number is originally cast to the u128 to get its bit representation,
-             * this covers any of the casting that would need to be done here. If the original number was unsigned then
-             * the leading bits of the u128 will be 0s and if it was signed then the leading bits will be 1s to handle
-             * the sign extension. Now here when we track the actual cast that needs to be done, the target type has at
-             * most 128 bits so we can just truncate the leading bits to get the correct bit representation.
-             */
-            Self::Int { bit_rep, .. } => Self::Int {
-                bit_rep: {
-                    // truncate leading bits as necessary
-                    let result = Wrapping(Self::to_size((*bit_rep).0, &to));
-                    debug_assert!(Self::in_bounds(result.0, &to), "result out of bounds");
-                    result
-                },
-                ty: to,
-            },
-            Self::Bool(value) => Self::Int {
-                bit_rep: Wrapping(*value as u128),
-                ty: to,
-            },
-            Self::Char(value) => Self::Int {
-                bit_rep: Wrapping(*value as u128),
-                ty: to,
-            },
-            Self::Float { .. } => todo!("Casting float to integer is not implemented yet."),
-            _ => unreachable!("Casting {this:?} to integer is not possible."),
-        }
-    }
-
-    fn binary_op_arithmetic(first: &Self, second: &Self, operator: BinaryOp) -> Self {
-        match (first, second) {
-            (
-                Self::Int {
-                    bit_rep: first,
-                    ty: first_ty,
-                },
-                Self::Int {
-                    bit_rep: second,
-                    ty: second_ty,
-                },
-            ) => {
-                debug_assert_eq!(first_ty.bit_size, second_ty.bit_size);
-
-                let result = match operator {
-                    BinaryOp::Add => first + second,
-                    BinaryOp::Sub => first - second,
-                    BinaryOp::Mul => first * second,
-                    BinaryOp::Div => first / second,
-                    BinaryOp::Rem => first % second,
-                    BinaryOp::BitXor => first ^ second,
-                    BinaryOp::BitAnd => first & second,
-                    BinaryOp::BitOr => first | second,
-                    _ => unreachable!(),
-                };
-
-                Self::Int {
-                    bit_rep: result,
-                    ty: *first_ty,
-                }
-            }
-
-            (Self::Float { .. }, Self::Float { .. }) => unimplemented!(),
-
-            (Self::Bool(first_value), Self::Bool(second_value)) => {
-                let result = match operator {
-                    BinaryOp::BitXor => first_value ^ second_value,
-                    BinaryOp::BitAnd => first_value & second_value,
-                    BinaryOp::BitOr => first_value | second_value,
-                    _ => unreachable!(),
-                };
-                Self::Bool(result)
-            }
-
-            _ => unreachable!(),
-        }
-    }
-
-    fn binary_op_with_overflow_arithmetic(
-        first: &Self,
-        second: &Self,
-        operator: AbsBinaryOp,
-    ) -> AdtValue {
-        /// use logic to determine whether the operation will overflow or underflow or be in bounds
-        fn checked_op(
-            operator: AbsBinaryOp,
-            first: &Wrapping<u128>,
-            second: &Wrapping<u128>,
-            ty @ IntType { is_signed, .. }: IntType, // pattern matching in function args, cool!
-        ) -> Option<u128> {
-            // we don't want any wrapping in this function, so we take the 0th parameter
-            let (first, second) = (first.0, second.0);
-            if is_signed {
-                // casting between same sized integers is a no-op (see rust docs)
-                let first = first as i128;
-                let second = second as i128;
-
-                let result = match operator {
-                    AbsBinaryOp::Add => first.checked_add(second),
-                    AbsBinaryOp::Sub => first.checked_sub(second),
-                    AbsBinaryOp::Mul => first.checked_mul(second),
-                    _ => unreachable!("unsupported by rust"),
-                };
-
-                if let Some(result) = result {
-                    // case: i128 has not overflowed, so result is valid. Ensure we're in our type's bounds
-                    if ConstValue::in_bounds(result as u128, &ty) {
-                        Some(result as u128)
-                    } else {
-                        None
-                    }
-                } else {
-                    // case: i128 overflowed, so any smaller type also overflowed
-                    None
-                }
-            } else {
-                let result = match operator {
-                    AbsBinaryOp::Add => first.checked_add(second),
-                    AbsBinaryOp::Sub => first.checked_sub(second),
-                    AbsBinaryOp::Mul => first.checked_mul(second),
-                    _ => unreachable!("unsupported by rust"),
-                };
-
-                // If u128 overflows, any smaller type also overflows.
-                result.filter(|result| {
-                    // u128 has not overflowed, check if we're higher than our max.
-                    ConstValue::in_bounds(*result, &ty)
-                })
-            }
-        }
-
-        // only integers are supported, as per the rust docs:
-        // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/syntax/enum.Rvalue.html#variant.CheckedBinaryOp
-        match (first, second) {
-            (
-                Self::Int {
-                    bit_rep: first,
-                    ty:
-                        ty @ IntType {
-                            bit_size: first_size,
-                            is_signed: first_signed,
-                        },
-                },
-                Self::Int {
-                    bit_rep: second,
-                    ty: ty_second @ IntType { .. },
-                },
-            ) => {
-                assert_eq!(*ty, *ty_second);
-
-                let result = checked_op(operator, first, second, *ty);
-                match result {
-                    Some(result) => {
-                        let ty = IntType {
-                            bit_size: *first_size,
-                            is_signed: *first_signed,
-                        };
-                        AdtValue::checked_success(Wrapping(result), ty)
-                    }
-                    None => AdtValue::checked_overflow(),
-                }
-            }
-            _ => unreachable!("only integers are supported by rust"),
-        }
-    }
-
-    fn binary_op_shift(first: &Self, second: &Self, operator: AbsBinaryOp) -> Self {
-        match (first, second) {
-            (
-                Self::Int {
-                    bit_rep: first,
-                    ty: first_ty,
-                },
-                Self::Int {
-                    bit_rep: second,
-                    ty: second_ty,
-                },
-            ) => {
-                assert!(
-                    !second_ty.is_signed || Self::is_positive(second.0, second_ty.bit_size),
-                    "Shifting by a negative value is not expected."
-                ); //TODO we can get rid of this assertion in the future
-
-                let result = match operator {
-                    // if second.0 is u128 or u64 & too big for usize, it will be usize::MAX
-                    AbsBinaryOp::Shl => first << second.0 as usize,
-                    AbsBinaryOp::Shr => first >> second.0 as usize,
-                    _ => unreachable!("invalid binop"),
-                };
-
-                let result = Wrapping(Self::to_size(result.0, first_ty));
-
-                debug_assert!(
-                    Self::in_bounds(result.0, first_ty),
-                    "result {} out of bounds",
-                    result.0
-                );
-
-                Self::Int {
-                    bit_rep: result,
-                    ty: *first_ty,
-                }
-            }
-            _ => unreachable!("Shifting is only possible on integers."),
-        }
-    }
-
-    fn binary_op_cmp(first: &Self, second: &Self, operator: BinaryOp) -> bool {
-        match operator {
-            BinaryOp::Eq => first.eq(second),
-            BinaryOp::Ne => first.ne(second),
-            _ => match (first, second) {
-                (
-                    Self::Int {
-                        bit_rep: first,
-                        ty: first_ty,
-                    },
-                    Self::Int {
-                        bit_rep: second,
-                        ty: second_ty,
-                    },
-                ) => {
-                    assert_eq!(*first_ty, *second_ty);
-
-                    if first_ty.is_signed {
-                        // `as i128` is a bitwise transmute
-                        let first = first.0 as i128;
-                        let second = second.0 as i128;
-                        match operator {
-                            BinaryOp::Lt => first < second,
-                            BinaryOp::Le => first <= second,
-                            BinaryOp::Ge => first >= second,
-                            BinaryOp::Gt => first > second,
-                            _ => unreachable!(),
-                        }
-                    } else {
-                        match operator {
-                            BinaryOp::Lt => first < second,
-                            BinaryOp::Le => first <= second,
-                            BinaryOp::Ge => first >= second,
-                            BinaryOp::Gt => first > second,
-                            _ => unreachable!(),
-                        }
-                    }
-                }
-
-                (Self::Float { .. }, Self::Float { .. }) => unimplemented!(),
-
-                _ => unimplemented!(),
-            },
-        }
-    }
-
-    fn is_positive(bit_rep: u128, size: u64) -> bool {
-        let mask: u128 = 1 << (size - 1);
-        bit_rep & mask == 0
-    }
-
-    /// determines whether value is valid for the type ty (not left zero-padded, for example)
-    fn in_bounds(value: u128, ty: &IntType) -> bool {
-        if ty.is_signed {
-            let max = ((1_u128 << (ty.bit_size - 1)) - 1) as i128;
-            let min = match ty.bit_size {
-                0..=127 => -(1_i128 << (ty.bit_size - 1)),
-                128 => i128::MIN,
-                129..=u64::MAX => panic!("unsupported integer size; too large"),
-            };
-            let value = value as i128;
-            value <= max && value >= min
-        } else {
-            let max = match ty.bit_size {
-                0..=127 => (1_u128 << ty.bit_size) - 1,
-                128 => u128::MAX,
-                129..=u64::MAX => panic!("unsupported integer size; too large"),
-            };
-            value <= max
-        }
-    }
-
-    /// Applies truncation and casting as necessary to keep value within ty's size bounds
-    /// (despite still being a u128 value)
-    fn to_size(value: u128, ty: &IntType) -> u128 {
-        if ty.bit_size == 128 {
-            return value;
-        }
-
-        // create a mask of all the significant bits, then truncate to size
-        let mask: u128 = (1_u128 << (ty.bit_size as u128)) - 1;
-        let value = value & mask;
-
-        if ty.is_signed {
-            Self::sign_ext(value, ty.bit_size)
-        } else {
-            value // implicit zero extension
-        }
-    }
-
-    /// A sign extension is equivalent to casting value to ty, then to u128
-    fn sign_ext(value: u128, bit_size: u64) -> u128 {
-        let bits_to_shift = 128 - bit_size;
-        let value = value as i128;
-        ((value << bits_to_shift) >> bits_to_shift) as u128
-    }
-
-    pub(crate) fn try_to_bit_rep(&self) -> Result<u128, &Self> {
-        match self {
-            Self::Bool(value) => Ok(*value as u128),
-            Self::Char(value) => Ok(*value as u128),
-            Self::Int { bit_rep, .. } => Ok(bit_rep.0),
-            Self::Float { bit_rep, .. } => Ok(*bit_rep),
-            Self::Addr(value) => Ok((*value as usize) as u128),
-        }
-    }
 }
 
 // ----------------------------------------------- //
@@ -573,28 +211,21 @@ pub(crate) struct ArrayValue {
     pub elements: Vec<ValueRef>,
 }
 
-impl ArrayValue {
-    #[inline]
-    pub fn len(&self) -> usize {
-        self.elements.len()
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct FatPtrValue {
+pub(super) struct FatPtrValue {
     pub address: ConcreteValueRef,
     pub metadata: ConcreteValueRef,
     pub ty: TypeId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, dm::From)]
-pub(crate) enum UnevalValue {
+pub(super) enum UnevalValue {
     Some,
     Lazy(RawConcreteValue),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RawConcreteValue(pub(crate) RawAddress, pub(crate) LazyTypeInfo);
+pub(super) struct RawConcreteValue(pub(crate) RawAddress, pub(crate) LazyTypeInfo);
 
 #[derive(Clone, Debug, PartialEq, Eq, dm::From)]
 pub(crate) enum LazyTypeInfo {
@@ -870,9 +501,9 @@ pub(crate) struct SliceIndex<I> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PorterValue {
-    pub(crate) as_concrete: RawConcreteValue,
-    pub(crate) sym_values: Vec<(PointerOffset, TypeId, SymValueRef)>,
+pub(super) struct PorterValue {
+    pub(super) as_concrete: RawConcreteValue,
+    pub(super) sym_values: Vec<(PointerOffset, TypeId, SymValueRef)>,
 }
 
 impl PorterValue {
@@ -997,6 +628,7 @@ mod guards {
             }
 
             impl<V: Clone> $name<V> {
+                #[allow(unused)]
                 #[inline]
                 pub fn clone_to(&self) -> V {
                     self.0.clone()
@@ -1420,6 +1052,345 @@ mod subtype {
             match self {
                 Self::Int { bit_rep, ty } => Some((&bit_rep.0, ty)),
                 _ => None,
+            }
+        }
+    }
+}
+
+mod ops {
+    use super::*;
+
+    impl ConstValue {
+        #[inline]
+        pub fn binary_op(first: &Self, second: &Self, operator: BinaryOp) -> Self {
+            use BinaryOp::*;
+            match operator {
+                Add | Sub | Mul | Div | Rem | BitXor | BitAnd | BitOr => {
+                    Self::binary_op_arithmetic(first, second, operator.try_into().unwrap())
+                }
+                Shl | Shr => Self::binary_op_shift(first, second, operator),
+
+                Eq | Lt | Le | Ne | Ge | Gt => ConstValue::Bool(Self::binary_op_cmp(
+                    first,
+                    second,
+                    operator.try_into().unwrap(),
+                )),
+                _ => unimplemented!("{:?} {:?} {:?}", first, second, operator),
+            }
+        }
+
+        #[inline]
+        pub fn integer_cast(this: &Self, to: IntType) -> Self {
+            match this {
+                /* This seems overly simple but when the number is originally cast to the u128 to get its bit representation,
+                 * this covers any of the casting that would need to be done here. If the original number was unsigned then
+                 * the leading bits of the u128 will be 0s and if it was signed then the leading bits will be 1s to handle
+                 * the sign extension. Now here when we track the actual cast that needs to be done, the target type has at
+                 * most 128 bits so we can just truncate the leading bits to get the correct bit representation.
+                 */
+                Self::Int { bit_rep, .. } => Self::Int {
+                    bit_rep: {
+                        // truncate leading bits as necessary
+                        let result = Wrapping(Self::to_size((*bit_rep).0, &to));
+                        debug_assert!(Self::in_bounds(result.0, &to), "result out of bounds");
+                        result
+                    },
+                    ty: to,
+                },
+                Self::Bool(value) => Self::Int {
+                    bit_rep: Wrapping(*value as u128),
+                    ty: to,
+                },
+                Self::Char(value) => Self::Int {
+                    bit_rep: Wrapping(*value as u128),
+                    ty: to,
+                },
+                Self::Float { .. } => todo!("Casting float to integer is not implemented yet."),
+                _ => unreachable!("Casting {this:?} to integer is not possible."),
+            }
+        }
+
+        fn binary_op_arithmetic(first: &Self, second: &Self, operator: BinaryOp) -> Self {
+            match (first, second) {
+                (
+                    Self::Int {
+                        bit_rep: first,
+                        ty: first_ty,
+                    },
+                    Self::Int {
+                        bit_rep: second,
+                        ty: second_ty,
+                    },
+                ) => {
+                    debug_assert_eq!(first_ty.bit_size, second_ty.bit_size);
+
+                    let result = match operator {
+                        BinaryOp::Add => first + second,
+                        BinaryOp::Sub => first - second,
+                        BinaryOp::Mul => first * second,
+                        BinaryOp::Div => first / second,
+                        BinaryOp::Rem => first % second,
+                        BinaryOp::BitXor => first ^ second,
+                        BinaryOp::BitAnd => first & second,
+                        BinaryOp::BitOr => first | second,
+                        _ => unreachable!(),
+                    };
+
+                    Self::Int {
+                        bit_rep: result,
+                        ty: *first_ty,
+                    }
+                }
+
+                (Self::Float { .. }, Self::Float { .. }) => unimplemented!(),
+
+                (Self::Bool(first_value), Self::Bool(second_value)) => {
+                    let result = match operator {
+                        BinaryOp::BitXor => first_value ^ second_value,
+                        BinaryOp::BitAnd => first_value & second_value,
+                        BinaryOp::BitOr => first_value | second_value,
+                        _ => unreachable!(),
+                    };
+                    Self::Bool(result)
+                }
+
+                _ => unreachable!(),
+            }
+        }
+
+        fn binary_op_with_overflow_arithmetic(
+            first: &Self,
+            second: &Self,
+            operator: AbsBinaryOp,
+        ) -> AdtValue {
+            /// use logic to determine whether the operation will overflow or underflow or be in bounds
+            fn checked_op(
+                operator: AbsBinaryOp,
+                first: &Wrapping<u128>,
+                second: &Wrapping<u128>,
+                ty @ IntType { is_signed, .. }: IntType, // pattern matching in function args, cool!
+            ) -> Option<u128> {
+                // we don't want any wrapping in this function, so we take the 0th parameter
+                let (first, second) = (first.0, second.0);
+                if is_signed {
+                    // casting between same sized integers is a no-op (see rust docs)
+                    let first = first as i128;
+                    let second = second as i128;
+
+                    let result = match operator {
+                        AbsBinaryOp::Add => first.checked_add(second),
+                        AbsBinaryOp::Sub => first.checked_sub(second),
+                        AbsBinaryOp::Mul => first.checked_mul(second),
+                        _ => unreachable!("unsupported by rust"),
+                    };
+
+                    if let Some(result) = result {
+                        // case: i128 has not overflowed, so result is valid. Ensure we're in our type's bounds
+                        if ConstValue::in_bounds(result as u128, &ty) {
+                            Some(result as u128)
+                        } else {
+                            None
+                        }
+                    } else {
+                        // case: i128 overflowed, so any smaller type also overflowed
+                        None
+                    }
+                } else {
+                    let result = match operator {
+                        AbsBinaryOp::Add => first.checked_add(second),
+                        AbsBinaryOp::Sub => first.checked_sub(second),
+                        AbsBinaryOp::Mul => first.checked_mul(second),
+                        _ => unreachable!("unsupported by rust"),
+                    };
+
+                    // If u128 overflows, any smaller type also overflows.
+                    result.filter(|result| {
+                        // u128 has not overflowed, check if we're higher than our max.
+                        ConstValue::in_bounds(*result, &ty)
+                    })
+                }
+            }
+
+            // only integers are supported, as per the rust docs:
+            // https://doc.rust-lang.org/beta/nightly-rustc/rustc_middle/mir/syntax/enum.Rvalue.html#variant.CheckedBinaryOp
+            match (first, second) {
+                (
+                    Self::Int {
+                        bit_rep: first,
+                        ty:
+                            ty @ IntType {
+                                bit_size: first_size,
+                                is_signed: first_signed,
+                            },
+                    },
+                    Self::Int {
+                        bit_rep: second,
+                        ty: ty_second @ IntType { .. },
+                    },
+                ) => {
+                    assert_eq!(*ty, *ty_second);
+
+                    let result = checked_op(operator, first, second, *ty);
+                    match result {
+                        Some(result) => {
+                            let ty = IntType {
+                                bit_size: *first_size,
+                                is_signed: *first_signed,
+                            };
+                            AdtValue::checked_success(Wrapping(result), ty)
+                        }
+                        None => AdtValue::checked_overflow(),
+                    }
+                }
+                _ => unreachable!("only integers are supported by rust"),
+            }
+        }
+
+        fn binary_op_shift(first: &Self, second: &Self, operator: BinaryOp) -> Self {
+            match (first, second) {
+                (
+                    Self::Int {
+                        bit_rep: first,
+                        ty: first_ty,
+                    },
+                    Self::Int {
+                        bit_rep: second,
+                        ty: second_ty,
+                    },
+                ) => {
+                    assert!(
+                        !second_ty.is_signed || Self::is_positive(second.0, second_ty.bit_size),
+                        "Shifting by a negative value is not expected."
+                    ); //TODO we can get rid of this assertion in the future
+
+                    let result = match operator {
+                        // if second.0 is u128 or u64 & too big for usize, it will be usize::MAX
+                        BinaryOp::Shl => first << second.0 as usize,
+                        BinaryOp::Shr => first >> second.0 as usize,
+                        _ => unreachable!("invalid binop"),
+                    };
+
+                    let result = Wrapping(Self::to_size(result.0, first_ty));
+
+                    debug_assert!(
+                        Self::in_bounds(result.0, first_ty),
+                        "result {} out of bounds",
+                        result.0
+                    );
+
+                    Self::Int {
+                        bit_rep: result,
+                        ty: *first_ty,
+                    }
+                }
+                _ => unreachable!("Shifting is only possible on integers."),
+            }
+        }
+
+        fn binary_op_cmp(first: &Self, second: &Self, operator: BinaryOp) -> bool {
+            match operator {
+                BinaryOp::Eq => first.eq(second),
+                BinaryOp::Ne => first.ne(second),
+                _ => match (first, second) {
+                    (
+                        Self::Int {
+                            bit_rep: first,
+                            ty: first_ty,
+                        },
+                        Self::Int {
+                            bit_rep: second,
+                            ty: second_ty,
+                        },
+                    ) => {
+                        assert_eq!(*first_ty, *second_ty);
+
+                        if first_ty.is_signed {
+                            // `as i128` is a bitwise transmute
+                            let first = first.0 as i128;
+                            let second = second.0 as i128;
+                            match operator {
+                                BinaryOp::Lt => first < second,
+                                BinaryOp::Le => first <= second,
+                                BinaryOp::Ge => first >= second,
+                                BinaryOp::Gt => first > second,
+                                _ => unreachable!(),
+                            }
+                        } else {
+                            match operator {
+                                BinaryOp::Lt => first < second,
+                                BinaryOp::Le => first <= second,
+                                BinaryOp::Ge => first >= second,
+                                BinaryOp::Gt => first > second,
+                                _ => unreachable!(),
+                            }
+                        }
+                    }
+
+                    (Self::Float { .. }, Self::Float { .. }) => unimplemented!(),
+
+                    _ => unimplemented!(),
+                },
+            }
+        }
+
+        fn is_positive(bit_rep: u128, size: u64) -> bool {
+            let mask: u128 = 1 << (size - 1);
+            bit_rep & mask == 0
+        }
+
+        /// determines whether value is valid for the type ty (not left zero-padded, for example)
+        fn in_bounds(value: u128, ty: &IntType) -> bool {
+            if ty.is_signed {
+                let max = ((1_u128 << (ty.bit_size - 1)) - 1) as i128;
+                let min = match ty.bit_size {
+                    0..=127 => -(1_i128 << (ty.bit_size - 1)),
+                    128 => i128::MIN,
+                    129..=u64::MAX => panic!("unsupported integer size; too large"),
+                };
+                let value = value as i128;
+                value <= max && value >= min
+            } else {
+                let max = match ty.bit_size {
+                    0..=127 => (1_u128 << ty.bit_size) - 1,
+                    128 => u128::MAX,
+                    129..=u64::MAX => panic!("unsupported integer size; too large"),
+                };
+                value <= max
+            }
+        }
+
+        /// Applies truncation and casting as necessary to keep value within ty's size bounds
+        /// (despite still being a u128 value)
+        fn to_size(value: u128, ty: &IntType) -> u128 {
+            if ty.bit_size == 128 {
+                return value;
+            }
+
+            // create a mask of all the significant bits, then truncate to size
+            let mask: u128 = (1_u128 << (ty.bit_size as u128)) - 1;
+            let value = value & mask;
+
+            if ty.is_signed {
+                Self::sign_ext(value, ty.bit_size)
+            } else {
+                value // implicit zero extension
+            }
+        }
+
+        /// A sign extension is equivalent to casting value to ty, then to u128
+        fn sign_ext(value: u128, bit_size: u64) -> u128 {
+            let bits_to_shift = 128 - bit_size;
+            let value = value as i128;
+            ((value << bits_to_shift) >> bits_to_shift) as u128
+        }
+
+        pub(crate) fn try_to_bit_rep(&self) -> Result<u128, &Self> {
+            match self {
+                Self::Bool(value) => Ok(*value as u128),
+                Self::Char(value) => Ok(*value as u128),
+                Self::Int { bit_rep, .. } => Ok(bit_rep.0),
+                Self::Float { bit_rep, .. } => Ok(*bit_rep),
+                Self::Addr(value) => Ok((*value as usize) as u128),
             }
         }
     }

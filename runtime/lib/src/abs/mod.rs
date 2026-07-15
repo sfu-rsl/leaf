@@ -1,5 +1,4 @@
 use derive_more as dm;
-use serde::Serialize;
 
 pub(crate) mod backend;
 pub(crate) mod expr;

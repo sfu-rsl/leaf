@@ -194,16 +194,6 @@ impl RawPointerVariableState {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    fn drop_region(&mut self, region: MemoryRegion) {
-        let addr = region.addr;
-        let Some(size) = NonZero::new(region.size) else {
-            // ZSTs are not supported
-            return;
-        };
-        self.memory.erase_objects(addr, size);
-    }
-
-    #[tracing::instrument(level = "debug", skip(self))]
     fn erase_region(&mut self, region: MemoryRegion) -> bool {
         let addr = region.addr;
         let Some(size) = NonZero::new(region.size) else {

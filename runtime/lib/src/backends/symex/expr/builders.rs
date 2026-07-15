@@ -59,16 +59,16 @@ mod toplevel {
     /// or the ones that are fully based on concrete values.
     /// NOTE: In an ideal case, fully concrete expressions should not be asked to created. So in
     /// the future, this top-level builder will be reduced to the symbolic builder.
-    pub(crate) struct TopLevelBuilder
-    where
-        SymbolicBuilder: SymValueRefExprBuilder,
-    {
+    pub(crate) struct TopLevelBuilder {
         sym_builder: SymbolicBuilder,
         conc_builder: ConcreteBuilder,
     }
 
     impl TopLevelBuilder {
-        pub(super) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self {
+        pub(super) fn new(type_manager: Rc<dyn TypeDatabase>) -> Self
+        where
+            SymbolicBuilder: SymValueRefExprBuilder,
+        {
             Self {
                 sym_builder: SymbolicBuilder::new(type_manager.clone()),
                 conc_builder: ConcreteBuilder::default(),
@@ -196,13 +196,19 @@ mod symbolic {
         >,
     >;
 
+    type BaseSymbolicUnaryBuilder =
+        Chained<FatPtrPorterExtractor, Chained<MiscSimplifier, CoreBuilder>>;
+
     type BaseSymbolicCastBuilder = Chained<FatPtrPorterExtractor, CoreBuilder>;
 
     type FunnelShiftBuilder = FunnelShiftSymbolicTranslator<
         Composite<BaseSymbolicBinaryBuilder, (), (), BaseSymbolicCastBuilder>,
     >;
 
-    struct BoundTester
+    type BaseSymbolicTernaryExprBuilder =
+        Chained<FunnelShiftBuilder, Chained<ConstSimplifier, CoreBuilder>>;
+
+    struct _AssertBounds
     where
         FunnelShiftBuilder:
             for<'a> TernaryExprBuilder<ExprRefTriple<'a> = SymTernaryOperands, Expr<'a> = ValueRef>,
@@ -210,9 +216,9 @@ mod symbolic {
             for<'a> BinaryExprBuilder<ExprRefPair<'a> = SymBinaryOperands, Expr<'a> = ValueRef>,
         BaseSymbolicBuilder:
             for<'a> UnaryExprBuilder<ExprRef<'a> = SymValueRef, Expr<'a> = ValueRef>,
-        BaseSymbolicBuilder:
+        BaseSymbolicTernaryExprBuilder:
             for<'a> TernaryExprBuilder<ExprRefTriple<'a> = SymTernaryOperands, Expr<'a> = ValueRef>,
-        BaseSymbolicBuilder: for<'a> CastExprBuilder<
+        BaseSymbolicCastBuilder: for<'a> CastExprBuilder<
                 ExprRef<'a> = SymValueRef,
                 Expr<'a> = ValueRef,
                 Metadata<'a> = LazyTypeInfo,
@@ -224,13 +230,9 @@ mod symbolic {
         BaseSymbolicBuilder: SymValueRefExprBuilder;
 
     pub(crate) type BaseSymbolicBuilder = Composite<
-        /*Binary:*/
         BaseSymbolicBinaryBuilder,
-        /*Unary:*/
-        Chained<FatPtrPorterExtractor, Chained<MiscSimplifier, CoreBuilder>>,
-        /*Ternary:*/
-        Chained<FunnelShiftBuilder, Chained<ConstSimplifier, CoreBuilder>>,
-        /*Cast:*/
+        BaseSymbolicUnaryBuilder,
+        BaseSymbolicTernaryExprBuilder,
         BaseSymbolicCastBuilder,
     >;
 
@@ -242,7 +244,8 @@ mod symbolic {
             let fat_ptr_extractor = FatPtrPorterExtractor {
                 type_manager: type_manager.clone(),
             };
-            let cast_expr_builder = Chained::new(fat_ptr_extractor.clone(), Default::default());
+            let cast_expr_builder =
+                BaseSymbolicCastBuilder::new(fat_ptr_extractor.clone(), Default::default());
             let funnel_sh_translator = FunnelShiftBuilder::new(
                 type_manager.clone(),
                 Composite {
@@ -847,6 +850,7 @@ mod adapters {
         type Expr<'a> = ValueRef;
         type Metadata<'a> = CastMetadata;
 
+        #[inline]
         fn cast<'a, 'b>(
             &mut self,
             operand: Self::ExprRef<'a>,
@@ -869,9 +873,7 @@ mod adapters {
         use super::*;
 
         #[derive(Default, Clone, dm::Deref, dm::DerefMut)]
-        pub(crate) struct ImpliedValueRefExprBuilderAdapter<T: ValueRefExprBuilder>(
-            pub(in super::super) RRef<T>,
-        );
+        pub(crate) struct ImpliedValueRefExprBuilderAdapter<T>(pub(in super::super) RRef<T>);
 
         impl<T: ValueRefExprBuilder> BinaryExprBuilder for ImpliedValueRefExprBuilderAdapter<T> {
             type ExprRefPair<'a> = (Implied<ValueRef>, Implied<ValueRef>);
@@ -1994,19 +1996,19 @@ mod simp {
             match operands.expr().operator {
                 // (x + a) + b = x + (a + b)
                 Add => {
-                    let folded_value = ConstValue::binary_op_arithmetic(a, b, Add);
+                    let folded_value = ConstValue::binary_op(a, b, Add);
                     Self::shortcut(operands.fold_expr(folded_value))
                 }
                 Sub => {
                     match &operands.expr().operands {
                         // (x - a) + b = x - (a - b)
                         BinaryOperands::Orig { .. } => {
-                            let folded_value = ConstValue::binary_op_arithmetic(a, b, Sub);
+                            let folded_value = ConstValue::binary_op(a, b, Sub);
                             Self::shortcut(operands.fold_expr(folded_value))
                         }
                         // (a - x) + b = (a + b) - x
                         BinaryOperands::Rev { .. } => {
-                            let folded_value = ConstValue::binary_op_arithmetic(a, b, Add);
+                            let folded_value = bin_op(a, b, Add);
                             Self::shortcut(operands.fold_expr(folded_value))
                         }
                     }
@@ -2027,19 +2029,19 @@ mod simp {
                     match operands.expr().operator {
                         // (x + a) - b = x + (a - b)
                         Add => {
-                            let folded_value = ConstValue::binary_op_arithmetic(a, b, Sub);
+                            let folded_value = bin_op(a, b, Sub);
                             Self::shortcut(operands.fold_expr(folded_value))
                         }
                         Sub => {
                             match operands.expr().operands {
                                 // (x - a) - b = x - (a + b)
                                 BinaryOperands::Orig { .. } => {
-                                    let folded_value = ConstValue::binary_op_arithmetic(a, b, Add);
+                                    let folded_value = bin_op(a, b, Add);
                                     Self::shortcut(operands.fold_expr(folded_value))
                                 }
                                 // (a - x) - b = (a - b) - x
                                 BinaryOperands::Rev { .. } => {
-                                    let folded_value = ConstValue::binary_op_arithmetic(a, b, Sub);
+                                    let folded_value = bin_op(a, b, Sub);
                                     Self::shortcut(operands.fold_expr(folded_value))
                                 }
                             }
@@ -2050,19 +2052,19 @@ mod simp {
                 BinaryOperands::Rev { .. } => match operands.expr().operator {
                     // b - (x + a) = (b - a) - x
                     Add => {
-                        let folded_value = ConstValue::binary_op_arithmetic(b, a, Sub);
+                        let folded_value = bin_op(b, a, Sub);
                         Self::shortcut(operands.new_expr(folded_value, Sub, true))
                     }
                     Sub => {
                         match operands.expr().operands {
                             // b - (x - a) = (b + a) - x
                             BinaryOperands::Orig { .. } => {
-                                let folded_value = ConstValue::binary_op_arithmetic(b, a, Add);
+                                let folded_value = bin_op(b, a, Add);
                                 Self::shortcut(operands.new_expr(folded_value, Sub, true))
                             }
                             // b - (a - x) = x + (b - a)
                             BinaryOperands::Rev { .. } => {
-                                let folded_value = ConstValue::binary_op_arithmetic(b, a, Sub);
+                                let folded_value = bin_op(b, a, Sub);
                                 Self::shortcut(operands.new_expr(folded_value, Add, false))
                             }
                         }
@@ -2082,7 +2084,7 @@ mod simp {
             match operands.expr().operator {
                 // (x * a) * b = x * (a * b)
                 Mul => {
-                    let folded_value = ConstValue::binary_op_arithmetic(a, b, Mul);
+                    let folded_value = bin_op(a, b, Mul);
                     Self::shortcut(operands.fold_expr(folded_value))
                 }
                 _ => Err(operands),
@@ -2111,7 +2113,7 @@ mod simp {
             match operands.expr().operator {
                 // (x & a) & b = x & (a & b)
                 BitAnd => {
-                    let folded_value = ConstValue::binary_op_arithmetic(a, b, BitAnd);
+                    let folded_value = bin_op(a, b, BitAnd);
                     Self::shortcut(operands.fold_expr(folded_value))
                 }
                 _ => Err(operands),
@@ -2124,7 +2126,7 @@ mod simp {
             match operands.expr().operator {
                 // (x | a) | b = x | (a | b)
                 BitOr => {
-                    let folded_value = ConstValue::binary_op_arithmetic(a, b, BitOr);
+                    let folded_value = bin_op(a, b, BitOr);
                     Self::shortcut(operands.fold_expr(folded_value))
                 }
                 _ => Err(operands),
@@ -2137,7 +2139,7 @@ mod simp {
             match operands.expr().operator {
                 // (x ^ a) ^ b = x ^ (a ^ b)
                 BitXor => {
-                    let folded_value = ConstValue::binary_op_arithmetic(a, b, BitXor);
+                    let folded_value = bin_op(a, b, BitXor);
                     Self::shortcut(operands.fold_expr(folded_value))
                 }
                 _ => Err(operands),
@@ -2163,7 +2165,7 @@ mod simp {
                                 debug_assert!(a.try_to_bit_rep().unwrap() < bits);
                                 debug_assert!(b.try_to_bit_rep().unwrap() < bits);
                             }
-                            let folded_value = ConstValue::binary_op_arithmetic(a, b, Add);
+                            let folded_value = bin_op(a, b, Add);
                             Self::map(operands.fold_expr(folded_value))
                         }
                         BinaryOperands::Rev { .. } => Err(operands),
@@ -2206,7 +2208,7 @@ mod simp {
                                 debug_assert!(a.try_to_bit_rep().unwrap() < bits);
                                 debug_assert!(b.try_to_bit_rep().unwrap() < bits);
                             }
-                            let folded_value = ConstValue::binary_op_arithmetic(a, b, Add);
+                            let folded_value = bin_op(a, b, Add);
                             Self::map(operands.fold_expr(folded_value))
                         }
                         BinaryOperands::Rev { .. } => Err(operands),
@@ -2313,6 +2315,11 @@ mod simp {
             // FIXME: Structural limitation to fold offsets.
             Err(operands)
         }
+    }
+
+    #[inline]
+    fn bin_op(a: &ConstValue, b: &ConstValue, op: SymExBinaryOp) -> ConstValue {
+        ConstValue::binary_op(a, b, op)
     }
 
     #[derive(Clone, Default)]
@@ -2606,8 +2613,7 @@ mod shift {
                     let second = y;
                     let second = match second.as_ref() {
                         Value::Concrete(ConcreteValue::Const(second @ ConstValue::Int { .. })) => {
-                            ConstValue::binary_op_arithmetic(second, &mask, SymExBinaryOp::BitAnd)
-                                .to_value_ref()
+                            ConstValue::binary_op(second, &mask, BinaryOp::BitAnd).to_value_ref()
                         }
                         Value::Concrete(..) => {
                             panic!("Only const integer values are expected: {:?}", second);
@@ -2776,11 +2782,11 @@ mod translators {
                 let first = expect_const_value(&first);
                 let second = expect_const_value(&second);
 
-                ConstValue::binary_op_arithmetic(
-                    &ConstValue::binary_op_shift(
+                ConstValue::binary_op(
+                    &&ConstValue::binary_op(
                         &ConstValue::integer_cast(first, double_ty.0),
                         &ConstValue::integer_cast(&ConstValue::from(ty.bit_size), double_ty.0),
-                        AbsBinaryOp::Shl,
+                        BinaryOp::Shl,
                     ),
                     &ConstValue::integer_cast(second, double_ty.0),
                     BinaryOp::BitOr,
@@ -2841,10 +2847,10 @@ mod translators {
                 if !shifted.is_symbolic() {
                     let shifted = expect_const_value(&shifted);
 
-                    ConstValue::binary_op_shift(
+                    ConstValue::binary_op(
                         &shifted,
                         &ConstValue::new_int(ty.bit_size, double_ty),
-                        AbsBinaryOp::ShrUnchecked,
+                        BinaryOp::Shr,
                     )
                     .to_value_ref()
                 } else {

@@ -101,7 +101,7 @@ impl PreconditionConstraints {
         }
     }
 
-    pub fn merge(&self) -> Cow<NonEmptyConstraints> {
+    pub fn merge(&self) -> Cow<'_, NonEmptyConstraints> {
         match self {
             Self::Whole(antecedents) => Cow::Borrowed(antecedents),
             Self::Refined(refined) => Cow::Owned({

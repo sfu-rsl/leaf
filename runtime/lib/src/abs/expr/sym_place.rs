@@ -176,7 +176,7 @@ impl<I, V> SymbolicReadTree<I, V> {
     #[inline]
     pub(crate) fn map_leaves<'m, J, W>(
         &self,
-        f_index: impl (Fn(&I) -> J),
+        f_index: impl Fn(&I) -> J,
         mut f: impl FnMut(&V) -> W,
     ) -> SymbolicReadTree<J, W>
     where
