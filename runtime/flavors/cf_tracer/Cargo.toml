@@ -10,4 +10,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
-runtimex = { path = "../../backends", features = ["runtime_access_raw_ptr"] }
+backend = { path = "../../backends/cf_tracer", package = "runtime_backend_cf_tracer", features = [
+    "runtime_access_raw_ptr",
+] }
