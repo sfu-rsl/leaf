@@ -2,7 +2,7 @@ use std::fmt::{Display, Write};
 
 use common::log_info;
 
-pub(crate) fn log_json<'a, Id: 'a + Display, Val: 'a + Display>(
+pub fn log_json<'a, Id: 'a + Display, Val: 'a + Display>(
     answers: impl Iterator<Item = (&'a Id, &'a Val)>,
 ) {
     let mut answers_str = String::new();

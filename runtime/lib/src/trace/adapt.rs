@@ -43,7 +43,7 @@ where
     }
 }
 
-pub(crate) trait TraceManagerExt<STo, VTo, CTo>: TraceManager<STo, VTo, CTo> {
+pub trait TraceManagerExt<STo, VTo, CTo>: TraceManager<STo, VTo, CTo> {
     fn adapt<SFrom, VFrom, CFrom, SF, VF, CF>(
         self,
         step_adaptor: SF,

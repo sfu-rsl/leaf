@@ -6,7 +6,7 @@ use crate::utils::file::JsonLinesFormatter;
 
 use super::{Constraint, StepInspector};
 
-pub(crate) struct StreamDumperStepInspector<S: Serialize, V: Serialize, C: Serialize, Ser> {
+pub struct StreamDumperStepInspector<S: Serialize, V: Serialize, C: Serialize, Ser> {
     serializer: Ser,
     _phantom: core::marker::PhantomData<(S, V, C)>,
 }

@@ -1,5 +1,6 @@
-pub(crate) type RRef<T> = std::rc::Rc<std::cell::RefCell<T>>;
+pub type RRef<T> = std::rc::Rc<std::cell::RefCell<T>>;
 
+#[macro_export]
 macro_rules! check_sym_value_loss {
     () => {
         cfg!(any(
@@ -9,4 +10,4 @@ macro_rules! check_sym_value_loss {
         ))
     };
 }
-pub(crate) use check_sym_value_loss;
+pub use check_sym_value_loss;

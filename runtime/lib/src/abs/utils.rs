@@ -7,7 +7,7 @@ use crate::utils::{HasIndex, Indexed};
 
 use super::{BasicBlockIndex, BasicBlockLocation, HasTags, Tag};
 
-pub(crate) trait BasicBlockLocationExt {
+pub trait BasicBlockLocationExt {
     fn at_basic_block(self, index: BasicBlockIndex) -> BasicBlockLocation<Self>
     where
         Self: Copy;
@@ -24,7 +24,7 @@ impl<T> BasicBlockLocationExt for T {
 }
 
 #[derive(Clone, Debug, dm::Deref)]
-pub(crate) struct Tagged<T> {
+pub struct Tagged<T> {
     #[deref]
     pub value: T,
     pub tags: Vec<Tag>,

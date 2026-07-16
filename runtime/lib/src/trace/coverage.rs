@@ -9,13 +9,13 @@ use crate::abs::ConstraintKind;
 use super::{Constraint, StepInspector};
 
 #[derive(Default, Serialize)]
-pub(crate) struct CoverageData {
+pub struct CoverageData {
     count: usize,
     last_depth: usize,
 }
 
 #[derive(dm::Deref, dm::DerefMut, Serialize)]
-pub(crate) struct Decisions<C>(Vec<(ConstraintKind<C>, CoverageData)>);
+pub struct Decisions<C>(Vec<(ConstraintKind<C>, CoverageData)>);
 
 impl<C> Default for Decisions<C> {
     fn default() -> Self {
@@ -23,14 +23,14 @@ impl<C> Default for Decisions<C> {
     }
 }
 
-pub(crate) struct BranchCoverageStepInspector<S: Eq + Hash, C> {
+pub struct BranchCoverageStepInspector<S: Eq + Hash, C> {
     map: HashMap<S, Decisions<C>>,
     current_depth: usize,
     _phantom: PhantomData<()>,
 }
 
 impl<S: Eq + Hash, C> BranchCoverageStepInspector<S, C> {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             map: Default::default(),
             current_depth: 0,
@@ -38,7 +38,7 @@ impl<S: Eq + Hash, C> BranchCoverageStepInspector<S, C> {
         }
     }
 
-    pub(crate) fn get_coverage(&self) -> &HashMap<S, Decisions<C>> {
+    pub fn get_coverage(&self) -> &HashMap<S, Decisions<C>> {
         &self.map
     }
 }

@@ -2,15 +2,15 @@ use crate::utils::alias::RRef;
 
 use super::{Constraint, TraceManager};
 
-pub(crate) trait StepInspector<S, V, C> {
+pub trait StepInspector<S, V, C> {
     fn inspect(&mut self, step: &S, constraint: Constraint<&V, &C>);
 }
 
-pub(crate) trait TraceInspector<S, V, C> {
+pub trait TraceInspector<S, V, C> {
     fn inspect(&mut self, steps: &[S], constraints: &[Constraint<V, C>]);
 }
 
-pub(crate) type NoopInspector = ();
+pub type NoopInspector = ();
 
 impl<S, V, C> StepInspector<S, V, C> for NoopInspector {
     fn inspect(&mut self, _step: &S, _constraint: Constraint<&V, &C>) {}
@@ -83,13 +83,7 @@ impl<S, V, C, I: TraceInspector<S, V, C>> TraceInspector<S, V, C> for Option<I> 
     }
 }
 
-pub(crate) struct InspectedTraceManager<
-    S,
-    V,
-    C,
-    M: TraceManager<S, V, C>,
-    I: StepInspector<S, V, C>,
-> {
+pub struct InspectedTraceManager<S, V, C, M: TraceManager<S, V, C>, I: StepInspector<S, V, C>> {
     inner: M,
     inspector: I,
     _phantom: core::marker::PhantomData<(S, V, C)>,
@@ -104,7 +98,7 @@ impl<S, V, C, M: TraceManager<S, V, C>, I: StepInspector<S, V, C>> TraceManager<
     }
 }
 
-pub(crate) struct StaticCompoundTraceInspector<
+pub struct StaticCompoundTraceInspector<
     S,
     V,
     C,
@@ -137,7 +131,7 @@ impl<S, V, C, I: TraceInspector<S, V, C>, J: TraceInspector<S, V, C>> TraceInspe
     }
 }
 
-pub(crate) trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
+pub trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
     fn inspected_by(self, inspector: impl StepInspector<S, V, C>) -> impl TraceManager<S, V, C>
     where
         Self: Sized;

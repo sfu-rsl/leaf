@@ -8,11 +8,11 @@ use crate::abs::place::{
 
 use super::*;
 
-pub(crate) struct DefaultPlaceBuilder<B = Local, I = B, P = Projection<I>> {
-    _phantom: PhantomData<(B, I, P)>,
+pub struct DefaultPlaceBuilder<B = Local, I = B, PI = I> {
+    _phantom: PhantomData<(B, I, PI)>,
 }
 
-impl<B, I, P> Default for DefaultPlaceBuilder<B, I, P> {
+impl<B, I, PI> Default for DefaultPlaceBuilder<B, I, PI> {
     fn default() -> Self {
         Self {
             _phantom: Default::default(),
@@ -20,19 +20,31 @@ impl<B, I, P> Default for DefaultPlaceBuilder<B, I, P> {
     }
 }
 
-impl<B, I, P> PlaceBuilder for DefaultPlaceBuilder<B, I, P>
+pub trait CoerceIndexPlace<I> {
+    fn coerce_from(index_place: I) -> Self
+    where
+        Self: Sized;
+}
+
+impl<P> CoerceIndexPlace<P> for P {
+    fn coerce_from(index_place: P) -> Self {
+        index_place
+    }
+}
+
+impl<B, I, PI> PlaceBuilder for DefaultPlaceBuilder<B, I, PI>
 where
     B: From<Local>,
-    P: From<Projection<I>>,
+    PI: CoerceIndexPlace<I>,
     B: HasMetadata<Metadata = DefaultPlaceMetadata>,
     for<'a> B: 'a,
     for<'a> I: 'a,
-    for<'a> P: 'a,
+    for<'a> PI: 'a,
 {
-    type Place = GenericPlaceWithMetadata<B, P, DefaultPlaceMetadata>;
+    type Place = GenericPlaceWithMetadata<B, Projection<PI>, DefaultPlaceMetadata>;
     type Index = I;
     type Projector<'a>
-        = DefaultPlaceProjectionHandler<'a, B, P, I>
+        = DefaultPlaceProjectionHandler<'a, B, PI, I>
     where
         Self::Place: 'a;
     type MetadataHandler<'a> = DefaultMetadataHandler<'a, Self::Place>;
@@ -57,13 +69,13 @@ where
     }
 }
 
-pub(crate) struct DefaultPlaceProjectionHandler<'a, B, P, I> {
-    place: &'a mut Place<B, P>,
+pub struct DefaultPlaceProjectionHandler<'a, B, PI, I> {
+    place: &'a mut Place<B, Projection<PI>>,
     _phantom: PhantomData<I>,
 }
 
-impl<'a, B, P, I> DefaultPlaceProjectionHandler<'a, B, P, I> {
-    pub(crate) fn new(place: &'a mut Place<B, P>) -> Self {
+impl<'a, B, PI, I> DefaultPlaceProjectionHandler<'a, B, PI, I> {
+    pub(crate) fn new(place: &'a mut Place<B, Projection<PI>>) -> Self {
         Self {
             place,
             _phantom: Default::default(),
@@ -71,16 +83,16 @@ impl<'a, B, P, I> DefaultPlaceProjectionHandler<'a, B, P, I> {
     }
 }
 
-impl<'a, B, P, I> PlaceProjector for DefaultPlaceProjectionHandler<'a, B, P, I>
+impl<'a, B, PI, I> PlaceProjector for DefaultPlaceProjectionHandler<'a, B, PI, I>
 where
-    P: From<Projection<I>>,
+    PI: CoerceIndexPlace<I>,
 {
     type Index = I;
 
     fn by(self, projection: PlaceInfoProjection<Self::Index>) {
         match projection {
             PlaceInfoProjection::Projection(projection) => {
-                self.place.add_projection(projection.into())
+                self.place.add_projection(projection.map(PI::coerce_from))
             }
             PlaceInfoProjection::Some => {
                 log_info!("Place info is not fully available.");
@@ -100,12 +112,12 @@ impl PlaceMetadataHandler for () {
     fn set_size(self, _byte_size: TypeSize) {}
 }
 
-pub(crate) struct DefaultMetadataHandler<'a, P> {
+pub struct DefaultMetadataHandler<'a, P> {
     place: &'a mut P,
 }
 
 impl<'a, P> DefaultMetadataHandler<'a, P> {
-    pub(crate) fn new(place: &'a mut P) -> Self {
+    pub fn new(place: &'a mut P) -> Self {
         Self { place }
     }
 }
@@ -130,13 +142,13 @@ impl<P: HasMetadata<Metadata = DefaultPlaceMetadata>> PlaceMetadataHandler
     }
 }
 
-pub(crate) mod noop {
+pub mod noop {
     use super::*;
 
-    pub(crate) type NullPlace = ();
+    pub type NullPlace = ();
 
     #[derive(Default)]
-    pub(crate) struct NoOpPlaceBuilder<P, I>(PhantomData<(P, I)>);
+    pub struct NoOpPlaceBuilder<P, I>(PhantomData<(P, I)>);
 
     impl<P: Default, I> PlaceBuilder for NoOpPlaceBuilder<P, I> {
         type Place = P;
@@ -164,7 +176,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpPlaceHandler<PI, P>(PhantomData<(PI, P)>);
+    pub struct NoOpPlaceHandler<PI, P>(PhantomData<(PI, P)>);
 
     impl<PI, P: Default> PlaceHandler for NoOpPlaceHandler<PI, P> {
         type PlaceInfo<'a> = PI;
@@ -180,7 +192,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpOperandHandler<P, O>(PhantomData<(P, O)>);
+    pub struct NoOpOperandHandler<P, O>(PhantomData<(P, O)>);
 
     impl<P, O: Default> OperandHandler for NoOpOperandHandler<P, O> {
         type Operand = O;
@@ -208,7 +220,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpAssignmentHandler<P, O>(PhantomData<(P, O)>);
+    pub struct NoOpAssignmentHandler<P, O>(PhantomData<(P, O)>);
 
     impl<P, O> AssignmentHandler for NoOpAssignmentHandler<P, O> {
         type Place = P;
@@ -290,7 +302,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpLifetimeHandler;
+    pub struct NoOpLifetimeHandler;
 
     impl LifetimeHandler for NoOpLifetimeHandler {
         type Place = NullPlace;
@@ -301,7 +313,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpRawMemoryHandler<P, O>(PhantomData<(P, O)>);
+    pub struct NoOpRawMemoryHandler<P, O>(PhantomData<(P, O)>);
 
     impl<P: Default, O: Default> RawMemoryHandler for NoOpRawMemoryHandler<P, O> {
         type Place = P;
@@ -381,7 +393,7 @@ pub(crate) mod noop {
         }
     }
 
-    pub(crate) struct NoOpConstraintHandler<O>(PhantomData<O>);
+    pub struct NoOpConstraintHandler<O>(PhantomData<O>);
 
     impl<O> Default for NoOpConstraintHandler<O> {
         fn default() -> Self {
@@ -390,7 +402,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpSwitchHandler;
+    pub struct NoOpSwitchHandler;
 
     impl<O> ConstraintHandler for NoOpConstraintHandler<O> {
         type Operand = O;
@@ -422,7 +434,7 @@ pub(crate) mod noop {
     }
 
     #[derive(Default)]
-    pub(crate) struct NoOpAnnotationHandler;
+    pub struct NoOpAnnotationHandler;
 
     impl AnnotationHandler for NoOpAnnotationHandler {
         fn push_tag(self, _tag: Tag) {}

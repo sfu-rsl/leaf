@@ -3,7 +3,7 @@ pub use common::{
     types::{FieldIndex, PointerOffset, VariantIndex},
 };
 
-pub(crate) trait TypeInfoExt {
+pub trait TypeInfoExt {
     fn as_single_variant(&self) -> Option<&VariantInfo>;
     fn expect_single_variant(&self) -> &VariantInfo;
     fn as_array(&self) -> Option<&ArrayShape>;
@@ -20,7 +20,7 @@ pub(crate) trait TypeInfoExt {
     ) -> Self;
 }
 
-pub(crate) trait FieldsShapeInfoExt {
+pub trait FieldsShapeInfoExt {
     fn as_array(&self) -> Option<&ArrayShape>;
     fn expect_array(&self) -> &ArrayShape;
     fn as_struct(&self) -> Option<&StructShape>;
@@ -138,7 +138,7 @@ impl FieldsShapeInfoExt for FieldsShapeInfo {
     }
 }
 
-pub(crate) trait TypeLayoutResolver<'t> {
+pub trait TypeLayoutResolver<'t> {
     fn resolve_array_elements(
         &self,
         type_id: TypeId,
@@ -214,7 +214,7 @@ impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutReso
     }
 }
 
-pub(super) trait TypeLayoutResolverExt<'t>: TypeDatabase<'t> {
+pub trait TypeLayoutResolverExt<'t>: TypeDatabase<'t> {
     fn layouts<'a>(&'a self) -> impl TypeLayoutResolver<'t> + 'a {
         LayoutResolver(self)
     }

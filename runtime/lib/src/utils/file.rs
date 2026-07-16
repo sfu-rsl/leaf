@@ -3,31 +3,41 @@ use std::{fs, io, path::PathBuf};
 use serde::Deserialize;
 
 #[derive(Debug, Default, Clone, Deserialize)]
-pub(crate) struct FileGenConfig {
+pub struct FileGenConfig {
     /// The folder to write file outputs to.
     /// Defaults to the current working directory.
     #[serde(default)]
-    pub directory: Option<std::path::PathBuf>,
+    directory: Option<std::path::PathBuf>,
     /// The format to write the file outputs in.
     #[serde(default)]
-    pub format: FileFormat,
+    format: FileFormat,
     /// The prefix to use for the name of the output files.
     /// Translates to the file name if a single file gets generated.
     #[serde(default)]
-    pub prefix: Option<String>,
+    prefix: Option<String>,
     /// The extension to use for the name of the output files.
     #[serde(default)]
-    pub extension: Option<String>,
+    extension: Option<String>,
 }
 
 impl FileGenConfig {
-    pub(crate) fn dir_or_default(&self) -> PathBuf {
+    #[inline]
+    pub fn format(&self) -> FileFormat {
+        self.format
+    }
+
+    #[inline]
+    pub fn prefix(&self) -> Option<&str> {
+        self.prefix.as_ref().map(|s| s.as_str())
+    }
+
+    pub fn dir_or_default(&self) -> PathBuf {
         self.directory.clone().unwrap_or_else(|| {
             std::env::current_dir().expect("Cannot get current working directory")
         })
     }
 
-    pub(crate) fn ensure_dir(&self) -> io::Result<PathBuf> {
+    pub fn ensure_dir(&self) -> io::Result<PathBuf> {
         let dir = self.dir_or_default();
         fs::create_dir_all(&dir).map(|_| dir)
     }
@@ -38,7 +48,7 @@ impl FileGenConfig {
     /// - If multiple files are generated, it is used as a prefix for each file.
     /// So if you want to generate a single file, and you want to give it a default name,
     /// you use `default_prefix` and `name` as `None`.
-    pub(crate) fn single_file_path(&self, default_prefix: &str, name: Option<String>) -> PathBuf {
+    pub fn single_file_path(&self, default_prefix: &str, name: Option<String>) -> PathBuf {
         let filename = format!(
             "{}{}",
             self.prefix
@@ -53,7 +63,7 @@ impl FileGenConfig {
     }
 
     #[tracing::instrument(level = "debug")]
-    pub(crate) fn open_or_create_single(
+    pub fn open_or_create_single(
         &self,
         default_prefix: &str,
         name: Option<String>,
@@ -64,7 +74,7 @@ impl FileGenConfig {
     }
 
     #[tracing::instrument(level = "debug")]
-    pub(crate) fn open_or_create_single_with_path(
+    pub fn open_or_create_single_with_path(
         &self,
         default_prefix: &str,
         name: Option<String>,
@@ -81,7 +91,7 @@ impl FileGenConfig {
         })
     }
 
-    pub(crate) fn extension_or_default(&self) -> &str {
+    pub fn extension_or_default(&self) -> &str {
         self.extension
             .as_ref()
             .map(AsRef::<str>::as_ref)
@@ -89,9 +99,9 @@ impl FileGenConfig {
     }
 }
 
-#[derive(Debug, Default, Clone, Deserialize)]
+#[derive(Debug, Default, Clone, Copy, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum FileFormat {
+pub enum FileFormat {
     #[serde(alias = "txt")]
     Text,
     #[default]
@@ -102,7 +112,7 @@ pub(crate) enum FileFormat {
 }
 
 impl FileFormat {
-    pub(crate) fn default_extension(&self) -> &'static str {
+    pub fn default_extension(&self) -> &'static str {
         match self {
             Self::Text => "txt",
             Self::Json => "json",
@@ -111,7 +121,7 @@ impl FileFormat {
         }
     }
 
-    pub(crate) fn is_streamable(&self) -> bool {
+    pub fn is_streamable(&self) -> bool {
         match self {
             Self::Text => true,
             Self::Json => false,
@@ -122,7 +132,7 @@ impl FileFormat {
 }
 
 #[derive(Default)]
-pub(crate) struct JsonLinesFormatter {
+pub struct JsonLinesFormatter {
     depth: usize,
 }
 

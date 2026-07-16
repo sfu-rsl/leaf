@@ -1,6 +1,6 @@
 // Converting flat calls to a fluent chain of calls.
 
-pub(crate) mod backend;
+pub mod backend;
 
 use common::pri::{
     AssertionInfo, AssignmentId, BasicBlockIndex, DynRawMetadata, FieldIndex, InstanceKindId,
@@ -21,7 +21,7 @@ use super::refs::RefManager;
 use self::backend::*;
 
 /// Manages the instance(s) of the runtime backend and provide access to them.
-pub(crate) trait InstanceManager {
+pub trait InstanceManager {
     type PlaceInfo;
     type Place;
     type Operand;

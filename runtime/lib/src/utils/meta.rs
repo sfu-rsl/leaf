@@ -2,6 +2,7 @@
 /// of two items of possibly different types.
 /// In other words, it keeps the order information as variant index.
 /// The memory layout for variants are the same.
+#[macro_export]
 macro_rules! define_reversible_pair {
     (
         $(#[$($attr: meta)*])*
@@ -91,8 +92,9 @@ macro_rules! define_reversible_pair {
     };
 }
 
-pub(crate) use define_reversible_pair;
+pub use define_reversible_pair;
 
+#[macro_export]
 macro_rules! impl_enum_from_enum {
     (
         From<$name:ty> for $src_name:ty {
@@ -118,8 +120,9 @@ macro_rules! impl_enum_from_enum {
         }
     }
 }
-pub(crate) use impl_enum_from_enum;
+pub use impl_enum_from_enum;
 
+#[macro_export]
 macro_rules! impl_sub_enum_conversions {
     (
         $name:ident from $src_name:ty {
@@ -147,8 +150,9 @@ macro_rules! impl_sub_enum_conversions {
         }
     };
 }
-pub(crate) use impl_sub_enum_conversions;
+pub use impl_sub_enum_conversions;
 
+#[macro_export]
 macro_rules! sub_enum {
     (
         #[repr($repr_ty:ty)]
@@ -194,8 +198,9 @@ macro_rules! sub_enum {
         }
     };
 }
-pub(crate) use sub_enum;
+pub use sub_enum;
 
+#[macro_export]
 macro_rules! impl_aug_enum_conversions {
     (
         $name:ident from $src_name:ty {
@@ -232,8 +237,9 @@ macro_rules! impl_aug_enum_conversions {
         }
     };
 }
-pub(crate) use impl_aug_enum_conversions;
+pub use impl_aug_enum_conversions;
 
+#[macro_export]
 macro_rules! aug_enum {
     (
         #[repr($repr_ty:ty)]
@@ -311,8 +317,9 @@ macro_rules! aug_enum {
         }
     };
 }
-pub(crate) use aug_enum;
+pub use aug_enum;
 
+#[macro_export]
 macro_rules! impl_super_enum_conversions {
     (
         $name:ident from $src_name:ty {
@@ -356,8 +363,9 @@ macro_rules! impl_super_enum_conversions {
         }
     };
 }
-pub(crate) use impl_super_enum_conversions;
+pub use impl_super_enum_conversions;
 
+#[macro_export]
 macro_rules! super_enum {
     (
         #[repr($repr_ty:ty)]
@@ -415,4 +423,4 @@ macro_rules! super_enum {
         }
     }
 }
-pub(crate) use super_enum;
+pub use super_enum;
