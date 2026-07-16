@@ -1,12 +1,12 @@
 [package]
-name = "runtimex"
+name = "runtime_backend_symex"
 version = { workspace = true }
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "leafrtx"
+name = "leafrtb_symex"
 crate-type = ["rlib"]
 
 [profile.release]
@@ -26,8 +26,8 @@ common = { workspace = true, features = [
     "program_dep",
     "ffi_ty_std_convert",
 ] }
-leaf_macros = { path = "../../macros", package = "macros" }
-leaf_runtime = { path = "../lib", package = "runtime" }
+leaf_macros = { workspace = true, package = "macros" }
+leaf_runtime = { path = "../../lib", package = "runtime" }
 
 config = { workspace = true, features = ["toml", "json"] }
 

@@ -10,4 +10,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
-runtimex = { path = "../../backends", features = ["runtime_access_raw_ptr"] }
+backend = { path = "../../backends/mdsan", package = "runtime_backend_mdsan", features = [
+    "runtime_access_raw_ptr",
+] }

@@ -1,3 +1,3 @@
-type PriImpl = leafrtx::MdSanPriLateInit;
+type PriImpl = backend::MdSanPriLateInit;
 
 include!("../../ffi_template.rs");

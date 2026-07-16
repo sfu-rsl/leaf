@@ -3,7 +3,7 @@ resolver = "2"
 members = [
     "common",
     "compiler",
-    "runtime/backends",
+    "runtime/backends/*",
     "runtime/flavors/*",
     "runtime/lib",
     "macros",
@@ -19,6 +19,7 @@ version = "0.2.0"
 # Unless we specify the package, it won't be renamed.
 common = { path = "common", package = "common" }
 macros = { path = "macros" }
+leaf_macros = { path = "macros", package = "macros"}
 runtime_symex_li = { path = "runtime/flavors/symex_li" }
 runtime_symex_li_no_implicit = { path = "runtime/flavors/symex_li_no_implicit" }
 runtime_noop = { path = "runtime/flavors/noop" }

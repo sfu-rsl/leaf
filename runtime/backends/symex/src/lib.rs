@@ -9,8 +9,6 @@
 #![feature(seek_stream_len)]
 #![feature(btree_cursors)]
 
-pub(crate) mod cf_tracer;
-pub(crate) mod mdsan;
 pub(crate) mod symex;
 mod utilsx;
 
@@ -19,11 +17,5 @@ use leaf_runtime::{
 };
 
 type SymExPri = pri::fluent::FluentPri<self::symex::SymExInstanceManager>;
-type CftPri = pri::fluent::FluentPri<self::cf_tracer::CftInstanceManager>;
-type MdSanPri = pri::fluent::FluentPri<self::mdsan::MdSanInstanceManager>;
 
 make_late_init_pri_of!(SymExPri);
-
-make_late_init_pri_of!(CftPri);
-
-make_late_init_pri_of!(MdSanPri);

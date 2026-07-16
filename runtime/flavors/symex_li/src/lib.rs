@@ -1,3 +1,3 @@
-type PriImpl = leafrtx::SymExPriLateInit;
+type PriImpl = backend::SymExPriLateInit;
 
 include!("../../ffi_template.rs");
