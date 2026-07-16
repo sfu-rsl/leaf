@@ -1,6 +1,6 @@
 use derive_more as dm;
 
-pub(crate) mod shared;
+pub mod shared;
 
 use crate::abs::{
     AssertKind, AssignmentId, BasicBlockIndex, BinaryOp, CalleeDef, CastKind, Constant, FieldIndex,
@@ -8,7 +8,7 @@ use crate::abs::{
     TernaryOp, TypeId, TypeSize, UnaryOp, ValueType, VariantIndex, backend::Shutdown,
 };
 
-pub(crate) trait RuntimeBackend: Shutdown {
+pub trait RuntimeBackend: Shutdown {
     type PlaceHandler<'a>: for<'b> PlaceHandler<
             PlaceInfo<'b> = Self::PlaceInfo,
             Place = Self::Place,
@@ -75,7 +75,7 @@ pub(crate) trait RuntimeBackend: Shutdown {
     fn annotate(&mut self) -> Self::AnnotationHandler<'_>;
 }
 
-pub(crate) trait PlaceHandler {
+pub trait PlaceHandler {
     type PlaceInfo<'a>;
     type Place;
     type DiscriminablePlace = Self::Place;
@@ -88,18 +88,18 @@ pub(crate) trait PlaceHandler {
 }
 
 #[derive(dm::From)]
-pub(crate) enum PlaceInfoBase {
+pub enum PlaceInfoBase {
     Local(Local),
     Some,
 }
 
 #[derive(dm::From)]
-pub(crate) enum PlaceInfoProjection<I> {
+pub enum PlaceInfoProjection<I> {
     Projection(Projection<I>),
     Some,
 }
 
-pub(crate) trait PlaceBuilder {
+pub trait PlaceBuilder {
     type Place;
     type Index = Self::Place;
     type Projector<'a>: PlaceProjector<Index = Self::Index>;
@@ -112,7 +112,7 @@ pub(crate) trait PlaceBuilder {
     fn metadata<'a>(self, place: &'a mut Self::Place) -> Self::MetadataHandler<'a>;
 }
 
-pub(crate) trait PlaceProjector: Sized {
+pub trait PlaceProjector: Sized {
     type Index;
 
     fn by(self, projection: PlaceInfoProjection<Self::Index>);
@@ -163,7 +163,7 @@ pub(crate) trait PlaceProjector: Sized {
     }
 }
 
-pub(crate) trait PlaceMetadataHandler {
+pub trait PlaceMetadataHandler {
     fn set_address(&mut self, address: RawAddress);
 
     fn set_type_id(&mut self, type_id: TypeId);
@@ -173,7 +173,7 @@ pub(crate) trait PlaceMetadataHandler {
     fn set_size(self, byte_size: TypeSize);
 }
 
-pub(crate) trait OperandHandler {
+pub trait OperandHandler {
     type Operand;
     type Place;
 
@@ -188,7 +188,7 @@ pub(crate) trait OperandHandler {
     fn new_symbolic(self, var: SymVariable<Self::Operand>) -> Self::Operand;
 }
 
-pub(crate) trait AssignmentHandler: Sized {
+pub trait AssignmentHandler: Sized {
     type Place;
     type DiscriminablePlace = Self::Place;
     type Operand;
@@ -305,7 +305,7 @@ pub(crate) trait AssignmentHandler: Sized {
     fn some(self);
 }
 
-pub(crate) trait LifetimeHandler {
+pub trait LifetimeHandler {
     type Place;
 
     fn mark_live(self, place: Self::Place);
@@ -313,7 +313,7 @@ pub(crate) trait LifetimeHandler {
     fn mark_dead(self, place: Self::Place);
 }
 
-pub(crate) trait RawMemoryHandler {
+pub trait RawMemoryHandler {
     type Place;
     type Operand;
 
@@ -379,7 +379,7 @@ pub(crate) trait RawMemoryHandler {
     ) -> Self::Operand;
 }
 
-pub(crate) trait ConstraintHandler {
+pub trait ConstraintHandler {
     type Operand;
     type SwitchHandler: SwitchHandler;
 
@@ -388,13 +388,13 @@ pub(crate) trait ConstraintHandler {
     fn assert(self, cond: Self::Operand, expected: bool, assert_kind: AssertKind<Self::Operand>);
 }
 
-pub(crate) trait SwitchHandler {
+pub trait SwitchHandler {
     fn take(self, case_index: SwitchCaseIndex, value: Option<super::Constant>);
     fn take_otherwise(self, non_values: Option<Vec<super::Constant>>);
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum ArgsTupling {
+pub enum ArgsTupling {
     Normal,
     Untupled {
         tupled_arg_index: Local,
@@ -404,7 +404,7 @@ pub(crate) enum ArgsTupling {
 }
 
 // FIXME: Merge before calls and shift temporary storage to PRI.
-pub(crate) trait CallHandler {
+pub trait CallHandler {
     type Place;
     type Operand;
 
@@ -435,7 +435,7 @@ pub(crate) trait CallHandler {
     fn after_call(self, assignment_id: AssignmentId, result_dest: Self::Place);
 }
 
-pub(crate) trait DropHandler {
+pub trait DropHandler {
     type Place;
     type Operand;
 
@@ -448,7 +448,7 @@ pub(crate) trait DropHandler {
     fn after_drop(self);
 }
 
-pub(crate) trait AnnotationHandler {
+pub trait AnnotationHandler {
     fn push_tag(self, tag: Tag);
 
     fn pop_tag(self);

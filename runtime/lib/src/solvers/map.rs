@@ -8,7 +8,7 @@ use crate::abs::{
 use super::Solver;
 
 /// Maps the model found by a solver.
-pub(crate) struct MappedSolver<F, MTo, S: Solver> {
+pub struct MappedSolver<F, MTo, S: Solver> {
     inner: S,
     f: F,
     _phantom: core::marker::PhantomData<(MTo,)>,
@@ -43,7 +43,7 @@ impl<MFrom> SolveResult<MFrom> {
     }
 }
 
-pub(crate) trait SolverExt {
+pub trait SolverExt {
     fn map<MTo>(
         self,
         f: impl FnMut(Self::Model) -> MTo,

@@ -25,7 +25,7 @@ where
     }
 }
 
-pub(crate) trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
+pub trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
     fn filtered_by(
         self,
         f: impl FnMut(&S, Constraint<&V, &C>) -> bool,
@@ -86,7 +86,7 @@ where
     }
 }
 
-pub(crate) trait StepInspectorExt<S, V, C>: StepInspector<S, V, C> {
+pub trait StepInspectorExt<S, V, C>: StepInspector<S, V, C> {
     fn filtered_by(
         self,
         f: impl FnMut(&S, Constraint<&V, &C>) -> bool,

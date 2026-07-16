@@ -29,7 +29,7 @@ impl<S: Display, V: Display, C: Display> StepInspector<S, V, C> for LoggerTraceM
     }
 }
 
-pub(crate) trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
+pub trait TraceManagerExt<S, V, C>: TraceManager<S, V, C> {
     fn logged(self) -> impl TraceManager<S, V, C>
     where
         Self: Sized;

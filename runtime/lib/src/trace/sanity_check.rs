@@ -6,14 +6,14 @@ use crate::abs::backend::{SolveResult, Solver};
 
 use super::{Constraint, TraceInspector};
 
-pub(crate) const TAG: &str = "constraint_sanity";
+pub const TAG: &str = "constraint_sanity";
 
 /// Ensures the constraints generated for the trace are satisfiable,
 /// given that the assumptions are held, i.e.:
 /// constraints && assumptions === True
 /// For example, the constraints must be satisfiable when the symbolic variables are tied
 /// to their concrete values.
-pub(crate) struct FullTraceSanityChecker<'o, TSolver, AI, S, V, C, const PANIC: bool = true> {
+pub struct FullTraceSanityChecker<'o, TSolver, AI, S, V, C, const PANIC: bool = true> {
     solver: TSolver,
     assumptions: AI,
     disable_further_checks: bool,
@@ -23,7 +23,7 @@ pub(crate) struct FullTraceSanityChecker<'o, TSolver, AI, S, V, C, const PANIC: 
 impl<'o, TSolver: 'o, AI: 'o, S: 'o, V: 'o, C: 'o>
     FullTraceSanityChecker<'o, TSolver, AI, S, V, C>
 {
-    pub(crate) fn new<const PANIC: bool>(
+    pub fn new<const PANIC: bool>(
         solver: TSolver,
         assumptions: AI,
         unsat_observer: Option<impl FnOnce(&[S], &[Constraint<V, C>]) + 'o>,
@@ -82,7 +82,7 @@ where
 /// constraint && assumptions === True
 /// For example, the constraints must be satisfiable when the symbolic variables are tied
 /// to their concrete values.
-pub(crate) struct StepSanityChecker<'o, TSolver, AI, S, V, C> {
+pub struct StepSanityChecker<'o, TSolver, AI, S, V, C> {
     solver: TSolver,
     assumptions: AI,
     unsat_observer: Option<Box<dyn FnMut(&S, Constraint<&V, &C>) + 'o>>,
@@ -95,7 +95,7 @@ where
     TSolver::Case: Clone,
     for<'a> &'a mut AI: IntoIterator<Item = Constraint<TSolver::Value, TSolver::Case>>,
 {
-    pub(crate) fn new(
+    pub fn new(
         solver: TSolver,
         assumptions: AI,
         unsat_observer: Option<impl FnMut(&S, Constraint<&V, &C>) + 'o>,
@@ -108,7 +108,7 @@ where
         }
     }
 
-    pub(crate) fn into_filter(mut self) -> impl FnMut(&S, Constraint<&V, &C>) -> bool + 'o
+    pub fn into_filter(mut self) -> impl FnMut(&S, Constraint<&V, &C>) -> bool + 'o
     where
         V: Borrow<TSolver::Value>,
         C: Borrow<TSolver::Case>,

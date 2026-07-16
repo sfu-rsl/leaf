@@ -2,14 +2,14 @@ use crate::utils::{RefView, alias::RRef};
 
 use super::{Constraint, StepInspector, TraceInspector, TraceManager};
 
-pub(crate) struct AggregatorTraceManager<S, V, C, I: TraceInspector<S, V, C>> {
+pub struct AggregatorTraceManager<S, V, C, I: TraceInspector<S, V, C>> {
     steps: RRef<Vec<S>>,
     constraints: RRef<Vec<Constraint<V, C>>>,
     inspector: I,
 }
 
 impl<S, V, C, I: TraceInspector<S, V, C>> AggregatorTraceManager<S, V, C, I> {
-    pub(crate) fn new(inspector: I) -> Self {
+    pub fn new(inspector: I) -> Self {
         Self {
             steps: Default::default(),
             constraints: Default::default(),
@@ -17,11 +17,11 @@ impl<S, V, C, I: TraceInspector<S, V, C>> AggregatorTraceManager<S, V, C, I> {
         }
     }
 
-    pub(crate) fn steps(&self) -> RefView<Vec<S>> {
+    pub fn steps(&self) -> RefView<Vec<S>> {
         RefView::new(self.steps.clone())
     }
 
-    pub(crate) fn constraints(&self) -> RefView<Vec<Constraint<V, C>>> {
+    pub fn constraints(&self) -> RefView<Vec<Constraint<V, C>>> {
         RefView::new(self.constraints.clone())
     }
 }
@@ -38,17 +38,17 @@ impl<S, V, C, I: TraceInspector<S, V, C>> TraceManager<S, V, C>
     }
 }
 
-pub(crate) struct AggregatorStepInspector<S, V, C> {
+pub struct AggregatorStepInspector<S, V, C> {
     steps: RRef<Vec<S>>,
     constraints: RRef<Vec<Constraint<V, C>>>,
 }
 
 impl<S, V, C> AggregatorStepInspector<S, V, C> {
-    pub(crate) fn steps(&self) -> RefView<Vec<S>> {
+    pub fn steps(&self) -> RefView<Vec<S>> {
         RefView::new(self.steps.clone())
     }
 
-    pub(crate) fn constraints(&self) -> RefView<Vec<Constraint<V, C>>> {
+    pub fn constraints(&self) -> RefView<Vec<Constraint<V, C>>> {
         RefView::new(self.constraints.clone())
     }
 }

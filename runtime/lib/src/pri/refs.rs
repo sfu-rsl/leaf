@@ -3,7 +3,7 @@
 /// Passing this complex structure is broken into multiple calls connected by temporary references.
 /// The implementation should have minimal overhead.
 
-pub(crate) trait RefManager {
+pub trait RefManager {
     type Ref = common::pri::Ref;
     type Value;
 
@@ -94,7 +94,7 @@ mod noop {
     pub struct NoOpRefManager<V>(V);
 
     impl<V> NoOpRefManager<V> {
-        pub(crate) const fn new(value: V) -> Self {
+        pub const fn new(value: V) -> Self {
             Self(value)
         }
     }
@@ -116,5 +116,5 @@ mod noop {
     }
 }
 
-pub(crate) type DefaultRefManager<V> = circular::CircularBufferRefManager<V>;
-pub(crate) use noop::NoOpRefManager;
+pub type DefaultRefManager<V> = circular::CircularBufferRefManager<V>;
+pub use noop::NoOpRefManager;

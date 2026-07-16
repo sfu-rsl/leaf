@@ -17,7 +17,7 @@ mod high {
 
     use super::*;
 
-    pub(crate) struct MemoryGate<O> {
+    pub struct MemoryGate<O> {
         mem: Memory<O>,
     }
 
@@ -31,7 +31,7 @@ mod high {
 
     impl<O: Debug> MemoryGate<O> {
         #[tracing::instrument(level = "debug", skip(self), ret)]
-        pub(crate) fn read_objects<'a, 'b>(
+        pub fn read_objects<'a, 'b>(
             &'a self,
             addr: Address,
             size: NonZero<TypeSize>,
@@ -69,7 +69,7 @@ mod high {
         }
 
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn erase_objects(&mut self, addr: Address, size: NonZero<TypeSize>) -> usize {
+        pub fn erase_objects(&mut self, addr: Address, size: NonZero<TypeSize>) -> usize {
             let range = range_from(addr, size);
 
             self.mem.drain_range_and_apply(
@@ -99,7 +99,7 @@ mod high {
         /// # Panics
         /// If `values` are not ordered by offset.
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn replace_objects(
+        pub fn replace_objects(
             &mut self,
             addr: Address,
             size: NonZero<TypeSize>,
@@ -127,7 +127,7 @@ mod high {
             }
         }
 
-        pub(crate) fn get_containing(&self, addr: Address) -> Option<&O> {
+        pub fn get_containing(&self, addr: Address) -> Option<&O> {
             if let Some((obj_addr, (obj_size, obj))) = self.mem.before_or_at(&addr).peek_prev() {
                 let obj_range = range_from(*obj_addr, *obj_size);
                 if obj_range.contains(&addr) {
@@ -137,7 +137,7 @@ mod high {
             None
         }
 
-        pub(crate) fn update_containing(&mut self, addr: Address, value: O) -> Option<O> {
+        pub fn update_containing(&mut self, addr: Address, value: O) -> Option<O> {
             if let Some((obj_addr, (obj_size, obj))) = self.mem.before_or_at_mut(&addr).peek_prev()
             {
                 let obj_range = range_from(*obj_addr, *obj_size);
@@ -170,7 +170,7 @@ mod low {
     /// the object size and payload, while range helpers provide overlap-aware read,
     /// mutate, and drain operations.
     #[derive(Debug)]
-    pub(crate) struct Memory<O>(BTreeMap<Address, MemoryElement<O>>);
+    pub struct Memory<O>(BTreeMap<Address, MemoryElement<O>>);
 
     impl<O> Default for Memory<O> {
         fn default() -> Self {
@@ -183,7 +183,7 @@ mod low {
         /// The `prev` node of the returned cursor is the last entry with an address
         /// less than or equal to `addr`.
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn before_or_at(&self, addr: &Address) -> Cursor<'_, Address, MemoryElement<O>> {
+        pub fn before_or_at(&self, addr: &Address) -> Cursor<'_, Address, MemoryElement<O>> {
             self.0.upper_bound(Bound::Included(addr))
         }
 
@@ -192,7 +192,7 @@ mod low {
         /// less than or equal to `addr`.
         // FIXME: Guard against insertion of overlapping elements
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn before_or_at_mut<'a>(
+        pub fn before_or_at_mut<'a>(
             &'a mut self,
             addr: &Address,
         ) -> CursorMut<'a, Address, MemoryElement<O>> {
@@ -202,7 +202,7 @@ mod low {
         /// # Remarks
         /// The `next` node of the returned cursor is greater than or equal to `addr`.
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn after_or_at(&self, addr: &Address) -> Cursor<'_, Address, MemoryElement<O>> {
+        pub fn after_or_at(&self, addr: &Address) -> Cursor<'_, Address, MemoryElement<O>> {
             self.0.lower_bound(Bound::Included(addr))
         }
 
@@ -210,7 +210,7 @@ mod low {
         /// The `next` node of the returned cursor is greater than or equal to `addr`.
         // FIXME: Guard against insertion of overlapping elements
         #[tracing::instrument(level = "debug", skip(self))]
-        pub(crate) fn after_or_at_mut(
+        pub fn after_or_at_mut(
             &mut self,
             addr: &Address,
         ) -> CursorMut<'_, Address, MemoryElement<O>> {
@@ -220,7 +220,7 @@ mod low {
         /// # Remarks
         /// Calls the function for all objects overlapping with the range.
         #[tracing::instrument(level = "debug", skip_all, fields(range = ?range.borrow()))]
-        pub(crate) fn apply_in_range<'a>(
+        pub fn apply_in_range<'a>(
             &'a self,
             range: impl Borrow<Range<Address>>,
             mut predicate: impl FnMut(&'a Address, &'a NonZero<TypeSize>, &'a O) -> bool,
@@ -251,7 +251,7 @@ mod low {
         /// # Remarks
         /// Calls the function for all objects overlapping with the range.
         #[tracing::instrument(level = "debug", skip_all, fields(range = ?range.borrow()), ret)]
-        pub(crate) fn apply_in_range_mut<'a>(
+        pub fn apply_in_range_mut<'a>(
             &'a mut self,
             range: impl Borrow<Range<Address>>,
             mut predicate: impl FnMut(&'_ Address, &'_ NonZero<TypeSize>, &'_ O) -> bool,
@@ -288,7 +288,7 @@ mod low {
         /// # Remarks
         /// The `next` node of the given cursor is in the range.
         #[tracing::instrument(level = "debug", skip_all, fields(range = ?range.borrow()), ret)]
-        pub(crate) fn drain_range_and_apply<'a>(
+        pub fn drain_range_and_apply<'a>(
             &'a mut self,
             range: impl Borrow<Range<Address>>,
             mut predicate: impl FnMut(&'_ Address, &'_ NonZero<TypeSize>, &'_ O) -> bool,
@@ -348,5 +348,5 @@ fn range_from(addr: Address, size: NonZero<TypeSize>) -> Range<Address> {
     addr..addr.wrapping_byte_add(size.get() as usize)
 }
 
-pub(crate) use high::MemoryGate;
-pub(crate) use low::Memory;
+pub use high::MemoryGate;
+pub use low::Memory;

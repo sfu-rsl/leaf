@@ -7,7 +7,7 @@ use crate::{abs::ConstraintKind, utils::alias::RRef};
 
 use super::DivergenceFilter;
 
-pub(crate) trait DepthProvider<S, C> {
+pub trait DepthProvider<S, C> {
     /// Returns the last depth that a step is taken with decision.
     fn last_depth(&self, step: &S, decision: ConstraintKind<&C>) -> usize;
 }
@@ -21,7 +21,7 @@ where
     }
 }
 
-pub(crate) struct BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
+pub struct BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
     last_accepted_depths: HashMap<(SC, VC), usize>,
     depth_provider: DP,
     distance_threshold_factor: f32,
@@ -31,7 +31,7 @@ pub(crate) struct BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
 }
 
 impl<S, SC, V, VC, C, CC, DP> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, C, CC, DP> {
-    pub(crate) fn new(
+    pub fn new(
         snapshot: Option<HashMap<(SC, VC), usize>>,
         depth_provider: DP,
         distance_factor_threshold: f32,
@@ -55,7 +55,7 @@ impl<S, SC, V, VC, C, CC, DP> BranchCoverageDepthDivergenceFilter<S, SC, V, VC, 
         }
     }
 
-    pub(crate) fn get_last_depths(&self) -> &HashMap<(SC, VC), usize> {
+    pub fn get_last_depths(&self) -> &HashMap<(SC, VC), usize> {
         &self.last_accepted_depths
     }
 }

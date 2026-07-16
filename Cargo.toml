@@ -1,6 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["common", "compiler", "runtime/lib", "runtime/flavors/*", "macros"]
+members = [
+    "common",
+    "compiler",
+    "runtime/backends",
+    "runtime/flavors/*",
+    "runtime/lib",
+    "macros",
+]
 exclude = ["runtime/shim", "samples/crates/", "scripts", ".notes/*"]
 
 [workspace.package]

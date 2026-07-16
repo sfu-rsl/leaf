@@ -13,23 +13,18 @@
 #![feature(never_type)]
 
 pub mod abs;
-mod backends;
-mod call;
-pub(crate) mod memory;
-pub(crate) mod outgen;
+pub mod call;
+pub mod memory;
+pub mod outgen;
 pub mod pri;
-pub(crate) mod solvers;
-pub(crate) mod trace;
+pub mod solvers;
+pub mod trace;
 pub mod type_info;
-pub(crate) mod utils;
+pub mod utils;
 
 use common::log_info;
 
-fn init<L: utils::logging::LeafTracingSubLayerFactory>() {
+pub fn init<L: utils::logging::LeafTracingSubLayerFactory>() {
     utils::logging::init_logging::<L>();
     log_info!("Initializing runtime library");
 }
-
-pub type SymExPri = pri::fluent::FluentPri<backends::symex::SymExInstanceManager>;
-pub type CftPri = pri::fluent::FluentPri<backends::cf_tracer::CftInstanceManager>;
-pub type MdSanPri = pri::fluent::FluentPri<backends::mdsan::MdSanInstanceManager>;

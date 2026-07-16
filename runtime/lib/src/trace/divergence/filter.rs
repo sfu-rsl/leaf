@@ -2,7 +2,7 @@ use crate::utils::alias::RRef;
 
 use super::Constraint;
 
-pub(crate) trait DivergenceFilter<S, V, C> {
+pub trait DivergenceFilter<S, V, C> {
     fn should_find(&mut self, trace: &[S], constraints: &[Constraint<V, C>]) -> bool;
 }
 
@@ -18,7 +18,7 @@ impl<S, V, C, F: DivergenceFilter<S, V, C>> DivergenceFilter<S, V, C> for RRef<F
     }
 }
 
-pub(crate) fn all<'a, S: 'a, V: 'a, C: 'a>(
+pub fn all<'a, S: 'a, V: 'a, C: 'a>(
     filters: Vec<Box<dyn DivergenceFilter<S, V, C> + 'a>>,
 ) -> impl DivergenceFilter<S, V, C> + 'a {
     struct All<'a, S, V, C>(Vec<Box<dyn DivergenceFilter<S, V, C> + 'a>>);
@@ -32,7 +32,7 @@ pub(crate) fn all<'a, S: 'a, V: 'a, C: 'a>(
     All(filters)
 }
 
-pub(crate) trait DivergenceFilterExt<S, V, C> {
+pub trait DivergenceFilterExt<S, V, C> {
     fn and_then<F>(self, f: F) -> impl DivergenceFilter<S, V, C>
     where
         Self: Sized,

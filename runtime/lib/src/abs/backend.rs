@@ -2,20 +2,20 @@ use std::collections::HashMap;
 
 use super::{BasicBlockLocation, Constraint, ConstraintKind, FuncDef, IntType, ValueType};
 
-pub(crate) trait Shutdown {
+pub trait Shutdown {
     fn shutdown(&mut self);
 }
 
 /// Keeps track of all the compounding constraints in a single trace
-pub(crate) trait TraceManager<S, V, C> {
+pub trait TraceManager<S, V, C> {
     fn notify_step(&mut self, step: S, constraint: Constraint<V, C>);
 }
 
-pub(crate) type Model<I, A> = HashMap<I, A>;
+pub type Model<I, A> = HashMap<I, A>;
 
 /// A trait for the SMT solver.
 /// It takes a set of constraints to check satisfiability of them together.
-pub(crate) trait Solver {
+pub trait Solver {
     type Value;
     type Case;
     type Model;
@@ -30,13 +30,13 @@ pub(crate) trait Solver {
 /// [`Sat`]: The constraints are satisfiable and a model is found.
 /// [`Unsat`]: The constraints are unsatisfiable.
 /// [`Unknown`]: The solver could not determine the satisfiability.
-pub(crate) enum SolveResult<M> {
+pub enum SolveResult<M> {
     Sat(M),
     Unsat,
     Unknown,
 }
 
-pub(crate) use common::type_info::TypeDatabase;
+pub use common::type_info::TypeDatabase;
 
 macro_rules! fn_by_name {
     ($($name:ident),*$(,)?) => {
@@ -69,7 +69,7 @@ pub trait CoreTypeProvider<V> {
     fn try_to_value_type<'a>(&self, ty: V) -> Option<ValueType>;
 }
 
-pub(crate) trait PhasedCallTraceRecorder {
+pub trait PhasedCallTraceRecorder {
     fn start_call(&mut self, call_site: BasicBlockLocation<FuncDef>);
 
     fn finish_call(&mut self, entered_func: FuncDef, broken: Option<bool>);
@@ -81,7 +81,7 @@ pub(crate) trait PhasedCallTraceRecorder {
     fn finish_return(&mut self, broken: bool) -> FuncDef;
 }
 
-pub(crate) trait DecisionTraceRecorder {
+pub trait DecisionTraceRecorder {
     type Case;
 
     /// # Returns

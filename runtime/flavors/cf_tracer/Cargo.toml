@@ -10,4 +10,4 @@ crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
-runtime = { path = "../../lib", features = ["runtime_access_raw_ptr"] }
+runtimex = { path = "../../backends", features = ["runtime_access_raw_ptr"] }

@@ -6,15 +6,15 @@ use core::{
 
 use derive_more as dm;
 
-pub(crate) mod alias;
-pub(crate) mod file;
-pub(crate) mod logging;
-pub(crate) mod meta;
+pub mod alias;
+pub mod file;
+pub mod logging;
+pub mod meta;
 
-use alias::RRef;
+pub use alias::RRef;
 
 /// A trait for any hierarchical structure with a parent from the self type.
-pub(crate) trait InPlaceSelfHierarchical {
+pub trait InPlaceSelfHierarchical {
     fn add_layer(&mut self);
 
     fn drop_layer(&mut self) -> Option<Self>
@@ -24,18 +24,18 @@ pub(crate) trait InPlaceSelfHierarchical {
 
 /// Guards a RefCell from mutable borrows.
 #[derive(Clone, dm::From)]
-pub(crate) struct RefView<T>(RRef<T>);
+pub struct RefView<T>(RRef<T>);
 
 impl<T> RefView<T> {
-    pub(crate) fn new(data: RRef<T>) -> Self {
+    pub fn new(data: RRef<T>) -> Self {
         Self(data)
     }
 
-    pub(crate) fn borrow(&self) -> impl Deref<Target = T> + '_ {
+    pub fn borrow(&self) -> impl Deref<Target = T> + '_ {
         self.0.as_ref().borrow()
     }
 
-    pub(crate) fn borrow_map<'a, U: 'a>(
+    pub fn borrow_map<'a, U: 'a>(
         &'a self,
         f: impl FnOnce(&T) -> &U,
     ) -> impl Deref<Target = U> + 'a {
@@ -43,7 +43,7 @@ impl<T> RefView<T> {
     }
 }
 
-pub(crate) trait RangeIntersection<T: PartialOrd> {
+pub trait RangeIntersection<T: PartialOrd> {
     fn is_overlapping(&self, other: &impl RangeBounds<T>) -> bool;
 
     fn contains(&self, other: &impl RangeBounds<T>) -> bool;
@@ -83,16 +83,16 @@ impl<T: PartialOrd, R: RangeBounds<T>> RangeIntersection<T> for R {
     }
 }
 
-pub(crate) fn byte_offset_from<T: Sized>(at: *const T, base: *const T) -> usize {
+pub fn byte_offset_from<T: Sized>(at: *const T, base: *const T) -> usize {
     at.addr() - base.addr()
 }
 
-pub(crate) trait HasIndex {
+pub trait HasIndex {
     fn index(&self) -> usize;
 }
 
 #[derive(Clone, Copy, Debug, dm::Deref, dm::From, serde::Serialize)]
-pub(crate) struct Indexed<T> {
+pub struct Indexed<T> {
     #[deref]
     pub value: T,
     pub index: usize,
@@ -117,7 +117,7 @@ impl<T: Display> Display for Indexed<T> {
 }
 
 #[derive(dm::From)]
-pub(crate) enum MutAccess<'a, T> {
+pub enum MutAccess<'a, T> {
     Borrowed(&'a mut T),
     Owned(T),
 }

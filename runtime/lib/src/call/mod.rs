@@ -92,13 +92,13 @@ use crate::abs::{CalleeDef, FuncDef, PlaceUsage};
 
 /// The places corresponding to the function base locals, i.e., arguments and return value.
 #[derive(Debug)]
-pub(crate) struct SignaturePlaces<P> {
+pub struct SignaturePlaces<P> {
     pub args: Vec<P>,
     pub return_val: P,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum CallFlowSanity<E = (), B = (), U = ()> {
+pub enum CallFlowSanity<E = (), B = (), U = ()> {
     Expected(E),
     /// The stack is broken (e.g., external function in between)
     Broken(B),
@@ -115,7 +115,7 @@ impl<E, B, U> CallFlowSanity<E, B, U> {
         }
     }
 
-    pub(crate) fn is_broken(&self) -> Option<bool> {
+    pub fn is_broken(&self) -> Option<bool> {
         match self {
             CallFlowSanity::Expected(_) => Some(false),
             CallFlowSanity::Broken(_) => Some(true),
@@ -127,7 +127,7 @@ impl<E, B, U> CallFlowSanity<E, B, U> {
 /// Manages the call flow.
 /// Four phases exist in a function call: before call (in the caller),
 /// entrance (in the callee), return (in the callee), and after call (in the caller).
-pub(crate) trait CallFlowManager {
+pub trait CallFlowManager {
     type Value;
     type ReturnToken;
     type FinalizationToken;
@@ -147,13 +147,13 @@ pub(crate) trait CallFlowManager {
 }
 
 /// An extension of `CallFlowManager` with additional data for flow breakage handling.
-pub(crate) trait CallControlFlowManager: CallFlowManager {
+pub trait CallControlFlowManager: CallFlowManager {
     fn prepare_for_calling(&mut self, def: CalleeDef);
 }
 
 /// An extension of `CallFlowManager` with functionalities for data transfer
 /// during function calls and returns.
-pub(crate) trait CallDataFlowManager: CallFlowManager {
+pub trait CallDataFlowManager: CallFlowManager {
     type Place;
 
     /* NOTE: Why `are_args_tupled` are passed?
@@ -192,7 +192,7 @@ pub(crate) trait CallDataFlowManager: CallFlowManager {
 /// Provides memory functionalities expected to handle data transfer during function calls and returns.
 /// Particularly, to set arguments passed from in the caller in the callee's memory,
 /// and to take the return value from the callee's memory.
-pub(crate) trait CallShadowMemory<P> {
+pub trait CallShadowMemory<P> {
     type Value;
 
     fn take_place(&mut self, place: &P) -> Self::Value;
@@ -212,7 +212,7 @@ pub(crate) trait CallShadowMemory<P> {
 }
 
 /// Provides callbacks to handle breakages detected in the call flow.
-pub(crate) trait CallFlowBreakageCallback<P, V> {
+pub trait CallFlowBreakageCallback<P, V> {
     /// Handles a breakage detected when finalizing an external call,
     /// i.e., when returned back to the internal caller.
     /// # Arguments
@@ -308,7 +308,7 @@ pub(crate) trait CallFlowBreakageCallback<P, V> {
     fn at_return_with_return_val(&mut self, current: FuncDef, unconsumed_return_value: V);
 }
 
-pub(crate) mod tupling {
+pub mod tupling {
     use crate::abs::{FieldIndex, LocalIndex, PlaceUsage};
 
     use super::*;
@@ -316,7 +316,7 @@ pub(crate) mod tupling {
         Box<dyn FnOnce() -> Box<dyn TuplingHelper<P, Value = V> + 'h> + 'f>;
 
     #[derive(dm::Debug)]
-    pub(crate) enum ArgsTuplingInfo<'h, 'f, P, V> {
+    pub enum ArgsTuplingInfo<'h, 'f, P, V> {
         Normal,
         /// This function expects untupled arguments, but they are passed as a tupled argument.
         /// Expected to happen in closures.
@@ -336,7 +336,7 @@ pub(crate) mod tupling {
         },
     }
 
-    pub(crate) trait TuplingHelper<P>: CallShadowMemory<P> {
+    pub trait TuplingHelper<P>: CallShadowMemory<P> {
         fn make_tupled_arg_pseudo_place(&mut self, usage: PlaceUsage) -> P;
 
         /// Returns the number of fields in the tuple.
@@ -349,7 +349,7 @@ pub(crate) mod tupling {
 
     /// # Remarks
     /// This is lazy loaded as we might have call flow breakage that does not need tupling resolution.
-    pub(crate) trait ArgsTuplingInfoProvider<'h, 'f, P, V> {
+    pub trait ArgsTuplingInfoProvider<'h, 'f, P, V> {
         fn get(self) -> ArgsTuplingInfo<'h, 'f, P, V>;
     }
 
@@ -369,7 +369,7 @@ mod implementation {
 
     use super::*;
 
-    pub(crate) struct DefaultCallFlowManager<P, V, BC, S = ()> {
+    pub struct DefaultCallFlowManager<P, V, BC, S = ()> {
         /// Stacked storage that holds data living during the function execution.
         stack: Vec<StackInfo<P, V, S>>,
 
@@ -474,7 +474,7 @@ mod implementation {
     }
 
     impl<P, V, BC, S> DefaultCallFlowManager<P, V, BC, S> {
-        pub(crate) fn new(breakage_callback: BC) -> Self {
+        pub fn new(breakage_callback: BC) -> Self {
             Self {
                 stack: vec![],
                 ephemeral: EphemeralInfo::default(),
@@ -657,7 +657,7 @@ mod implementation {
             }
         }
 
-        pub(crate) struct NoOpArgsTuplingInfoProvider;
+        pub struct NoOpArgsTuplingInfoProvider;
 
         // NOTE: Update this based on the internal logics of tupling resolution.
         impl<'h, 'f, P, V> ArgsTuplingInfoProvider<'h, 'f, P, V> for NoOpArgsTuplingInfoProvider {
@@ -666,7 +666,7 @@ mod implementation {
             }
         }
 
-        pub(crate) mod utils {
+        pub mod utils {
             use crate::{
                 abs::FieldIndex,
                 pri::fluent::backend::ArgsTupling,
@@ -675,19 +675,19 @@ mod implementation {
 
             use super::*;
 
-            pub(crate) struct TuplingHelperTypeUtils<
+            pub struct TuplingHelperTypeUtils<
                 'a,
                 T,
                 F = Box<dyn for<'b> FnMut(&'b mut T) -> &'b TypeInfo + 'a>,
             > {
                 fields_info: Option<StructShape>,
-                pub(crate) type_holder: T,
+                pub type_holder: T,
                 get_type_info: F,
                 _marker: core::marker::PhantomData<&'a ()>,
             }
 
             impl<'a, T, F> TuplingHelperTypeUtils<'a, T, F> {
-                pub(crate) fn new(type_holder: T, get_type_info: F) -> Self {
+                pub fn new(type_holder: T, get_type_info: F) -> Self {
                     Self {
                         fields_info: None,
                         type_holder,
@@ -701,7 +701,7 @@ mod implementation {
             where
                 F: for<'b> FnMut(&'b mut T) -> &'b TypeInfo,
             {
-                pub(crate) fn fields_info(&mut self) -> &StructShape {
+                pub fn fields_info(&mut self) -> &StructShape {
                     if self.fields_info.is_none() {
                         let type_info = (self.get_type_info)(&mut self.type_holder);
                         let info = match type_info.expect_single_variant().fields {
@@ -713,18 +713,18 @@ mod implementation {
                     self.fields_info.as_ref().unwrap()
                 }
 
-                pub(crate) fn num_fields(&mut self) -> FieldIndex {
+                pub fn num_fields(&mut self) -> FieldIndex {
                     self.fields_info().fields().len() as FieldIndex
                 }
 
-                pub(crate) fn field_info(&mut self, field: FieldIndex) -> &type_info::FieldInfo {
+                pub fn field_info(&mut self, field: FieldIndex) -> &type_info::FieldInfo {
                     self.fields_info().fields().get(field as usize).unwrap()
                 }
             }
 
             use crate::abs::TypeId;
 
-            pub(crate) fn make_lazy_tupling_info<'h, 'f, T: From<TypeId> + 'f, P, V>(
+            pub fn make_lazy_tupling_info<'h, 'f, T: From<TypeId> + 'f, P, V>(
                 tupling: ArgsTupling,
                 arg_places: &[P],
                 get_tuple_type: impl FnOnce(&P) -> T,
@@ -769,17 +769,17 @@ mod implementation {
         }
     }
 
-    pub(crate) struct ReturnToken<P, V, S> {
+    pub struct ReturnToken<P, V, S> {
         popped_frame: StackInfo<P, V, S>,
     }
 
     #[derive(dm::From)]
-    pub(crate) struct FinalizationToken<V>(
+    pub struct FinalizationToken<V>(
         CallFlowSanity<CalleeParcel<V>, Either<CallerParcel<V>, CalleeParcel<V>>, !>,
     );
 
     impl<V> FinalizationToken<V> {
-        pub(crate) fn sanity(&self) -> CallFlowSanity<(), (), !> {
+        pub fn sanity(&self) -> CallFlowSanity<(), (), !> {
             match &self.0 {
                 CallFlowSanity::Expected(..) => CallFlowSanity::Expected(()),
                 CallFlowSanity::Broken(..) => CallFlowSanity::Broken(()),
@@ -1104,7 +1104,7 @@ mod implementation {
         }
     }
 
-    pub(crate) struct NoOpCallFlowBreakageCallback<F> {
+    pub struct NoOpCallFlowBreakageCallback<F> {
         unknown_value_factory: F,
     }
 
@@ -1210,7 +1210,7 @@ mod implementation {
         use const_format::concatcp;
         use tracing::{Span, debug_span};
 
-        pub(crate) const TAG: &str = "call_manager";
+        pub const TAG: &str = "call_manager";
         const TAG_STACK: &str = concatcp!(TAG, "::stack");
         const SPAN_CALL: &str = "call";
         const SPAN_TRANSITION: &str = "call_trans";
@@ -1263,9 +1263,9 @@ mod implementation {
         }
     }
 
-    pub(crate) use logging::TAG;
+    pub use logging::TAG;
 }
-pub(crate) use implementation::{
+pub use implementation::{
     DefaultCallFlowManager, NoOpCallFlowBreakageCallback, TAG,
     tupling::NoOpArgsTuplingInfoProvider, tupling::utils as tupling_utils,
 };

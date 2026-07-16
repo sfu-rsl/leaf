@@ -5,13 +5,13 @@ use tracing_subscriber::{
 };
 use tracing_tree::{HierarchicalLayer, time::FormatTime};
 
-pub(crate) trait LeafTracingSubLayerFactory {
+pub trait LeafTracingSubLayerFactory {
     fn layer() -> impl Layer<tracing_subscriber::Registry> + Sized + Send + Sync + 'static;
 
     fn filter_rest<S: 'static>() -> impl Filter<S> + Sized + Send + Sync + 'static;
 }
 
-pub(crate) struct IdentityFactory;
+pub struct IdentityFactory;
 
 impl LeafTracingSubLayerFactory for IdentityFactory {
     fn layer() -> impl Layer<tracing_subscriber::Registry> + Sized + Send + Sync + 'static {
@@ -23,7 +23,7 @@ impl LeafTracingSubLayerFactory for IdentityFactory {
     }
 }
 
-pub(crate) fn init_logging<L: LeafTracingSubLayerFactory>() {
+pub fn init_logging<L: LeafTracingSubLayerFactory>() {
     const ENV_LOG: &str = "LEAF_LOG";
     const ENV_WRITE_STYLE: &str = "LEAF_LOG_STYLE";
 

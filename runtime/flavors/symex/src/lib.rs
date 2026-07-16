@@ -1,3 +1,3 @@
-type PriImpl = leafrt::SymExPri;
+type PriImpl = leafrtx::SymExPriLateInit;
 
 include!("../../ffi_template.rs");

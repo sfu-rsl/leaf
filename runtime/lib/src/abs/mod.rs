@@ -2,13 +2,13 @@ use core::{num::NonZeroU64, panic, ptr::NonNull};
 
 use derive_more as dm;
 
-pub(crate) mod backend;
+pub mod backend;
 pub(crate) mod fmt;
-pub(crate) mod place;
+pub mod place;
 mod serdes;
-pub(crate) mod utils;
+pub mod utils;
 
-pub(crate) use common::{
+pub use common::{
     pri::Tag,
     types::{trace::*, *},
 };
@@ -102,13 +102,13 @@ pub enum AtomicBinaryOp {
     Max = common::pri::AtomicBinaryOp::MAX.to_raw(),
 }
 
-pub(crate) use place::{Local, LocalWithMetadata, PlaceUsage, PlaceWithMetadata};
+pub use place::{Local, LocalWithMetadata, PlaceUsage, PlaceWithMetadata};
 
-pub(crate) type Place<L = Local, P = Projection<L>> = place::Place<L, P>;
-pub(crate) type Projection<L> = place::Projection<L>;
+pub type Place<L = Local, P = Projection<L>> = place::Place<L, P>;
+pub type Projection<L> = place::Projection<L>;
 
 #[derive(Debug, dm::From)]
-pub(crate) enum Constant {
+pub enum Constant {
     Bool(bool),
     Char(char),
     Int {
@@ -127,9 +127,9 @@ pub(crate) enum Constant {
     Some,
 }
 
-pub(crate) struct SymVariable<C> {
-    pub(crate) ty: ValueType,
-    pub(crate) conc_value: Option<C>,
+pub struct SymVariable<C> {
+    pub ty: ValueType,
+    pub conc_value: Option<C>,
 }
 
 #[derive(Debug)]
@@ -193,7 +193,7 @@ impl PrimitiveType {
 
 // FIXME: Replace with PrimitiveType
 #[derive(Clone, Copy, Debug, PartialEq, Eq, derive_more::From)]
-pub(crate) enum ValueType {
+pub enum ValueType {
     Bool,
     Char,
     Int(IntType),
@@ -201,20 +201,20 @@ pub(crate) enum ValueType {
 }
 
 impl ValueType {
-    pub(crate) fn new_int(bit_size: u64, is_signed: bool) -> Self {
+    pub fn new_int(bit_size: u64, is_signed: bool) -> Self {
         Self::Int(IntType {
             bit_size,
             is_signed,
         })
     }
 
-    pub(crate) fn new_float(e_bits: u64, s_bits: u64) -> Self {
+    pub fn new_float(e_bits: u64, s_bits: u64) -> Self {
         Self::Float(FloatType { e_bits, s_bits })
     }
 
     /// Returns whether the type is signed if it.
     /// Remarks: Returns false for bool and char.
-    pub(crate) fn is_signed(&self) -> bool {
+    pub fn is_signed(&self) -> bool {
         match self {
             Self::Bool | Self::Char => false,
             Self::Int(IntType { is_signed, .. }) => *is_signed,
@@ -222,7 +222,7 @@ impl ValueType {
         }
     }
 
-    pub(crate) fn size(&self) -> NonZeroU64 {
+    pub fn size(&self) -> NonZeroU64 {
         use core::mem::size_of;
         let size = match self {
             ValueType::Bool => size_of::<bool>() as u64,
@@ -233,7 +233,7 @@ impl ValueType {
         NonZeroU64::new(size as u64).unwrap()
     }
 
-    pub(crate) fn bit_size(&self) -> Option<NonZeroU64> {
+    pub fn bit_size(&self) -> Option<NonZeroU64> {
         match self {
             Self::Bool => None,
             Self::Char => NonZeroU64::new((core::mem::size_of::<char>() * 8) as u64),
@@ -243,7 +243,7 @@ impl ValueType {
     }
 
     #[inline]
-    pub(crate) fn as_int(&self) -> Option<&IntType> {
+    pub fn as_int(&self) -> Option<&IntType> {
         match self {
             Self::Int(ref int_type) => Some(int_type),
             _ => None,
@@ -251,7 +251,7 @@ impl ValueType {
     }
 
     #[inline]
-    pub(crate) fn expect_int(self) -> IntType {
+    pub fn expect_int(self) -> IntType {
         match self {
             Self::Int(int_type) => int_type,
             _ => panic!("Expected an IntType, found: {:?}", self),
@@ -292,34 +292,34 @@ impl From<PrimitiveType> for ValueType {
  */
 #[derive(Clone, Copy, Eq, PartialEq, Hash, dm::Debug)]
 #[debug("{}", self)]
-pub(crate) struct IntType {
+pub struct IntType {
     pub bit_size: u64,
     pub is_signed: bool,
 }
 
 impl IntType {
-    pub(crate) const USIZE: Self = Self {
+    pub const USIZE: Self = Self {
         bit_size: std::mem::size_of::<usize>() as u64 * 8,
         is_signed: false,
     };
-    pub(crate) const U32: Self = Self {
+    pub const U32: Self = Self {
         bit_size: 32,
         is_signed: false,
     };
-    pub(crate) const U8: Self = Self {
+    pub const U8: Self = Self {
         bit_size: 8,
         is_signed: false,
     };
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub(crate) struct FloatType {
+pub struct FloatType {
     pub e_bits: u64,
     pub s_bits: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum CastKind<I = IntType, F = FloatType, P = TypeId, T = TypeId> {
+pub enum CastKind<I = IntType, F = FloatType, P = TypeId, T = TypeId> {
     ToChar,
     ToInt(I),
     ToFloat(F),
@@ -344,13 +344,13 @@ impl TryFrom<CastKind> for ValueType {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Into)]
-pub(crate) struct FuncDef {
+pub struct FuncDef {
     pub body_id: InstanceKindId,
     pub raw: Option<FuncRawAddr>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From, dm::Into)]
-pub(crate) struct FuncRawAddr {
+pub struct FuncRawAddr {
     pub static_addr: NonNull<()>,
     pub as_dyn_method: Option<(DynRawMetadata, u64)>,
 }
@@ -362,12 +362,12 @@ impl Into<InstanceKindId> for FuncDef {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, dm::From)]
-pub(crate) struct CalleeDef {
+pub struct CalleeDef {
     pub callee_id: InstanceKindId,
     pub raw: Option<FuncRawAddr>,
 }
 
-pub(crate) trait HasTags {
+pub trait HasTags {
     fn tags(&self) -> &[Tag];
 
     fn has_tag<T: PartialEq<Tag>>(&self, tag: &T) -> bool {

@@ -7,14 +7,14 @@ use common::{log_error, log_warn};
 use super::{FieldIndex, LocalIndex, RawAddress, TypeId, TypeSize, ValueType, VariantIndex};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub(crate) enum Local {
+pub enum Local {
     ReturnValue,          // 0
     Argument(LocalIndex), // 1-n
     Normal(LocalIndex),   // > n
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Place<B, P = Projection<B>> {
+pub struct Place<B, P = Projection<B>> {
     base: B,
     projections: Vec<P>,
 }
@@ -55,7 +55,7 @@ impl<B, P> Place<B, P> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum Projection<I = Local> {
+pub enum Projection<I = Local> {
     Field(FieldIndex),
     Deref,
     Index(I),
@@ -76,7 +76,7 @@ pub(crate) enum Projection<I = Local> {
 }
 
 impl<I> Projection<I> {
-    pub(crate) fn map<IInto>(self, f: impl FnOnce(I) -> IInto) -> Projection<IInto> {
+    pub fn map<IInto>(self, f: impl FnOnce(I) -> IInto) -> Projection<IInto> {
         use Projection::*;
         match self {
             Field(index) => Field(index),
@@ -99,7 +99,7 @@ impl<I> Projection<I> {
     }
 }
 
-pub(crate) trait HasMetadata {
+pub trait HasMetadata {
     type Metadata;
 
     fn metadata(&self) -> &Self::Metadata;
@@ -108,7 +108,7 @@ pub(crate) trait HasMetadata {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, dm::Deref, dm::DerefMut, dm::From)]
-pub(crate) struct LocalWithMetadata<M = DefaultPlaceMetadata> {
+pub struct LocalWithMetadata<M = DefaultPlaceMetadata> {
     #[deref]
     #[deref_mut]
     pub local: Local,
@@ -139,7 +139,7 @@ impl<M> HasMetadata for LocalWithMetadata<M> {
 */
 
 #[derive(Debug, Clone, dm::Deref, dm::DerefMut)]
-pub(crate) struct GenericPlaceWithMetadata<B, P, M> {
+pub struct GenericPlaceWithMetadata<B, P, M> {
     #[deref]
     #[deref_mut]
     place: Place<B, P>,
@@ -174,20 +174,20 @@ where
 }
 
 impl<B, P, M> GenericPlaceWithMetadata<B, P, M> {
-    pub(crate) fn push_metadata(&mut self, metadata: M) {
+    pub fn push_metadata(&mut self, metadata: M) {
         self.projs_metadata.push(metadata);
     }
 
-    pub(crate) fn projs_metadata(&self) -> impl Iterator<Item = &M> + '_ {
+    pub fn projs_metadata(&self) -> impl Iterator<Item = &M> + '_ {
         self.projs_metadata.iter()
     }
 }
 
-pub(crate) type PlaceWithMetadata<P, M = DefaultPlaceMetadata> =
+pub type PlaceWithMetadata<P, M = DefaultPlaceMetadata> =
     GenericPlaceWithMetadata<LocalWithMetadata<M>, P, M>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DefaultPlaceMetadata {
+pub struct DefaultPlaceMetadata {
     address: Option<NonNull<()>>,
     type_id: Option<TypeId>,
     // Fast-accessible type information
@@ -208,7 +208,7 @@ impl Default for DefaultPlaceMetadata {
 
 impl DefaultPlaceMetadata {
     #[inline]
-    pub(crate) fn address(&self) -> RawAddress {
+    pub fn address(&self) -> RawAddress {
         self.address
             .unwrap_or_else(|| {
                 log_error!("Presumably an unchecked null pointer dereference is happening in the program. Runtime will terminate the execution.");
@@ -218,7 +218,7 @@ impl DefaultPlaceMetadata {
     }
 
     #[inline]
-    pub(crate) fn set_address(&mut self, address: RawAddress) {
+    pub fn set_address(&mut self, address: RawAddress) {
         debug_assert!(self.address.is_none());
         if cfg!(debug_assertions) && address.is_null() {
             log_warn!("Setting null address to place metadata. {:?}", self);
@@ -227,45 +227,45 @@ impl DefaultPlaceMetadata {
     }
 
     #[inline]
-    pub(crate) fn type_id(&self) -> Option<TypeId> {
+    pub fn type_id(&self) -> Option<TypeId> {
         self.type_id
     }
 
     #[inline]
-    pub(crate) fn unwrap_type_id(&self) -> TypeId {
+    pub fn unwrap_type_id(&self) -> TypeId {
         self.type_id.expect("Type id is not available.")
     }
 
     #[inline]
-    pub(crate) fn set_type_id(&mut self, type_id: TypeId) {
+    pub fn set_type_id(&mut self, type_id: TypeId) {
         debug_assert!(self.type_id.is_none());
         self.type_id = Some(type_id);
     }
 
     #[inline]
-    pub(crate) fn ty(&self) -> Option<&ValueType> {
+    pub fn ty(&self) -> Option<&ValueType> {
         self.ty.as_ref()
     }
 
     #[inline]
-    pub(crate) fn set_ty(&mut self, ty: ValueType) {
+    pub fn set_ty(&mut self, ty: ValueType) {
         self.ty = Some(ty);
     }
 
     #[inline]
-    pub(crate) fn size(&self) -> Option<TypeSize> {
+    pub fn size(&self) -> Option<TypeSize> {
         self.size.as_ref().copied()
     }
 
     #[inline]
-    pub(crate) fn set_size(&mut self, size: TypeSize) {
+    pub fn set_size(&mut self, size: TypeSize) {
         debug_assert!(self.size.is_none());
         self.size = Some(size);
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum PlaceUsage {
+pub enum PlaceUsage {
     Copy,
     Move,
     Write,

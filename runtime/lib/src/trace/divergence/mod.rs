@@ -8,12 +8,12 @@ use crate::abs::backend::{SolveResult, Solver};
 use super::{Constraint, inspect::TraceInspector};
 
 mod coverage;
-pub(crate) mod filter;
+pub mod filter;
 
-pub(crate) use coverage::{BranchCoverageDepthDivergenceFilter, DepthProvider};
-pub(crate) use filter::DivergenceFilter;
+pub use coverage::{BranchCoverageDepthDivergenceFilter, DepthProvider};
+pub use filter::DivergenceFilter;
 
-pub(crate) struct ImmediateDivergingAnswerFinder<TSolver: Solver, F> {
+pub struct ImmediateDivergingAnswerFinder<TSolver: Solver, F> {
     solver: TSolver,
     filter: F,
     optimistic_divergence_solver: Option<TSolver>,

@@ -1,8 +1,9 @@
 mod ffi;
-pub(crate) mod fluent;
+pub mod fluent;
 mod late_init;
+pub mod late_init_x;
 mod noop;
-pub(crate) mod refs;
+pub mod refs;
 
 pub use late_init::LateInitPri;
 pub use noop::NoOpPri;
