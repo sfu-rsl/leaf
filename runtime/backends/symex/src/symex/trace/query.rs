@@ -5,7 +5,7 @@ use common::{
     types::{InstanceKindId, trace::ExeTraceRecord},
 };
 
-use crate::utils::{HasIndex, Indexed, RefView};
+use leaf_runtime::utils::{HasIndex, Indexed, RefView};
 
 use super::{Step, backend};
 use backend::{ExeTraceStorage, GenericTraceQuerier, SymExConstraint, SymExExeTraceRecorder};

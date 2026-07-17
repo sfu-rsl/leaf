@@ -2,7 +2,7 @@ use std::cell::RefMut;
 
 use common::log_debug;
 
-use crate::pri::fluent::backend::AnnotationHandler;
+use leaf_runtime::pri::fluent::backend::AnnotationHandler;
 
 use super::alias::backend;
 use backend::SymExBackend;

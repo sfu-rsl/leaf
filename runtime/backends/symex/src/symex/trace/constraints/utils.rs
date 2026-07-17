@@ -58,7 +58,7 @@ pub(super) mod dumping {
     use common::log_debug;
     use serde::de::DeserializeOwned;
 
-    use crate::{
+    use leaf_runtime::{
         abs::Constraint,
         trace::{FilterStepInspectorExt, StepInspector},
         utils::{
@@ -116,7 +116,7 @@ pub(super) mod dumping {
         ($config: expr, $name: expr, $default_filename: expr, || {$data: expr}) => {{
             use std::io::{Seek, Write};
 
-            use crate::utils::file::{FileFormat, FileGenConfig};
+            use leaf_runtime::utils::file::{FileFormat, FileGenConfig};
 
             let create_serializer = |config: &FileGenConfig,
                                      name: String,
@@ -220,7 +220,7 @@ pub(super) mod dumping {
 mod shutdown {
     use delegate::delegate;
 
-    use crate::abs::backend::{Shutdown, TraceManager as AbsTraceManager};
+    use leaf_runtime::abs::backend::{Shutdown, TraceManager as AbsTraceManager};
 
     pub(super) struct ShutdownWrapper<T, F> {
         inner: T,
@@ -248,7 +248,7 @@ mod shutdown {
     {
         delegate! {
             to self.inner {
-                fn notify_step(&mut self, step: S, constraint: crate::abs::Constraint<V, C>);
+                fn notify_step(&mut self, step: S, constraint: leaf_runtime::abs::Constraint<V, C>);
             }
         }
     }

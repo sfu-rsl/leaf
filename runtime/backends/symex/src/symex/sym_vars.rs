@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use common::{log_info, types::trace::Constraint};
 
-use crate::abs::SymVariable;
+use leaf_runtime::abs::SymVariable;
 
 use super::alias::backend;
 use backend::{

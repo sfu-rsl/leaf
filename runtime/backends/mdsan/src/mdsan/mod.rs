@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
-use crate::abs::backend::Shutdown;
-use crate::abs::{PlaceUsage, RawAddress, TypeId};
-use crate::pri::fluent::backend::{
-    RuntimeBackend,
-    shared::noop::{NoOpAnnotationHandler, NoOpConstraintHandler},
+use leaf_runtime::{
+    abs::{PlaceUsage, RawAddress, TypeId, backend::Shutdown},
+    pri::fluent::backend::{
+        AssignmentHandler, RuntimeBackend,
+        shared::noop::{NoOpAnnotationHandler, NoOpConstraintHandler},
+    },
 };
 
 mod alias;
@@ -55,7 +56,9 @@ pub(crate) struct MdSanBackend {
 }
 
 impl MdSanBackend {
-    pub(crate) fn new(types_db: impl crate::type_info::TypeDatabase<'static> + 'static) -> Self {
+    pub(crate) fn new(
+        types_db: impl leaf_runtime::type_info::TypeDatabase<'static> + 'static,
+    ) -> Self {
         let type_manager_ref = Rc::new(type_info::MdSanTypeDb::new(types_db));
         let type_manager = type_manager_ref.clone();
 
@@ -125,7 +128,7 @@ impl RuntimeBackend for MdSanBackend {
 
     type Operand = MdSanValue;
 
-    fn place(&mut self, usage: crate::abs::PlaceUsage) -> Self::PlaceHandler<'_> {
+    fn place(&mut self, usage: PlaceUsage) -> Self::PlaceHandler<'_> {
         MdSanPlaceHandler::new(usage, self)
     }
 
@@ -136,7 +139,7 @@ impl RuntimeBackend for MdSanBackend {
     fn assign_to<'a>(
         &'a mut self,
         _id: common::pri::AssignmentId,
-        dest: <Self::AssignmentHandler<'a> as crate::pri::fluent::backend::AssignmentHandler>::Place,
+        dest: <Self::AssignmentHandler<'a> as AssignmentHandler>::Place,
     ) -> Self::AssignmentHandler<'a> {
         MdSanAssignmentHandler::new(dest, self)
     }

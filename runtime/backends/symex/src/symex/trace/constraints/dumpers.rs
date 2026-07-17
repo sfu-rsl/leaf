@@ -1,6 +1,6 @@
 use core::borrow::Borrow;
 
-use crate::{
+use leaf_runtime::{
     abs::Constraint,
     trace::{StepInspector, StreamDumperStepInspector},
     utils::{HasIndex, Indexed, RRef, file::FileFormat},
@@ -73,7 +73,7 @@ where
                         });
                     serde_json::Serializer::with_formatter(
                         file,
-                        crate::utils::file::JsonLinesFormatter::default(),
+                        leaf_runtime::utils::file::JsonLinesFormatter::default(),
                     )
                 }
                 format @ FileFormat::Text => {

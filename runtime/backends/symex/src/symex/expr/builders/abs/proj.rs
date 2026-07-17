@@ -151,7 +151,7 @@ pub(crate) mod macros {
                 >,
                 metadata: Self::Metadata<'a>,
             ) -> Self::Proj<'a> {
-                use crate::abs::expr::proj::ProjectionOn::*;
+                use leaf_runtime::abs::expr::proj::ProjectionOn::*;
                 match pair {
                     Deref(host) => self.deref(host, metadata),
                     Field(host, field) => self.field(host, field, metadata),

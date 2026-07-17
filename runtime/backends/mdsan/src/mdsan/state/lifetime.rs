@@ -1,4 +1,4 @@
-use crate::pri::fluent::backend::LifetimeHandler;
+use leaf_runtime::pri::fluent::backend::LifetimeHandler;
 
 use super::super::alias::backend;
 use backend::{MdMemoryState, MdSanBackend, MdSanVariablesState};

@@ -13,7 +13,7 @@ pub(crate) mod z3 {
         ast::{self, Ast},
     };
 
-    use crate::abs::{IntType, ValueType};
+    use leaf_runtime::abs::{IntType, ValueType};
 
     use common::log_debug;
     use common::z3::*;
@@ -497,7 +497,7 @@ pub(crate) mod z3 {
             &mut self,
             pointer: AstNode<'ctx>,
             offset: AstNode<'ctx>,
-            pointee_size: crate::abs::TypeSize,
+            pointee_size: leaf_runtime::abs::TypeSize,
         ) -> AstNode<'ctx> {
             let pointer = pointer.as_bit_vector();
             let offset = offset.as_bit_vector();

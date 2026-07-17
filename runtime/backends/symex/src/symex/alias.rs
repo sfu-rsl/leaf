@@ -1,13 +1,13 @@
 use core::ops::DerefMut;
 
 use common::type_info::TypeInfo;
-
-// https://github.com/rust-lang/rust/issues/119776
-pub(super) use crate::symex as backend;
-use crate::{
+use leaf_runtime::{
     abs::{self, FloatType, IntType, TypeId, backend::*},
     utils::Indexed,
 };
+
+// https://github.com/rust-lang/rust/issues/119776
+pub(super) use crate::symex as backend;
 
 use super::{
     ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,

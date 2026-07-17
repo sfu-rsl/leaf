@@ -9,7 +9,7 @@ use std::{cell::RefCell, rc::Rc};
 use common::types::trace::Constraint;
 use delegate::delegate;
 
-use crate::{
+use leaf_runtime::{
     abs::{
         Tag,
         backend::{Shutdown, Solver, TraceManager as AbsTraceManager},
@@ -115,7 +115,7 @@ pub(crate) fn create_trace_manager(
     // NOTE: It's very tricky to break this function down because of complicated borrows.
     let (solver, translator) = match solver_config {
         SolverImpl::Z3 { config } => {
-            crate::solvers::z3::set_global_params(
+            leaf_runtime::solvers::z3::set_global_params(
                 config.global_params.iter().map(|(k, v)| (k, v.to_string())),
             );
             let solver: CurrentSolver = Z3Solver::<SymVarId>::new_in_global_context();

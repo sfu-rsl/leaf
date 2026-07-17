@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, fmt::Display};
 
 use common::log_info;
 
-use crate::{
+use leaf_runtime::{
     abs::Constraint,
     trace::{
         TraceInspector,
@@ -20,7 +20,7 @@ use backend::{
     SymVarId, SymVariablesManager, config::ConstraintSanityCheckLevel, config::OutputConfig,
 };
 
-const TAG: &str = crate::trace::sanity_check::TAG;
+const TAG: &str = leaf_runtime::trace::sanity_check::TAG;
 
 pub(super) fn create_trace_inspector<'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
     sym_var_manager: RRef<impl SymVariablesManager + 'ctx>,
@@ -140,7 +140,7 @@ mod dumping {
 
     use common::{log_info, log_warn};
 
-    use crate::utils::file::FileGenConfig;
+    use leaf_runtime::utils::file::FileGenConfig;
 
     use super::{Constraint, OutputConfig, TAG};
 

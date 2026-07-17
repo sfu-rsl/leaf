@@ -1,6 +1,6 @@
 use delegate::delegate;
 
-use crate::{
+use leaf_runtime::{
     abs::{AssignmentId, BasicBlockIndex, CalleeDef, FuncDef},
     call::{
         CallControlFlowManager, CallDataFlowManager, CallFlowManager, CallShadowMemory,
@@ -156,7 +156,7 @@ impl DropHandler for MdSanCallHandler<'_> {
 
 mod tupling {
 
-    use crate::{
+    use leaf_runtime::{
         abs::{FieldIndex, Local, PlaceUsage, RawAddress, TypeId, place::HasMetadata},
         call::{
             tupling::TuplingHelper,
@@ -267,15 +267,17 @@ mod tupling {
 mod breakage {
     use const_format::concatcp;
 
-    use crate::abs::{CalleeDef, FuncDef};
-    use crate::call::CallFlowBreakageCallback;
-    use crate::utils::alias::check_sym_value_loss;
+    use leaf_runtime::{
+        abs::{CalleeDef, FuncDef},
+        call::CallFlowBreakageCallback,
+        utils::alias::check_sym_value_loss,
+    };
 
     use super::backend;
     use backend::MdSanValue;
     use common::{log_debug, log_warn};
 
-    const TAG: &str = concatcp!(crate::call::TAG, "::breakage");
+    const TAG: &str = concatcp!(leaf_runtime::call::TAG, "::breakage");
 
     pub(crate) struct MdSanBreakageCallback {}
 

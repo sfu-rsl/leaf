@@ -33,7 +33,7 @@ impl Display for ConcreteValue {
 
 impl Display for ConstValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        use crate::utilsx::IntTypeExt;
+        use leaf_runtime::utils::IntTypeExt;
         match self {
             ConstValue::Bool(value) => write!(f, "{value}"),
             ConstValue::Char(value) => write!(f, "'{value}'"),
@@ -159,7 +159,7 @@ impl Expr {
                 bin_expr: BinaryExpr { operator, .. },
                 is_overflow,
             } => write!(f, "{}{operator}?", if *is_overflow { "O" } else { "U" }),
-            Expr::Offset { .. } => write!(f, "{}", crate::abs::BinaryOp::Offset),
+            Expr::Offset { .. } => write!(f, "{}", leaf_runtime::abs::BinaryOp::Offset),
             Expr::Extension(..) => write!(f, "Ext"),
             Expr::Truncation(..) => write!(f, "Trunc"),
             Expr::Ite { .. } => write!(f, "Ite"),

@@ -4,7 +4,7 @@ mod instance;
 mod record;
 mod tracing_i;
 
-use crate::{
+use leaf_runtime::{
     abs::{SwitchCaseIndex, backend::Shutdown, utils::BasicBlockLocationExt},
     call::CallFlowManager,
     pri::fluent::backend::{AssignmentHandler, RuntimeBackend, shared::noop::*},
@@ -82,7 +82,7 @@ impl RuntimeBackend for CftBackend {
 
     type Operand = NullOperand;
 
-    fn place(&mut self, _usage: crate::abs::PlaceUsage) -> Self::PlaceHandler<'_> {
+    fn place(&mut self, _usage: leaf_runtime::abs::PlaceUsage) -> Self::PlaceHandler<'_> {
         Default::default()
     }
 

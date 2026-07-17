@@ -1,6 +1,6 @@
 use std::cell::RefMut;
 
-use crate::{
+use leaf_runtime::{
     abs::{
         self, AssertKind, BasicBlockIndex, BasicBlockLocation, ConstraintKind, SwitchCaseIndex,
         utils::BasicBlockLocationExt,
@@ -9,7 +9,7 @@ use crate::{
     utils::RRef,
 };
 
-use crate::call::CallFlowManager;
+use leaf_runtime::call::CallFlowManager;
 
 use super::alias::backend;
 use backend::{
@@ -17,7 +17,7 @@ use backend::{
     alias::SymExValueUnaryExprBuilder, expr::prelude::ConstValue,
 };
 
-pub(super) type Constraint = crate::abs::Constraint<SymExValue, ConstValue>;
+pub(super) type Constraint = leaf_runtime::abs::Constraint<SymExValue, ConstValue>;
 pub(super) type DecisionCase = ConstValue;
 
 pub(crate) struct SymExConstraintHandler<'a, EB> {

@@ -2,19 +2,21 @@ use super::alias::backend;
 use backend::{PlaceValueRef, expr::place::DeterPlaceValueRef};
 
 mod data_types {
+    use leaf_runtime::abs;
+
     use super::*;
 
     /* Index's place is always deterministic. */
-    pub(crate) type Projection = crate::abs::Projection<DeterPlaceValueRef>;
+    pub(crate) type Projection = abs::Projection<DeterPlaceValueRef>;
 
-    pub(crate) type PlaceMetadata = crate::abs::place::DefaultPlaceMetadata;
-    pub(crate) type LocalWithMetadata = crate::abs::LocalWithMetadata;
-    pub(crate) type PlaceWithMetadata = crate::abs::PlaceWithMetadata<Projection>;
+    pub(crate) type PlaceMetadata = abs::place::DefaultPlaceMetadata;
+    pub(crate) type LocalWithMetadata = abs::LocalWithMetadata;
+    pub(crate) type PlaceWithMetadata = abs::PlaceWithMetadata<Projection>;
 }
 pub(crate) use data_types::*;
 
 mod builders {
-    use crate::pri::fluent::backend::shared::{CoerceIndexPlace, DefaultPlaceBuilder};
+    use leaf_runtime::pri::fluent::backend::shared::{CoerceIndexPlace, DefaultPlaceBuilder};
 
     use super::*;
 
@@ -33,7 +35,7 @@ pub(crate) use builders::SymExPlaceBuilder;
 mod handlers {
     use common::type_info::{TagEncodingInfo, TagInfo};
 
-    use crate::{
+    use leaf_runtime::{
         abs::{PlaceUsage, place::HasMetadata},
         pri::fluent::backend::PlaceHandler,
     };
@@ -66,8 +68,10 @@ mod handlers {
             // FIXME: Temporary solution until LazyTypeInfo is upgraded.
             if let Some(ty) = info.metadata().ty() {
                 if info.metadata().type_id().is_none() {
-                    use crate::abs::{ValueType, backend::CoreTypeProvider};
-                    use crate::type_info::TypeInfo;
+                    use leaf_runtime::{
+                        abs::{ValueType, backend::CoreTypeProvider},
+                        type_info::TypeInfo,
+                    };
                     let id = match ty {
                         ValueType::Bool => {
                             Some(CoreTypeProvider::<&TypeInfo>::bool(self.type_manager).id)

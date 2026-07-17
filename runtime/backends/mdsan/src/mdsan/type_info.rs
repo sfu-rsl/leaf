@@ -5,7 +5,7 @@ use delegate::delegate;
 use common::log_warn;
 use common::type_info::TypeDatabase;
 
-use crate::abs::TypeId;
+use leaf_runtime::abs::TypeId;
 
 use super::MdTypeProvider;
 

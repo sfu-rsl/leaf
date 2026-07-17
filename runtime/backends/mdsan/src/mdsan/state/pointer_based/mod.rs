@@ -1,6 +1,6 @@
 use std::{num::NonZero, rc::Rc};
 
-use crate::{
+use leaf_runtime::{
     abs::{PlaceUsage, PointerOffset, RawAddress, TypeId, TypeSize, place::HasMetadata},
     memory::raw_addr::MemoryGate,
     utils::byte_offset_from,

@@ -1,7 +1,7 @@
 mod pointer_based;
 mod sym_place;
 
-use crate::pri::fluent::backend::LifetimeHandler;
+use leaf_runtime::pri::fluent::backend::LifetimeHandler;
 
 pub(super) use pointer_based::RawPointerVariableState;
 pub(super) use sym_place::{

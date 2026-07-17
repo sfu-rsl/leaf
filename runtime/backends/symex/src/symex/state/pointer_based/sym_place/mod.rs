@@ -4,7 +4,7 @@ use core::{iter, ops::Bound};
 
 use common::log_debug;
 
-use crate::abs::place::HasMetadata;
+use leaf_runtime::abs::place::HasMetadata;
 
 use super::*;
 

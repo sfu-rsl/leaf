@@ -1,21 +1,22 @@
+use leaf_runtime::{abs, pri::fluent::backend::shared::DefaultPlaceBuilder};
+
 use super::alias::backend;
 use backend::MdSanPlaceValue;
 
 mod data_types {
     use super::*;
 
-    pub(crate) type Projection = crate::abs::Projection<MdSanPlaceValue>;
+    pub(crate) type Projection = abs::Projection<MdSanPlaceValue>;
 
-    pub(crate) type LocalWithMetadata = crate::abs::LocalWithMetadata;
-    pub(crate) type PlaceWithMetadata = crate::abs::PlaceWithMetadata<Projection>;
+    pub(crate) type LocalWithMetadata = abs::LocalWithMetadata;
+    pub(crate) type PlaceWithMetadata = abs::PlaceWithMetadata<Projection>;
 }
 pub(crate) use data_types::*;
 
-pub(crate) type MdSanPlaceBuilder =
-    crate::pri::fluent::backend::shared::DefaultPlaceBuilder<LocalWithMetadata, MdSanPlaceValue>;
+pub(crate) type MdSanPlaceBuilder = DefaultPlaceBuilder<LocalWithMetadata, MdSanPlaceValue>;
 
 mod handlers {
-    use crate::{abs::PlaceUsage, pri::fluent::backend::PlaceHandler};
+    use leaf_runtime::{abs::PlaceUsage, pri::fluent::backend::PlaceHandler};
 
     use super::*;
     use backend::{MdMemoryState, MdSanBackend, MdSanPlaceInfo, MdSanVariablesState};

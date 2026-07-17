@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use common::log_warn;
 
-use crate::{
+use leaf_runtime::{
     abs::{AssignmentId, IntType, PlaceUsage, RawAddress, TypeId, TypeSize},
     pri::fluent::backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
 };
