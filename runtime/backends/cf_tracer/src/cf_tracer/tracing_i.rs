@@ -8,7 +8,7 @@ use tracing_subscriber::{
     layer::Filter,
 };
 
-use crate::utils::logging::LeafTracingSubLayerFactory;
+use leaf_runtime::utils::logging::LeafTracingSubLayerFactory;
 
 pub(super) const TARGET: &str = "__program";
 pub(super) const LEVEL: Level = Level::INFO;

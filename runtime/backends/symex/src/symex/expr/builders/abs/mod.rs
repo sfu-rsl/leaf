@@ -8,7 +8,7 @@ pub(super) mod variance;
 
 use common::pri::TypeSize;
 
-use crate::{
+use leaf_runtime::{
     abs::{CastKind, FloatType, IntType, TypeId},
     utils::meta::{aug_enum, super_enum},
 };
@@ -18,7 +18,7 @@ use self::macros::macro_rules_method_with_optional_args;
 aug_enum! {
     #[repr(u8)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub(crate) enum BinaryOp from crate::abs::BinaryOp {
+    pub(crate) enum BinaryOp from leaf_runtime::abs::BinaryOp {
         Add, AddUnchecked, AddWithOverflow, AddSaturating,
         Sub, SubUnchecked, SubWithOverflow, SubSaturating,
         Mul, MulUnchecked, MulWithOverflow,
@@ -83,7 +83,7 @@ impl BinaryOp {
 super_enum! {
     #[repr(u8)]
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub(crate) enum UnaryOp from crate::abs::UnaryOp {
+    pub(crate) enum UnaryOp from leaf_runtime::abs::UnaryOp {
         Not,
         Neg,
         PtrMetadata,
@@ -99,7 +99,7 @@ super_enum! {
     }
 }
 
-pub(crate) use crate::abs::TernaryOp;
+pub(crate) use leaf_runtime::abs::TernaryOp;
 
 mod fmt {
     use core::fmt::{Display, Formatter, Result};
@@ -108,7 +108,7 @@ mod fmt {
 
     impl Display for BinaryOp {
         fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-            write!(f, "{}", crate::abs::BinaryOp::from(self))
+            write!(f, "{}", leaf_runtime::abs::BinaryOp::from(self))
         }
     }
 
@@ -116,7 +116,7 @@ mod fmt {
         fn fmt(&self, f: &mut Formatter<'_>) -> Result {
             match self {
                 UnaryOp::NoOp => write!(f, ""),
-                _ => write!(f, "{}", crate::abs::UnaryOp::try_from(self).unwrap()),
+                _ => write!(f, "{}", leaf_runtime::abs::UnaryOp::try_from(self).unwrap()),
             }
         }
     }

@@ -1,14 +1,11 @@
 use std::{cell::RefCell, sync::Once};
 
-use crate::{
-    cf_tracer::{NullOperand, NullPlace},
-    pri::{
-        fluent::{InstanceManager, backend::shared::noop::NoOpPlaceBuilder},
-        refs::NoOpRefManager,
-    },
+use leaf_runtime::pri::{
+    fluent::{InstanceManager, backend::shared::noop::NoOpPlaceBuilder},
+    refs::NoOpRefManager,
 };
 
-use super::CftBackend;
+use super::{CftBackend, NullOperand, NullPlace};
 
 thread_local! {
     static BACKEND: RefCell<Option<CftBackend>> = RefCell::new(None);

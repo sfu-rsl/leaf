@@ -1,6 +1,6 @@
 use common::log_warn;
 
-use crate::{
+use leaf_runtime::{
     abs::{AssignmentId, PlaceUsage, RawAddress, TypeId, TypeSize},
     pri::fluent::backend::{AssignmentHandler, RawMemoryHandler, RuntimeBackend},
 };

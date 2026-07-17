@@ -1,6 +1,6 @@
 use std::cell::RefMut;
 
-use crate::{
+use leaf_runtime::{
     abs::{
         AssignmentId, BasicBlockIndex, CalleeDef, Constant, FuncDef,
         backend::PhasedCallTraceRecorder, utils::BasicBlockLocationExt,
@@ -198,7 +198,7 @@ impl DropHandler for SymExCallHandler<'_> {
 mod tupling {
     use delegate::delegate;
 
-    use crate::{
+    use leaf_runtime::{
         abs::{FieldIndex, PlaceUsage, RawAddress},
         call::{
             tupling::TuplingHelper,
@@ -311,15 +311,17 @@ mod tupling {
 mod breakage {
     use const_format::concatcp;
 
-    use crate::abs::{CalleeDef, Constant, FuncDef};
-    use crate::call::CallFlowBreakageCallback;
-    use crate::utils::alias::check_sym_value_loss;
+    use leaf_runtime::{
+        abs::{CalleeDef, Constant, FuncDef},
+        call::CallFlowBreakageCallback,
+        utils::alias::check_sym_value_loss,
+    };
 
     use super::backend;
     use backend::{ConcreteValue, Implied, SymExValue, config::ExternalCallStrategy};
     use common::{log_debug, log_warn};
 
-    const TAG: &str = concatcp!(crate::call::TAG, "::breakage");
+    const TAG: &str = concatcp!(leaf_runtime::call::TAG, "::breakage");
 
     pub(crate) struct SymExBreakageCallback {
         pub(super) strategy: ExternalCallStrategy,

@@ -2,7 +2,7 @@ use delegate::delegate;
 
 use common::type_info::{CoreTypes, MetadataValue, TypeInfo, pass_core_type_names_to};
 
-use crate::abs::{IntType, backend::TypeDatabase};
+use leaf_runtime::abs::{IntType, backend::TypeDatabase};
 
 use super::alias::backend;
 use backend::{CoreTypeProvider, LazyTypeInfo, TypeId, ValueType};

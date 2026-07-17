@@ -3,14 +3,14 @@ use std::ops::Range;
 
 use common::pri::TypeSize;
 
-use crate::utils::{RangeIntersection, byte_offset_from};
+use leaf_runtime::utils::{RangeIntersection, byte_offset_from};
 
 pub(super) type Address = common::types::RawAddress;
 
 mod high {
     use common::{log_warn, pri::TypeId, types::PointerOffset};
 
-    use crate::memory::raw_addr::{Memory, MemoryGate as SharedMemoryGate};
+    use leaf_runtime::memory::raw_addr::{Memory, MemoryGate as SharedMemoryGate};
 
     use super::super::backend::{
         expr::SymValueRef,

@@ -6,7 +6,7 @@ use core::num::NonZero;
 use common::log_error;
 use derive_more as dm;
 
-use crate::abs::{PointerOffset, RawAddress, TypeId, TypeSize};
+use leaf_runtime::abs::{PointerOffset, RawAddress, TypeId, TypeSize};
 
 use super::alias::backend;
 use backend::{MdMemoryState, MdSanPlaceValue, MdSanVariablesState, TypeDatabase};

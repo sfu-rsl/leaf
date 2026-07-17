@@ -178,7 +178,7 @@ mod toplevel {
 mod symbolic {
     use common::{pri::TypeSize, type_info::FieldInfo};
 
-    use crate::{
+    use leaf_runtime::{
         type_info::{FieldsShapeInfoExt, TypeInfoExt},
         utils::RangeIntersection,
     };

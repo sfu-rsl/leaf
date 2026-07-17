@@ -4,7 +4,7 @@ use derive_more as dm;
 
 use common::{log_warn, type_info::TypeInfo};
 
-use crate::{
+use leaf_runtime::{
     abs::{PlaceUsage, PointerOffset, TypeId, TypeSize},
     type_info::{TypeInfoExt, TypeLayoutResolver, TypeLayoutResolverExt},
     utils::{InPlaceSelfHierarchical, RRef, byte_offset_from},

@@ -1,6 +1,6 @@
 use core::iter;
 
-use crate::{
+use leaf_runtime::{
     abs::{FieldIndex, TypeId},
     pri::fluent::backend::AssignmentHandler,
     type_info::{TypeLayoutResolver, TypeLayoutResolverExt},

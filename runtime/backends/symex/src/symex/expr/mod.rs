@@ -16,10 +16,10 @@ use derive_more as dm;
 
 use common::type_info::TypeInfo;
 
-pub(crate) use crate::abs::{
+pub(crate) use leaf_runtime::abs::{
     FloatType, IntType, PointerOffset, RawAddress, TypeId, TypeSize, ValueType, VariantIndex,
 };
-use crate::utils::meta::define_reversible_pair;
+use leaf_runtime::utils::meta::define_reversible_pair;
 
 use super::alias::backend;
 
@@ -297,7 +297,7 @@ impl SymBinaryOperands {
 }
 
 mod operators {
-    use crate::utils::meta::sub_enum;
+    use leaf_runtime::utils::meta::sub_enum;
 
     use super::{AbsBinaryOp, AbsUnaryOp};
 
@@ -695,7 +695,7 @@ define_reversible_pair!(
 #[allow(clippy::wrong_self_convention)]
 mod convert {
     use super::*;
-    use crate::abs;
+    use leaf_runtime::abs;
 
     impl Value {
         #[inline]

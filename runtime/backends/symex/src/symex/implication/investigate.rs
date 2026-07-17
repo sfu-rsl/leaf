@@ -5,7 +5,7 @@ use common::program_dep::{
     rw::{LoadedProgramDepMap, read_program_dep_map},
 };
 
-use crate::{abs::BasicBlockLocation, utils::HasIndex};
+use leaf_runtime::{abs::BasicBlockLocation, utils::HasIndex};
 
 use super::backend;
 use backend::{

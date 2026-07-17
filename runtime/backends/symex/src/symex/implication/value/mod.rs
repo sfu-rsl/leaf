@@ -10,7 +10,7 @@ use std::borrow::Cow;
 use cfg_if::cfg_if;
 use derive_more as dm;
 
-use crate::abs::{PointerOffset, TypeSize};
+use leaf_runtime::abs::{PointerOffset, TypeSize};
 
 use super::ConstraintId;
 

@@ -2,12 +2,12 @@ use common::{log_warn, pri::BasicBlockIndex};
 use tracing::{Span, event, span};
 use valuable::Valuable;
 
-use crate::{
+use leaf_runtime::{
     abs::{
         BasicBlockLocation, Constant, ConstraintKind, FuncDef, SwitchCaseIndex,
         backend::{DecisionTraceRecorder, PhasedCallTraceRecorder},
     },
-    utilsx::IntTypeExt,
+    utils::IntTypeExt,
 };
 
 use super::tracing_i::{LEVEL, TARGET};

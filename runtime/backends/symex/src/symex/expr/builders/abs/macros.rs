@@ -216,7 +216,7 @@ macro_rules! impl_general_cast_through_singulars {
         fn cast<'a>(
             &mut self,
             operand: Self::ExprRef<'a>,
-            target: $crate::abs::CastKind<
+            target: leaf_runtime::abs::CastKind<
                 Self::IntType,
                 Self::FloatType,
                 Self::PtrType,
@@ -224,7 +224,7 @@ macro_rules! impl_general_cast_through_singulars {
             >,
             metadata: Self::Metadata<'a>,
         ) -> Self::Expr<'a> {
-            use $crate::abs::CastKind;
+            use leaf_runtime::abs::CastKind;
             match target {
                 CastKind::ToChar => self.to_char(operand, metadata),
                 CastKind::ToInt(ty) => self.to_int(operand, ty, metadata),
@@ -256,14 +256,14 @@ macro_rules! impl_singular_casts_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_cast_through_general;
-            (to_char = $crate::abs::CastKind::ToChar)
-            (to_int + ty: Self::IntType = $crate::abs::CastKind::ToInt(ty))
-            (to_float + ty: Self::FloatType = $crate::abs::CastKind::ToFloat(ty))
-            (to_ptr + ty: Self::PtrType = $crate::abs::CastKind::ToPointer(ty))
-            (ptr_unsize = $crate::abs::CastKind::PointerUnsize)
-            (expose_prov = $crate::abs::CastKind::ExposeProvenance)
-            (transmute + ty: Self::GenericType = $crate::abs::CastKind::Transmute(ty))
-            (subtype + ty: Self::GenericType = $crate::abs::CastKind::Subtype(ty))
+            (to_char = leaf_runtime::abs::CastKind::ToChar)
+            (to_int + ty: Self::IntType = leaf_runtime::abs::CastKind::ToInt(ty))
+            (to_float + ty: Self::FloatType = leaf_runtime::abs::CastKind::ToFloat(ty))
+            (to_ptr + ty: Self::PtrType = leaf_runtime::abs::CastKind::ToPointer(ty))
+            (ptr_unsize = leaf_runtime::abs::CastKind::PointerUnsize)
+            (expose_prov = leaf_runtime::abs::CastKind::ExposeProvenance)
+            (transmute + ty: Self::GenericType = leaf_runtime::abs::CastKind::Transmute(ty))
+            (subtype + ty: Self::GenericType = leaf_runtime::abs::CastKind::Subtype(ty))
         );
     };
 }

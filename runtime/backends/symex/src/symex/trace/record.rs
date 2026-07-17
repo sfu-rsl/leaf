@@ -10,9 +10,9 @@ use common::{
     types::{InstanceKindId, trace::BranchRecord},
 };
 
-use crate::{
+use leaf_runtime::{
     abs::{
-        BasicBlockLocation, ConstraintKind, FuncDef,
+        BasicBlockLocation, ConstraintKind, ExeTraceRecord as AbsExeTraceRecord, FuncDef,
         backend::{DecisionTraceRecorder, PhasedCallTraceRecorder},
     },
     utils::{HasIndex, Indexed, RRef, RefView, file::JsonLinesFormatter},
@@ -21,12 +21,12 @@ use crate::{
 use super::backend;
 use backend::{ConstValue, ExeTraceStorage, alias::ExeTraceRecorder, config::OutputConfig};
 
-type ExeTraceRecord = crate::abs::ExeTraceRecord<ConstValue>;
+type ExeTraceRecord = AbsExeTraceRecord<ConstValue>;
 
 #[derive(Debug, Serialize, dm::Deref)]
 pub(crate) struct Record {
     #[deref]
-    record: Indexed<crate::abs::ExeTraceRecord<ConstValue>>,
+    record: Indexed<AbsExeTraceRecord<ConstValue>>,
     pub(super) depth: usize,
 }
 
@@ -36,8 +36,8 @@ impl HasIndex for Record {
     }
 }
 
-impl Borrow<crate::abs::ExeTraceRecord<ConstValue>> for Record {
-    fn borrow(&self) -> &crate::abs::ExeTraceRecord<ConstValue> {
+impl Borrow<AbsExeTraceRecord<ConstValue>> for Record {
+    fn borrow(&self) -> &AbsExeTraceRecord<ConstValue> {
         &self.record.value
     }
 }
@@ -251,7 +251,7 @@ fn serialize_rec<S: Serializer>(record: &Record, serializer: S) -> Result<S::Ok,
         ..
     } = record;
 
-    use crate::abs::ExeTraceRecord::*;
+    use AbsExeTraceRecord::*;
     match value {
         Branch(ref branch) => Indexed {
             value: Branch(to_raw_case(branch)),

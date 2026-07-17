@@ -7,7 +7,7 @@ use common::{
     log_warn,
 };
 
-use crate::{
+use leaf_runtime::{
     abs::IntType,
     utils::file::{FileFormat, FileGenConfig},
 };
@@ -49,7 +49,7 @@ struct LoggingAnswersWriter;
 
 impl SpecializedAnswersWriter for LoggingAnswersWriter {
     fn write(&mut self, answers: &HashMap<u32, ValueRef>) {
-        crate::outgen::log_json(answers.iter());
+        leaf_runtime::outgen::log_json(answers.iter());
     }
 }
 

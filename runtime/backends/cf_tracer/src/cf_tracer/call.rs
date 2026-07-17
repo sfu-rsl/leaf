@@ -1,4 +1,4 @@
-use crate::{
+use leaf_runtime::{
     abs::{
         AssignmentId, BasicBlockIndex, CalleeDef, FuncDef, SwitchCaseIndex,
         backend::PhasedCallTraceRecorder, utils::BasicBlockLocationExt,

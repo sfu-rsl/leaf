@@ -12,7 +12,7 @@ use common::type_info::rw::LoadedTypeDatabase;
 
 use cfg_if::cfg_if;
 
-use crate::pri::{
+use leaf_runtime::pri::{
     fluent::{InstanceManager, backend::RuntimeBackend},
     refs::DefaultRefManager,
 };
@@ -102,7 +102,7 @@ impl InstanceManager for SymExInstanceManager {
 
     fn init() {
         INIT.call_once(|| {
-            crate::init::<crate::utils::logging::IdentityFactory>();
+            crate::init::<leaf_runtime::utils::logging::IdentityFactory>();
 
             log_info!("Initializing symbolic execution backend");
             let config = load_config();

@@ -1,7 +1,9 @@
 use common::types::trace::ConstraintKind;
 
-use crate::{
-    abs::{BasicBlockLocation, Constant, SwitchCaseIndex, backend::DecisionTraceRecorder},
+use leaf_runtime::{
+    abs::{
+        AssertKind, BasicBlockLocation, Constant, SwitchCaseIndex, backend::DecisionTraceRecorder,
+    },
     pri::fluent::backend::{ConstraintHandler, SwitchHandler},
 };
 
@@ -38,12 +40,7 @@ impl<'a> ConstraintHandler for CftConstraintHandler<'a> {
         }
     }
 
-    fn assert(
-        self,
-        _cond: Self::Operand,
-        expected: bool,
-        _assert_kind: crate::abs::AssertKind<Self::Operand>,
-    ) {
+    fn assert(self, _cond: Self::Operand, expected: bool, _assert_kind: AssertKind<Self::Operand>) {
         self.recorder.notify_decision(
             self.node_location,
             &if expected {

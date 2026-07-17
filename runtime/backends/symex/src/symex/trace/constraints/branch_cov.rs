@@ -14,7 +14,7 @@ use super::{
 };
 use backend::{ConstValue, config::OutputConfig};
 
-type Inspector = crate::trace::BranchCoverageStepInspector<Step, ConstValue>;
+type Inspector = BranchCoverageStepInspector<Step, ConstValue>;
 
 pub(super) fn create_branch_coverage_collector<V: Display>(
     output_config: &Option<OutputConfig>,

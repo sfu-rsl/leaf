@@ -10,12 +10,9 @@
 #![feature(btree_cursors)]
 
 pub(crate) mod symex;
-mod utilsx;
 
-use leaf_runtime::{
-    abs, call, init, make_late_init_pri_of, memory, outgen, pri, solvers, trace, type_info, utils,
-};
+use leaf_runtime::init;
 
-type SymExPri = pri::fluent::FluentPri<self::symex::SymExInstanceManager>;
+type SymExPri = leaf_runtime::pri::fluent::FluentPri<self::symex::SymExInstanceManager>;
 
-make_late_init_pri_of!(SymExPri);
+leaf_runtime::make_late_init_pri_of!(SymExPri);

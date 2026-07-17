@@ -1,7 +1,7 @@
 use common::log_debug;
 use common::type_info::TypeInfo;
 
-use crate::type_info::TypeInfoExt;
+use leaf_runtime::type_info::TypeInfoExt;
 
 use super::backend;
 use backend::alias::TypeDatabase;
@@ -17,7 +17,7 @@ mod retrieval {
     use common::type_info::{FieldsShapeInfo, StructShape, VariantInfo};
     use common::types::TypeSize;
 
-    use crate::abs::{IntType, ValueType, backend::CoreTypeProvider};
+    use leaf_runtime::abs::{IntType, ValueType, backend::CoreTypeProvider};
 
     use super::*;
 

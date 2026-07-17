@@ -4,7 +4,7 @@ use std::fmt::Display;
 
 use common::log_debug;
 
-use crate::abs::CastKind;
+use leaf_runtime::abs::CastKind;
 
 use super::{macros::macro_rules_method_with_optional_args, *};
 

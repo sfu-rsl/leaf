@@ -2,7 +2,7 @@ use core::{iter, ops::DerefMut};
 
 use common::type_info::TagEncodingInfo;
 
-use crate::{
+use leaf_runtime::{
     abs::{
         self, AssignmentId, BinaryOp, CastKind, FieldIndex, InstanceKindId, IntType, UnaryOp,
         VariantIndex,
@@ -35,7 +35,7 @@ pub(super) struct AssignmentServices<'a, EB> {
 // Meant for leveraging field-level borrowing to avoid borrowing issues.
 macro_rules! services_from_backend {
     ($backend:expr) => {{
-        use crate::call::CallFlowManager;
+        use leaf_runtime::call::CallFlowManager;
         AssignmentServices {
             #[cfg(feature = "implicit_flow")]
             current_func: $backend.call_flow_manager.current_func().body_id,
@@ -534,7 +534,7 @@ pub(super) mod precondition {
 
     use common::type_info::TagInfo;
 
-    use crate::utils::RangeIntersection;
+    use leaf_runtime::utils::RangeIntersection;
 
     use backend::{
         TypeSize,

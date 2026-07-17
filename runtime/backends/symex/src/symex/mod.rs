@@ -25,8 +25,8 @@ use common::{
     types::InstanceKindId,
 };
 
-use crate::{
-    abs::{PlaceUsage, SymVariable, Tag, TypeId, TypeSize, backend::*},
+use leaf_runtime::{
+    abs::{Constraint, PlaceUsage, SymVariable, Tag, TypeId, TypeSize, backend::*},
     pri::fluent::backend::*,
     utils::{HasIndex, RRef, RefView},
 };
@@ -103,7 +103,7 @@ pub(crate) struct SymExBackend {
 impl SymExBackend {
     pub fn new(
         config: SymExBackendConfig,
-        types_db: impl crate::type_info::TypeDatabase<'static> + 'static,
+        types_db: impl leaf_runtime::type_info::TypeDatabase<'static> + 'static,
     ) -> Self {
         let type_manager_ref = Rc::new(type_info::default_type_manager(types_db));
         let expr_builder_ref = Rc::new(RefCell::new(expr::builders::new_expr_builder(
@@ -295,7 +295,7 @@ trait SymVariablesManager {
 
     fn iter_concretization_constraints(
         &self,
-    ) -> impl ExactSizeIterator<Item = (&SymVarId, &crate::abs::Constraint<SymValueRef, ConstValue>)>;
+    ) -> impl ExactSizeIterator<Item = (&SymVarId, &Constraint<SymValueRef, ConstValue>)>;
 }
 
 trait GenericVariablesState {

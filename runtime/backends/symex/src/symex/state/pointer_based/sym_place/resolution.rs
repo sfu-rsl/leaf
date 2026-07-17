@@ -98,7 +98,7 @@ impl<'a> DefaultSymPlaceResolver<'a> {
 mod implementation {
     use common::{log_warn, type_info::ArrayShape};
 
-    use crate::type_info::TypeInfoExt;
+    use leaf_runtime::type_info::TypeInfoExt;
 
     use super::*;
 
