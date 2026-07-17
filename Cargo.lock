@@ -191,7 +191,7 @@ dependencies = [
 
 [[package]]
 name = "common"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "config",
  "delegate",
@@ -209,7 +209,7 @@ dependencies = [
 
 [[package]]
 name = "compiler"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bimap",
  "bitflags",
@@ -725,7 +725,7 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "macros"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ignore",
  "proc-macro2",
@@ -1165,7 +1165,7 @@ dependencies = [
 
 [[package]]
 name = "runtime"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "common",
@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_backend_cf_tracer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cfg-if",
  "common",
@@ -1209,7 +1209,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_backend_mdsan"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cfg-if",
  "common",
@@ -1228,7 +1228,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_backend_symex"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "cfg-if",
  "common",
@@ -1251,7 +1251,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_cf_tracer"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "common",
  "runtime_backend_cf_tracer",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_mdsan"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "common",
  "runtime_backend_mdsan",
@@ -1267,7 +1267,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_noop"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "common",
  "runtime",
@@ -1275,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_symex"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "common",
  "runtime_backend_symex",
@@ -1283,7 +1283,7 @@ dependencies = [
 
 [[package]]
 name = "runtime_symex_no_implicit"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "common",
  "runtime_backend_symex",
