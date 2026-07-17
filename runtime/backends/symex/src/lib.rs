@@ -54,7 +54,7 @@ use self::{
     trace::default_trace_querier,
 };
 
-pub(crate) use self::{config::SymExBackendConfig, instance::SymExInstanceManager};
+pub(crate) use self::config::SymExBackendConfig;
 
 mod associated_types {
     use super::*;
