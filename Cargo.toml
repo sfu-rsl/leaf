@@ -20,8 +20,8 @@ version = "0.2.0"
 common = { path = "common", package = "common" }
 macros = { path = "macros" }
 leaf_macros = { path = "macros", package = "macros"}
-runtime_symex_li = { path = "runtime/flavors/symex_li" }
-runtime_symex_li_no_implicit = { path = "runtime/flavors/symex_li_no_implicit" }
+runtime_symex = { path = "runtime/flavors/symex" }
+runtime_symex_no_implicit = { path = "runtime/flavors/symex_no_implicit" }
 runtime_noop = { path = "runtime/flavors/noop" }
 libafl_leaf = { path = "integration/libafl/lib" }
 

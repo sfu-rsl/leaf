@@ -1,17 +1,16 @@
 [package]
-name = "runtime_symex_li"
+name = "runtime_symex_no_implicit"
 version = { workspace = true }
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]
-name = "leafrt_symex_li"
+name = "leafrt_symex_no_implicit"
 crate-type = ["cdylib"]
 
 [dependencies]
 common = { workspace = true }
 backend = { path = "../../backends/symex", package = "runtime_backend_symex", features = [
-    "implicit_flow",
     "runtime_access_raw_ptr",
     "release_sym_value_loss_checks",
 ] }

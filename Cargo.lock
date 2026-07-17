@@ -232,8 +232,8 @@ dependencies = [
  "regex-lite",
  "ron 0.8.1",
  "runtime_noop",
- "runtime_symex_li",
- "runtime_symex_li_no_implicit",
+ "runtime_symex",
+ "runtime_symex_no_implicit",
  "serde",
  "serde_json",
  "smallvec",
@@ -1361,15 +1361,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "runtime_symex_li"
-version = "0.2.0"
-dependencies = [
- "common",
- "runtime_backend_symex",
-]
-
-[[package]]
-name = "runtime_symex_li_no_implicit"
+name = "runtime_symex_no_implicit"
 version = "0.2.0"
 dependencies = [
  "common",
