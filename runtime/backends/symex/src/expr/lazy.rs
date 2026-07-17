@@ -118,10 +118,7 @@ mod retrieval {
     }
 
     impl LazyTypeInfo {
-        pub(in crate::symex) fn fetch<'a>(
-            &'a mut self,
-            type_manager: &dyn TypeDatabase,
-        ) -> &'a TypeInfo {
+        pub(crate) fn fetch<'a>(&'a mut self, type_manager: &dyn TypeDatabase) -> &'a TypeInfo {
             match self {
                 Self::Id(ty_id) | Self::IdPrimitive(ty_id, _) | Self::IdSize(ty_id, _) => {
                     *self = Self::Fetched(type_manager.get_type(ty_id));
@@ -137,10 +134,7 @@ mod retrieval {
         }
 
         #[inline]
-        pub(in crate::symex) fn get_type(
-            &self,
-            type_manager: &dyn TypeDatabase,
-        ) -> Option<&TypeInfo> {
+        pub(crate) fn get_type(&self, type_manager: &dyn TypeDatabase) -> Option<&TypeInfo> {
             match self {
                 Self::Id(ty_id) | Self::IdPrimitive(ty_id, _) | Self::IdSize(ty_id, _) => {
                     Some(type_manager.get_type(&ty_id))
@@ -152,10 +146,7 @@ mod retrieval {
         }
 
         #[inline]
-        pub(in crate::symex) fn get_size(
-            &self,
-            type_manager: &dyn TypeDatabase,
-        ) -> Option<TypeSize> {
+        pub(crate) fn get_size(&self, type_manager: &dyn TypeDatabase) -> Option<TypeSize> {
             match self {
                 Self::None => None,
                 Self::IdPrimitive(_, ty) => Some(ty.size().into()),
@@ -435,7 +426,7 @@ mod retrieval {
     }
 
     impl ConcreteValue {
-        pub(in crate::symex) fn try_resolve_as_const(
+        pub(crate) fn try_resolve_as_const(
             &self,
             type_manager: &dyn TypeDatabase,
         ) -> Option<ConstValue> {
@@ -643,7 +634,7 @@ mod proj {
     }
 
     impl ConcreteValue {
-        pub(in crate::symex) fn expect_int(
+        pub(crate) fn expect_int(
             &self,
             type_manager: &dyn TypeDatabase,
             retriever: &dyn RawPointerRetriever,
@@ -659,7 +650,7 @@ mod proj {
             }
         }
 
-        pub(in crate::symex) fn expect_addr(
+        pub(crate) fn expect_addr(
             &self,
             type_manager: &dyn TypeDatabase,
             retriever: &dyn RawPointerRetriever,
@@ -675,7 +666,7 @@ mod proj {
             }
         }
 
-        pub(in crate::symex) fn expect_fat_ptr(
+        pub(crate) fn expect_fat_ptr(
             &self,
             type_manager: &dyn TypeDatabase,
             retriever: &dyn RawPointerRetriever,

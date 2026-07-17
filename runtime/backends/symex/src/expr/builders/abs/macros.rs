@@ -11,9 +11,9 @@ macro_rules! impl_general_binary_op_through_singulars {
         fn binary_op<'a>(
             &mut self,
             operands: Self::ExprRefPair<'a>,
-            op: $crate::symex::expr::builders::abs::BinaryOp,
+            op: $crate::expr::builders::abs::BinaryOp,
         ) -> Self::Expr<'a> {
-            use $crate::symex::expr::builders::abs::BinaryOp::*;
+            use $crate::expr::builders::abs::BinaryOp::*;
             match op {
                 Add => self.add(operands),
                 AddUnchecked => self.add_unchecked(operands),
@@ -68,38 +68,38 @@ macro_rules! impl_singular_binary_ops_through_general {
     () => {
         repeat_macro_for!(
             impl_general_binary_op_for;
-            (add = $crate::symex::expr::builders::abs::BinaryOp::Add)
-            (add_unchecked = $crate::symex::expr::builders::abs::BinaryOp::AddUnchecked)
-            (add_with_overflow = $crate::symex::expr::builders::abs::BinaryOp::AddWithOverflow)
-            (add_saturating = $crate::symex::expr::builders::abs::BinaryOp::AddSaturating)
-            (sub = $crate::symex::expr::builders::abs::BinaryOp::Sub)
-            (sub_unchecked = $crate::symex::expr::builders::abs::BinaryOp::SubUnchecked)
-            (sub_with_overflow = $crate::symex::expr::builders::abs::BinaryOp::SubWithOverflow)
-            (sub_saturating = $crate::symex::expr::builders::abs::BinaryOp::SubSaturating)
-            (mul = $crate::symex::expr::builders::abs::BinaryOp::Mul)
-            (mul_unchecked = $crate::symex::expr::builders::abs::BinaryOp::MulUnchecked)
-            (mul_with_overflow = $crate::symex::expr::builders::abs::BinaryOp::MulWithOverflow)
-            (div = $crate::symex::expr::builders::abs::BinaryOp::Div)
-            (div_exact = $crate::symex::expr::builders::abs::BinaryOp::DivExact)
-            (rem = $crate::symex::expr::builders::abs::BinaryOp::Rem)
-            (xor = $crate::symex::expr::builders::abs::BinaryOp::BitXor)
-            (and = $crate::symex::expr::builders::abs::BinaryOp::BitAnd)
-            (or = $crate::symex::expr::builders::abs::BinaryOp::BitOr)
-            (shl = $crate::symex::expr::builders::abs::BinaryOp::Shl)
-            (shl_unchecked = $crate::symex::expr::builders::abs::BinaryOp::ShlUnchecked)
-            (shr = $crate::symex::expr::builders::abs::BinaryOp::Shr)
-            (shr_unchecked = $crate::symex::expr::builders::abs::BinaryOp::ShrUnchecked)
-            (rotate_left = $crate::symex::expr::builders::abs::BinaryOp::RotateL)
-            (rotate_right = $crate::symex::expr::builders::abs::BinaryOp::RotateR)
-            (carryless_mul = $crate::symex::expr::builders::abs::BinaryOp::CarrylessMul)
-            (eq = $crate::symex::expr::builders::abs::BinaryOp::Eq)
-            (lt = $crate::symex::expr::builders::abs::BinaryOp::Lt)
-            (le = $crate::symex::expr::builders::abs::BinaryOp::Le)
-            (ne = $crate::symex::expr::builders::abs::BinaryOp::Ne)
-            (ge = $crate::symex::expr::builders::abs::BinaryOp::Ge)
-            (gt = $crate::symex::expr::builders::abs::BinaryOp::Gt)
-            (cmp = $crate::symex::expr::builders::abs::BinaryOp::Cmp)
-            (offset + pointee_size: TypeSize = $crate::symex::expr::builders::abs::BinaryOp::Offset(pointee_size))
+            (add = $crate::expr::builders::abs::BinaryOp::Add)
+            (add_unchecked = $crate::expr::builders::abs::BinaryOp::AddUnchecked)
+            (add_with_overflow = $crate::expr::builders::abs::BinaryOp::AddWithOverflow)
+            (add_saturating = $crate::expr::builders::abs::BinaryOp::AddSaturating)
+            (sub = $crate::expr::builders::abs::BinaryOp::Sub)
+            (sub_unchecked = $crate::expr::builders::abs::BinaryOp::SubUnchecked)
+            (sub_with_overflow = $crate::expr::builders::abs::BinaryOp::SubWithOverflow)
+            (sub_saturating = $crate::expr::builders::abs::BinaryOp::SubSaturating)
+            (mul = $crate::expr::builders::abs::BinaryOp::Mul)
+            (mul_unchecked = $crate::expr::builders::abs::BinaryOp::MulUnchecked)
+            (mul_with_overflow = $crate::expr::builders::abs::BinaryOp::MulWithOverflow)
+            (div = $crate::expr::builders::abs::BinaryOp::Div)
+            (div_exact = $crate::expr::builders::abs::BinaryOp::DivExact)
+            (rem = $crate::expr::builders::abs::BinaryOp::Rem)
+            (xor = $crate::expr::builders::abs::BinaryOp::BitXor)
+            (and = $crate::expr::builders::abs::BinaryOp::BitAnd)
+            (or = $crate::expr::builders::abs::BinaryOp::BitOr)
+            (shl = $crate::expr::builders::abs::BinaryOp::Shl)
+            (shl_unchecked = $crate::expr::builders::abs::BinaryOp::ShlUnchecked)
+            (shr = $crate::expr::builders::abs::BinaryOp::Shr)
+            (shr_unchecked = $crate::expr::builders::abs::BinaryOp::ShrUnchecked)
+            (rotate_left = $crate::expr::builders::abs::BinaryOp::RotateL)
+            (rotate_right = $crate::expr::builders::abs::BinaryOp::RotateR)
+            (carryless_mul = $crate::expr::builders::abs::BinaryOp::CarrylessMul)
+            (eq = $crate::expr::builders::abs::BinaryOp::Eq)
+            (lt = $crate::expr::builders::abs::BinaryOp::Lt)
+            (le = $crate::expr::builders::abs::BinaryOp::Le)
+            (ne = $crate::expr::builders::abs::BinaryOp::Ne)
+            (ge = $crate::expr::builders::abs::BinaryOp::Ge)
+            (gt = $crate::expr::builders::abs::BinaryOp::Gt)
+            (cmp = $crate::expr::builders::abs::BinaryOp::Cmp)
+            (offset + pointee_size: TypeSize = $crate::expr::builders::abs::BinaryOp::Offset(pointee_size))
         );
     };
 }
@@ -110,9 +110,9 @@ macro_rules! impl_general_unary_op_through_singulars {
         fn unary_op<'a>(
             &mut self,
             operand: Self::ExprRef<'a>,
-            op: $crate::symex::expr::builders::abs::UnaryOp,
+            op: $crate::expr::builders::abs::UnaryOp,
         ) -> Self::Expr<'a> {
-            use $crate::symex::expr::builders::abs::UnaryOp::*;
+            use $crate::expr::builders::abs::UnaryOp::*;
             match op {
                 NoOp => self.no_op(operand),
                 Not => self.not(operand),
@@ -146,25 +146,25 @@ macro_rules! impl_singular_unary_ops_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_unary_op_through_general;
-            (no_op = $crate::symex::expr::builders::abs::UnaryOp::NoOp)
-            (not = $crate::symex::expr::builders::abs::UnaryOp::Not)
-            (neg = $crate::symex::expr::builders::abs::UnaryOp::Neg)
-            (ptr_metadata = $crate::symex::expr::builders::abs::UnaryOp::PtrMetadata)
-            (bit_reverse = $crate::symex::expr::builders::abs::UnaryOp::BitReverse)
+            (no_op = $crate::expr::builders::abs::UnaryOp::NoOp)
+            (not = $crate::expr::builders::abs::UnaryOp::Not)
+            (neg = $crate::expr::builders::abs::UnaryOp::Neg)
+            (ptr_metadata = $crate::expr::builders::abs::UnaryOp::PtrMetadata)
+            (bit_reverse = $crate::expr::builders::abs::UnaryOp::BitReverse)
             (trailing_zeros + non_zero: bool =
                 if non_zero {
-                    $crate::symex::expr::builders::abs::UnaryOp::NonZeroTrailingZeros
+                    $crate::expr::builders::abs::UnaryOp::NonZeroTrailingZeros
                 } else {
-                    $crate::symex::expr::builders::abs::UnaryOp::TrailingZeros
+                    $crate::expr::builders::abs::UnaryOp::TrailingZeros
                 })
-            (count_ones = $crate::symex::expr::builders::abs::UnaryOp::CountOnes)
+            (count_ones = $crate::expr::builders::abs::UnaryOp::CountOnes)
             (leading_zeros + non_zero: bool =
                 if non_zero {
-                    $crate::symex::expr::builders::abs::UnaryOp::NonZeroLeadingZeros
+                    $crate::expr::builders::abs::UnaryOp::NonZeroLeadingZeros
                 } else {
-                    $crate::symex::expr::builders::abs::UnaryOp::LeadingZeros
+                    $crate::expr::builders::abs::UnaryOp::LeadingZeros
                 })
-            (byte_swap = $crate::symex::expr::builders::abs::UnaryOp::ByteSwap)
+            (byte_swap = $crate::expr::builders::abs::UnaryOp::ByteSwap)
         );
     };
 }
@@ -175,9 +175,9 @@ macro_rules! impl_general_ternary_op_through_singulars {
         fn ternary_op<'a>(
             &mut self,
             operands: Self::ExprRefTriple<'a>,
-            op: $crate::symex::expr::builders::abs::TernaryOp,
+            op: $crate::expr::builders::abs::TernaryOp,
         ) -> Self::Expr<'a> {
-            use $crate::symex::expr::builders::abs::TernaryOp::*;
+            use $crate::expr::builders::abs::TernaryOp::*;
             match op {
                 IfThenElse => self.if_then_else(operands),
                 FunnelShl => self.funnel_shl(operands),
@@ -203,9 +203,9 @@ macro_rules! impl_singular_ternary_ops_through_general {
     () => {
         repeat_macro_for!(
             impl_singular_ternary_op_through_general;
-            (if_then_else = $crate::symex::expr::builders::abs::TernaryOp::IfThenElse)
-            (funnel_shl = $crate::symex::expr::builders::abs::TernaryOp::FunnelShl)
-            (funnel_shr = $crate::symex::expr::builders::abs::TernaryOp::FunnelShr)
+            (if_then_else = $crate::expr::builders::abs::TernaryOp::IfThenElse)
+            (funnel_shl = $crate::expr::builders::abs::TernaryOp::FunnelShl)
+            (funnel_shr = $crate::expr::builders::abs::TernaryOp::FunnelShr)
         );
     };
 }

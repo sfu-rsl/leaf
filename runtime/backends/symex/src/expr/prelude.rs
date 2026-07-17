@@ -1,4 +1,4 @@
-pub(in crate::symex) use super::{
+pub(crate) use super::{
     AdtField, AdtKind, AdtValue, ArrayValue, BinaryExpr, ConcatExpr, ConcreteValue,
     ConcreteValueRef, ConstValue, Expr, ExtensionExpr, FatPtrValue, LazyTypeInfo, MultiValue,
     MultiValueLeaf, MultiValueTree, PorterValue, RawAddress, RawConcreteValue, SymValue,

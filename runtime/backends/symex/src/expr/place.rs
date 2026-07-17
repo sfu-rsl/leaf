@@ -232,7 +232,7 @@ mod convert {
     }
 
     impl DeterministicPlaceValue {
-        pub(in crate::symex) fn to_raw_value(&self) -> RawConcreteValue {
+        pub(crate) fn to_raw_value(&self) -> RawConcreteValue {
             RawConcreteValue(self.addr, self.ty_info.clone())
         }
     }
