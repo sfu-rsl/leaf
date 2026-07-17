@@ -1,3 +1,3 @@
-type PriImpl = backend::SymExPriLateInit;
+type PriImpl = backend::interface::SymExPriLateInit;
 
 include!("../../ffi_template.rs");

@@ -7,7 +7,7 @@ use leaf_runtime::{
 };
 
 // https://github.com/rust-lang/rust/issues/119776
-pub(super) use crate::symex as backend;
+pub(super) use super as backend;
 
 use super::{
     ConstValue, ExeTraceStorage, GenericTraceQuerier, GenericVariablesState, LazyTypeInfo,

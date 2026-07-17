@@ -3,7 +3,7 @@ use core::borrow::Borrow;
 use derive_more as dm;
 
 use super::{
-    CurrentSolverCase, CurrentSolverValue, IStep, Step,
+    CurrentSolverCase, CurrentSolverValue, IStep, Step, SymVarId,
     backend::{ConstValue, ValueRef},
 };
 
@@ -31,7 +31,7 @@ impl<T> Borrow<ConstValue> for Translation<ConstValue, T> {
 }
 
 // impl<'ctx, V> Borrow<CurrentSolverValue<'ctx>> for Translation<V, CurrentSolverValue<'ctx>> {
-impl<'ctx, V> Borrow<common::z3::AstAndVars<'ctx, crate::symex::expr::SymVarId>>
+impl<'ctx, V> Borrow<common::z3::AstAndVars<'ctx, SymVarId>>
     for Translation<V, CurrentSolverValue<'ctx>>
 {
     fn borrow(&self) -> &CurrentSolverValue<'ctx> {

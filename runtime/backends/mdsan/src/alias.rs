@@ -1,7 +1,6 @@
 use leaf_runtime::abs;
 
-pub(super) use crate::mdsan as backend;
-
+pub(super) use super as backend;
 use backend::MdTypeProvider;
 
 pub(super) trait TypeDatabase: abs::backend::TypeDatabase<'static> + MdTypeProvider {}

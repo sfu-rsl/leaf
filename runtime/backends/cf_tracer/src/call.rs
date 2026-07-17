@@ -3,7 +3,7 @@ use leaf_runtime::{
         AssignmentId, BasicBlockIndex, CalleeDef, FuncDef, SwitchCaseIndex,
         backend::PhasedCallTraceRecorder, utils::BasicBlockLocationExt,
     },
-    call::{CallControlFlowManager, CallFlowManager, CallShadowMemory, DefaultCallFlowManager},
+    call::{CallControlFlowManager, CallFlowManager, DefaultCallFlowManager},
     pri::fluent::backend::{ArgsTupling, CallHandler, DropHandler, RuntimeBackend},
 };
 
@@ -14,20 +14,6 @@ pub(super) type CftCallFlowManager = DefaultCallFlowManager<
     <super::CftBackend as RuntimeBackend>::Operand,
     (),
 >;
-
-pub(super) struct NoOpCallShadowMemory;
-
-impl CallShadowMemory<super::NullPlace> for NoOpCallShadowMemory {
-    type Value = super::NullOperand;
-
-    fn take_place(&mut self, _place: &super::NullPlace) -> Self::Value {
-        super::NullOperand::default()
-    }
-
-    fn set_place(&mut self, _place: &super::NullPlace, _value: Self::Value) {}
-
-    fn set_args(&mut self, _places: &[super::NullPlace], _values: Vec<Self::Value>) {}
-}
 
 pub(crate) struct CftCallHandler<'a> {
     flow_manager: &'a mut CftCallFlowManager,

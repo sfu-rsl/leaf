@@ -1,4 +1,4 @@
-use crate::symex as backend;
+use crate::alias::backend;
 use backend::expr::sym_place::{Select, SelectTarget, SymbolicReadTree};
 
 /// Resolves a symbolic read to a selection.

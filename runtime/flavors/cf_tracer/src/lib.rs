@@ -1,3 +1,3 @@
-type PriImpl = backend::CftPriLateInit;
+type PriImpl = backend::interface::CftPriLateInit;
 
 include!("../../ffi_template.rs");
