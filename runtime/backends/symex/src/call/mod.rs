@@ -314,7 +314,7 @@ mod breakage {
     use leaf_runtime::{
         abs::{CalleeDef, Constant, FuncDef},
         call::CallFlowBreakageCallback,
-        utils::alias::check_sym_value_loss,
+        utils::alias::check_value_loss,
     };
 
     use super::backend;
@@ -335,7 +335,7 @@ mod breakage {
             current_func: FuncDef,
             arg_values: &'a [SymExValue],
         ) -> Vec<(usize, &'a SymExValue)> {
-            if !check_sym_value_loss!() {
+            if !check_value_loss!() {
                 return vec![];
             }
 
@@ -368,7 +368,7 @@ mod breakage {
             current_func: FuncDef,
             returned_value: &SymExValue,
         ) {
-            if !check_sym_value_loss!() {
+            if !check_value_loss!() {
                 return;
             }
 

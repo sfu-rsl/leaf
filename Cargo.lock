@@ -190,12 +190,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "clippy-tracing-attributes"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cc1f3bbafdf6613bd4a8d8a37970632074798bb892ef8f57c2c09854e3c3afa"
-
-[[package]]
 name = "common"
 version = "0.2.0"
 dependencies = [
@@ -484,21 +478,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "generator"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3b854b0e584ead1a33f18b2fcad7cf7be18b3875c78816b753639aa501513ae"
-dependencies = [
- "cc",
- "cfg-if",
- "libc",
- "log",
- "rustversion",
- "windows-link",
- "windows-result",
-]
-
-[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -743,19 +722,6 @@ name = "log"
 version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
-
-[[package]]
-name = "loom"
-version = "0.7.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "419e0dc8046cb947daa77eb95ae174acfbddb7673b4151f56d1eed8e93fbfaca"
-dependencies = [
- "cfg-if",
- "generator",
- "scoped-tls",
- "tracing",
- "tracing-subscriber",
-]
 
 [[package]]
 name = "macros"
@@ -1201,9 +1167,7 @@ dependencies = [
 name = "runtime"
 version = "0.2.0"
 dependencies = [
- "cfg-if",
  "chrono",
- "clippy-tracing-attributes",
  "common",
  "config",
  "const_format",
@@ -1216,15 +1180,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tracing",
- "tracing-appender",
- "tracing-flame",
  "tracing-subscriber",
- "tracing-tracy",
  "tracing-tree",
- "tracy-client",
- "tracy-client-sys",
- "valuable",
- "valuable-serde",
  "z3",
  "z3-sys",
 ]
@@ -1234,32 +1191,20 @@ name = "runtime_backend_cf_tracer"
 version = "0.2.0"
 dependencies = [
  "cfg-if",
- "chrono",
- "clippy-tracing-attributes",
  "common",
  "config",
- "const_format",
  "delegate",
  "derive_more",
  "itertools 0.15.0",
  "json-subscriber",
- "macros",
  "paste",
  "runtime",
  "serde",
- "serde_json",
  "tracing",
  "tracing-appender",
- "tracing-flame",
  "tracing-subscriber",
- "tracing-tracy",
- "tracing-tree",
- "tracy-client",
- "tracy-client-sys",
  "valuable",
  "valuable-serde",
- "z3",
- "z3-sys",
 ]
 
 [[package]]
@@ -1267,8 +1212,6 @@ name = "runtime_backend_mdsan"
 version = "0.2.0"
 dependencies = [
  "cfg-if",
- "chrono",
- "clippy-tracing-attributes",
  "common",
  "config",
  "const_format",
@@ -1276,23 +1219,11 @@ dependencies = [
  "derive_more",
  "itertools 0.15.0",
  "json-subscriber",
- "macros",
  "paste",
  "runtime",
  "serde",
- "serde_json",
  "tracing",
- "tracing-appender",
- "tracing-flame",
  "tracing-subscriber",
- "tracing-tracy",
- "tracing-tree",
- "tracy-client",
- "tracy-client-sys",
- "valuable",
- "valuable-serde",
- "z3",
- "z3-sys",
 ]
 
 [[package]]
@@ -1300,8 +1231,6 @@ name = "runtime_backend_symex"
 version = "0.2.0"
 dependencies = [
  "cfg-if",
- "chrono",
- "clippy-tracing-attributes",
  "common",
  "config",
  "const_format",
@@ -1309,21 +1238,13 @@ dependencies = [
  "derive_more",
  "itertools 0.15.0",
  "json-subscriber",
- "macros",
  "paste",
  "runtime",
  "serde",
  "serde_json",
  "tracing",
- "tracing-appender",
- "tracing-flame",
  "tracing-subscriber",
- "tracing-tracy",
  "tracing-tree",
- "tracy-client",
- "tracy-client-sys",
- "valuable",
- "valuable-serde",
  "z3",
  "z3-sys",
 ]
@@ -1407,12 +1328,6 @@ checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
 dependencies = [
  "winapi-util",
 ]
-
-[[package]]
-name = "scoped-tls"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
 
 [[package]]
 name = "scopeguard"
@@ -1712,17 +1627,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-flame"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bae117ee14789185e129aaee5d93750abe67fdc5a9a62650452bfe4e122a3a9"
-dependencies = [
- "lazy_static",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tracing-log"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1765,17 +1669,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-tracy"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6a90519f16f55e5c62ffd5976349f10744435a919ecff83d918300575dfb69b"
-dependencies = [
- "tracing-core",
- "tracing-subscriber",
- "tracy-client",
-]
-
-[[package]]
 name = "tracing-tree"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1785,26 +1678,6 @@ dependencies = [
  "tracing-core",
  "tracing-log",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "tracy-client"
-version = "0.17.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "373db47331c3407b343538df77eea2516884a0b126cdfb4b135acfd400015dd7"
-dependencies = [
- "loom",
- "once_cell",
- "tracy-client-sys",
-]
-
-[[package]]
-name = "tracy-client-sys"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49cf0064dcb31c99aa1244c1b93439359e53f72ed217eef5db50abd442241e9a"
-dependencies = [
- "cc",
 ]
 
 [[package]]

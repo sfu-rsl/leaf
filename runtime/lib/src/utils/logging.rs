@@ -69,18 +69,5 @@ pub fn init_logging<L: LeafTracingSubLayerFactory>() {
             .with_filter(L::filter_rest()),
     );
 
-    #[cfg(feature = "profile_flame")]
-    let subscriber = {
-        const ENV_FLAME_GRAPH: &str = "FLAME_OUTPUT";
-        let flame_graph_output =
-            std::env::var(ENV_FLAME_GRAPH).unwrap_or_else(|_| "tracing.folded".into());
-        let (flame_layer, _guard) =
-            tracing_flame::FlameLayer::with_file(flame_graph_output).unwrap();
-        subscriber.with(flame_layer)
-    };
-
-    #[cfg(feature = "profile_tracy")]
-    let subscriber = subscriber.with(tracing_tracy::TracyLayer::default());
-
     subscriber.try_init().unwrap();
 }

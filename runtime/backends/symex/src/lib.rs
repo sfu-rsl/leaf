@@ -9,8 +9,6 @@
 #![feature(seek_stream_len)]
 #![feature(btree_cursors)]
 
-use leaf_runtime::init;
-
 mod alias;
 mod annotation;
 mod assignment;
@@ -55,6 +53,11 @@ use self::{
 };
 
 pub(crate) use self::config::SymExBackendConfig;
+
+fn init<L: leaf_runtime::utils::logging::LeafTracingSubLayerFactory>() {
+    leaf_runtime::utils::logging::init_logging::<L>();
+    log_info!("Initializing symbolic execution backend");
+}
 
 mod associated_types {
     use super::*;

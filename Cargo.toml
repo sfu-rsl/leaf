@@ -19,7 +19,8 @@ version = "0.2.0"
 # Unless we specify the package, it won't be renamed.
 common = { path = "common", package = "common" }
 macros = { path = "macros" }
-leaf_macros = { path = "macros", package = "macros"}
+leaf_macros = { path = "macros", package = "macros" }
+leaf_runtime = { path = "runtime/lib", package = "runtime" }
 runtime_symex = { path = "runtime/flavors/symex" }
 runtime_symex_no_implicit = { path = "runtime/flavors/symex_no_implicit" }
 runtime_noop = { path = "runtime/flavors/noop" }

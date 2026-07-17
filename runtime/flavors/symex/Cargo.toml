@@ -13,5 +13,5 @@ common = { workspace = true }
 backend = { path = "../../backends/symex", package = "runtime_backend_symex", features = [
     "implicit_flow",
     "runtime_access_raw_ptr",
-    "release_sym_value_loss_checks",
+    "release_value_loss_checks",
 ] }
