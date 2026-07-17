@@ -270,7 +270,7 @@ mod breakage {
     use leaf_runtime::{
         abs::{CalleeDef, FuncDef},
         call::CallFlowBreakageCallback,
-        utils::alias::check_sym_value_loss,
+        utils::alias::check_value_loss,
     };
 
     use super::backend;
@@ -289,7 +289,7 @@ mod breakage {
             current_func: FuncDef,
             arg_values: &'a [MdSanValue],
         ) -> Vec<(usize, &'a MdSanValue)> {
-            if !check_sym_value_loss!() {
+            if !check_value_loss!() {
                 return vec![];
             }
 
@@ -323,7 +323,7 @@ mod breakage {
             current_func: FuncDef,
             returned_value: &MdSanValue,
         ) {
-            if !check_sym_value_loss!() {
+            if !check_value_loss!() {
                 return;
             }
 

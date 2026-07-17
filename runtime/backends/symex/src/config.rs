@@ -5,7 +5,7 @@ use std::{collections::HashMap, num::NonZero};
 
 use common::{log_debug, log_warn};
 
-use leaf_runtime::utils::{alias::check_sym_value_loss, file::FileGenConfig};
+use leaf_runtime::utils::{alias::check_value_loss, file::FileGenConfig};
 
 impl TryFrom<::config::Config> for SymExBackendConfig {
     type Error = ::config::ConfigError;
@@ -15,7 +15,7 @@ impl TryFrom<::config::Config> for SymExBackendConfig {
         log_debug!("Loaded configurations: {:?}", config);
 
         use ExternalCallStrategy::*;
-        if !check_sym_value_loss!()
+        if !check_value_loss!()
             && matches!(
                 config.call.external_call,
                 OptimisticConcretization | OverApproximation

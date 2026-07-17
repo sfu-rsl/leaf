@@ -108,10 +108,6 @@ pub fn trait_log_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
     let instrument_stmt: Attribute = syn::parse_quote! {
         #[tracing::instrument(#attr)]
     };
-    let clippy_ignore: Attribute = syn::parse_quote! {
-    #[cfg_attr(any(feature = "profile_flame", feature = "profile_tracy", feature = "profile_full"),
-               clippy_tracing_attributes::clippy_tracing_skip)]
-        };
 
     for item in &mut input.items {
         if let ImplItem::Fn(method) = item {
@@ -120,7 +116,6 @@ pub fn trait_log_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
 
             if !function_contains_log_fn(att_string.as_str()) {
                 att.insert(0, instrument_stmt.clone());
-                att.insert(0, clippy_ignore.clone());
             }
         }
     }

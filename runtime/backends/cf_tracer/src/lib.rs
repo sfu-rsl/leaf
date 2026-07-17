@@ -1,14 +1,14 @@
 #![feature(likely_unlikely)]
 #![feature(unboxed_closures)]
 
-use leaf_runtime::init;
-
 mod call;
 mod constraint;
 mod instance;
 pub mod interface;
 mod record;
 mod tracing_i;
+
+use common::log_info;
 
 use leaf_runtime::{
     abs::{SwitchCaseIndex, backend::Shutdown, utils::BasicBlockLocationExt},
@@ -18,6 +18,11 @@ use leaf_runtime::{
 
 use call::CftCallHandler;
 use record::Recorder;
+
+fn init<L: leaf_runtime::utils::logging::LeafTracingSubLayerFactory>() {
+    leaf_runtime::utils::logging::init_logging::<L>();
+    log_info!("Initializing control flow tracer backend");
+}
 
 /// A backend meant for control flow tracing (CFT).
 pub(crate) struct CftBackend {

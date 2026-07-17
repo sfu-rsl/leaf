@@ -2,8 +2,6 @@
 #![feature(associated_type_defaults)]
 #![feature(unboxed_closures)]
 
-use leaf_runtime::init;
-
 mod alias;
 mod assignment;
 mod call;
@@ -17,6 +15,8 @@ mod type_info;
 
 use std::rc::Rc;
 
+use common::log_info;
+
 use leaf_runtime::{
     abs::{PlaceUsage, RawAddress, TypeId, backend::Shutdown},
     pri::fluent::backend::{
@@ -27,7 +27,10 @@ use leaf_runtime::{
 
 use alias::*;
 
-pub(crate) use self::instance::MdSanInstanceManager;
+fn init<L: leaf_runtime::utils::logging::LeafTracingSubLayerFactory>() {
+    leaf_runtime::utils::logging::init_logging::<L>();
+    log_info!("Initializing ManuallyDrop sanitizer backend");
+}
 
 mod associated_types {
     use super::*;

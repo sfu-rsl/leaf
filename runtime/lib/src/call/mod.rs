@@ -1120,7 +1120,7 @@ mod implementation {
     }
 
     impl<F> NoOpCallFlowBreakageCallback<F> {
-        pub(crate) fn new<V>(unknown_value_factory: F) -> Self
+        pub fn new<V>(unknown_value_factory: F) -> Self
         where
             F: Fn() -> V,
         {
