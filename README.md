@@ -1,54 +1,51 @@
 # Leaf
 
-Concolic execution for Rust through MIR instrumentation.
+Leaf is a Rust-oriented framework for dynamic analysis built around MIR instrumentation. It wraps the Rust compiler through `leafc`, instruments a program at compile time, and routes runtime events to pluggable backends for tracing, symbolic execution, and related analyses.
 
+## Project layout
 
-## Table of Contents
-- [Getting Started](#getting-started)
-- [Documentation](#documentation)
+- `compiler/`: the `leafc` driver and instrumentation pipeline
+- `runtime/lib`: the shared abstraction library for implementing runtime backends
+- `runtime/backends/`: concrete backend implementations
+- `common/`: shared facilities and definitions used across the project
 
-## Getting Started
-1. Clone the repository.
-1. Install `leafc` using
-    ```
-    cargo install --path ./compiler
-    ```
-1. Compile target programs using `leafc`, e.g.,
-    ```
-    leafc samples/hello_world.rs
-    ```
-1. Enable logging for Leaf's backend using `LEAF_LOG` environment variable.
-    ```
-    export LEAF_LOG="info"
-    ```
-1. Run the compiled program.
-    ```
-    hello_world
-    ```
-1. An output similar to the following is expected from the execution.
-    ```log
-    2024-12-10 00:40:55  INFO leafrt Initializing runtime library
-    2024-12-10 00:40:55  INFO leafrt::pri::basic::instance Initializing basic backend
-    2024-12-10 00:40:55  INFO leafrt::backends::basic::outgen Setting up binary output writing to directory: output
-    2024-12-10 00:40:55  INFO leafrt::pri::basic::instance Basic backend initialized
-    2024-12-10 00:40:55  INFO leafrt::backends::basic::sym_vars Added a new symbolic variable: <Var1: u8> = 10u8
-    2024-12-10 00:40:55  INFO leafrt::trace::log Notified about constraint {!(<(<Var1: u8>, 5u8))} at step Def(0:5)[2]
-    2024-12-10 00:40:55  INFO leafrt::outgen Found a solution:
-    {
-        "1": 0u8,
-    }
-    ```
+## Requirements
 
-This was a demonstration of the basic workflow to perform dynamic symbolic execution using Leaf.
+- Rustup and cargo to install nightly toolchains, `rustc` libraries and building the project.
+- Python for helper scripts (e.g., toolchain builder) in the repository
 
-Leaf comes with a compiler (`leafc`) that instruments programs.
-It is a wrapper around the Rust compiler and should be usable in any existing command
-in place of `rustc`.
-The instrumented program calls the backend during runtime, providing the information about the events inside the program
-including the constraints on the variables for the path currently being taken.
-By marking a variables of interest as symbolic, the system records the constraints on them, and later provides output
-based on them, e.g., concrete values for them which cause the program take paths different from the current one.
-For further information please refer to documentations.
+## Quick start
+1. Clone the repository and build the compiler:
+   ```console
+   $ git clone https://github.com/sfu-rsl/leaf.git
+   $ cd leaf
+   $ cargo install --path ./compiler
+   ```
+
+1. Build a runtime backend, for example the control-flow tracer:
+   ```console
+   $ cargo build -p runtime_cf_tracer
+   ```
+
+1. Make the shared library discoverable to the generated program:
+   ```console
+   $ mkdir -p target/debug/runtime_cf_tracer
+   $ ln -sf target/debug/runtime_cf_tracer.so target/debug/runtime_cf_tracer/libleafrt.so
+   $ export LD_LIBRARY_PATH="$PWD/target/debug/runtime_cf_tracer:$LD_LIBRARY_PATH"
+   ```
+
+1. Compile a sample program with `leafc`:
+   ```console
+   $ leafc samples/hello_world.rs
+   ```
+
+1. Run the instrumented binary with logging enabled:
+   ```console
+   $ export LEAF_LOG="info"
+   $ ./hello_world
+   ```
+
+The generated program will emit runtime events through the active backend, which can be inspected through the logging output or any backend-specific artifacts.
 
 ## Documentation
 
@@ -57,17 +54,8 @@ Further information, tutorials, and technical details are collected in Leaf Book
 
 ## License
 
-Licensed under either of
+Leaf is licensed under the MIT or Apache-2.0 licenses.
 
- * Apache License, Version 2.0
-   ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
- * MIT license
-   ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+- Apache License, Version 2.0: [LICENSE-APACHE](LICENSE-APACHE)
+- MIT License: [LICENSE-MIT](LICENSE-MIT)
 
-at your option.
-
-## Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
