@@ -4,30 +4,33 @@
 	"name": "Rust",
 	"build": {
 		"dockerfile": "Dockerfile",
-		"args": {
-			"CMAKE_BIN_URL": "<The URL for .tar.gz file found in https://cmake.org/download/ or https://cmake.org/files/>",
-		},
 	},
 	"features": {
 		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/devcontainers-extra/features/wget-apt-get:1": {},
 		"ghcr.io/devcontainers/features/rust:1": {},
-		/*
+		"ghcr.io/devcontainers/features/python:1": {},
 		// Optional: If you want to use PowerShell in the container.
 		"ghcr.io/devcontainers/features/powershell:1": {
 			"modules": "posh-git"
 		},
-		*/
 	},
 	"mounts": [
+		// Sync time
+		{
+			"source": "/etc/localtime",
+			"target": "/etc/localtime",
+			"type": "bind"
+		},
 		// Making the cargo cache persistent in a Docker Volume.
 		{
 			"source": "devcontainer-cargo-cache-${devcontainerId}",
 			"target": "/usr/local/cargo",
 			"type": "volume"
 		},
-		// Optional: Home Folder
+		// Optional: Home folder
 		{
-			"source": "devcontainer-home-${devcontainerId}",
+			"source": "leaf-devcontainer-home",
 			"target": "/home/vscode",
 			"type": "volume"
 		},
@@ -35,21 +38,27 @@
 	"customizations": {
 		"vscode": {
 			"extensions": [
-				// Rust
 				"rust-lang.rust-analyzer",
 				"tamasfe.even-better-toml",
+				"fill-labs.dependi",
 				"vadimcn.vscode-lldb",
-				// VSC
-				"eamodio.gitlens",
-				// Experience
 				"streetsidesoftware.code-spell-checker",
-				// Also, look at the recommended extensions in .vscode/extensions.json
+				"GitHub.copilot",
+				"GitHub.copilot-chat",
+				"GitHub.vscode-pull-request-github",
 			],
 		},
 	},
 	"remoteUser": "vscode",
 	"postStartCommand": {
 		// Making sure the setup is correct.
-		"build": "cd ${containerWorkspaceFolder} && rustc --version && cargo build",
+		"build": "cd ${containerWorkspaceFolder:Leaf}/leaf/leaf && rustc --version && cargo check",
 	},
+	"runArgs": [
+		"--privileged",
+		"--shm-size=8g"
+	],
+	// If you want to have another (parent) folder mount, copy this .devcontainer to that folder and use the following config
+	"workspaceMount": "source=${localWorkspaceFolder},target=/workspaces/Rust,type=bind,consistency=cached",
+	"workspaceFolder": "/workspaces/Rust",
 }
