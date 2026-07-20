@@ -1,5 +1,6 @@
 [package]
 name = "runtime_noop"
+license = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 

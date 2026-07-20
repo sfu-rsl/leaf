@@ -1,5 +1,6 @@
 [package]
 name = "runtime_symex_no_implicit"
+license = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 
