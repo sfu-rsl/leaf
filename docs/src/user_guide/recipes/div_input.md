@@ -1,5 +1,8 @@
 # Diverging Input Generation
 
+> [!IMPORTANT]
+> This document is currently obsolete and will be removed with further developments of the book. The orchestrators mentioned in this tutorial are currently moved out of the project.
+
 Each instance of concolic execution of a program, records a trace of the constraints put on symbolic variables at each
 step of the execution.
 Conditional branches are the major source of these constraints and whether they are held or not

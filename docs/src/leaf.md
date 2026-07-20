@@ -2,7 +2,6 @@
 Concolic execution for Rust through MIR instrumentation.
 
 Welcome to project Leaf, a tool to perform dynamic symbolic execution for Rust programs.
-Leaf helps you with tracking the constraints put on particular variables of interest during the execution of the program.
 
 Leaf aims to be robust, extensible, and easily-integrable within real world Rust testing stacks.
 

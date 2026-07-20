@@ -11,3 +11,7 @@ $ export RUSTC=leafc
 $ cargo build
 ```
 
+## Leaf's Modifications
+
+`leafc` is slightly specialized when used by cargo for compiling crate's dependencies.
+(TODO)

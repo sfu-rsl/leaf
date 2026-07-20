@@ -1,91 +1,91 @@
 # Getting Started
-Although currently working with the first releases of Leaf, we aim to provide a rather straightforward workflow for the users.
 
-Please follow the instruction below to try Leaf in your environment.
+Leaf is a Rust-oriented framework for dynamic analysis built around MIR instrumentation. The workflow is:
+
+1. compile and instrument a target program with `leafc`, and
+1. provide a runtime backend that receives callbacks from the instrumented program,
+4. run the instrumented program with the backend plugged in.
+
+## Requirements
+
+- Rust
+- Python
+- A working C toolchain and linker
 
 ## Installing Leaf
 
-### Requirements
-- Rust (`rustup`)
-- Python
-
-You can install Leaf using `cargo` and by building the source code.
-
-1. Clone the repository.
-    ```console
-    $ git clone https://github.com/sfu-rsl/leaf.git
-    $ cd leaf
-    ```
-1. Install Leaf's compiler named as `leafc` using
-    ```console
-    $ cargo install --path ./compiler
-    ```
-## Performing Concolic Execution
-As an instrumentation-based dynamic analyzer, Leaf instruments programs such that
-they expose information about their behavior during each execution.
-Therefore, concolic execution is achieved by compiling the target program and
-running the executable.
-
-1. Pick a program you want to do concolic execution for. Some are available in `samples` directory of the source tree.
-    ```rust
-    fn main() {
-        let x: u8 = 10;
-        if x < 5 {
-            println!("Hello, world!");
-        }
-    }
-    ```
-
-1. Mark a variable interest as symbolic.
-    ```rust
-    // samples/hello_world.rs
-
-    use leaf::annotations::*;
-    fn main() {
-        let x: u8 = 10.mark_symbolic();
-        if x < 5 {
-            println!("Hello, world!");
-        }
-    }
-    ```
-
-1. Compile your target program using `leafc` as you would do with `rustc`. (The first compilation takes longer, bear with it!)
-    ```console
-    $ leafc ./hello_world.rs
-    ```
-
-1. Prepare the environment to observe the execution through the standard error
-   by setting `LEAF_LOG` variable. e.g.,
-    ```bash
-    export LEAF_LOG="info"
-    ```
-1. Execute the compiled program.
-    ```console
-    $ ./hello_world 
-    ```
-1. An output similar to the following is expected from the execution.
-    ```log
-    2024-12-10 00:40:55  INFO leafrt Initializing runtime library
-    2024-12-10 00:40:55  INFO leafrt::pri::basic::instance Initializing basic backend
-    2024-12-10 00:40:55  INFO leafrt::backends::basic::outgen Setting up binary output writing to directory: output
-    2024-12-10 00:40:55  INFO leafrt::pri::basic::instance Basic backend initialized
-    2024-12-10 00:40:55  INFO leafrt::backends::basic::sym_vars Added a new symbolic variable: <Var1: u8> = 10u8
-    2024-12-10 00:40:55  INFO leafrt::trace::log Notified about constraint {!(<(<Var1: u8>, 5u8))} at step Def(0:5)[2]
-    2024-12-10 00:40:55  INFO leafrt::outgen Found a solution:
-    {
-        "1": 0u8,
-    }
-    ```
-    The logs include information about the constraints put on the variables marked as symbolic for the path taken in the execution.
-
-1. Given the current default configuration, a folder named `leaf_out` also gets generated
-   which contains alternative values for the symbolic variables that should cause
-   the execution take other paths than the one taken, which we call diverging inputs.
+1. Clone the repository and enter the workspace.
    ```console
-   $ ls ./leaf_out
-   0.bin
+   $ git clone https://github.com/sfu-rsl/leaf.git
+   $ cd leaf
    ```
 
------------
+1. Install the compiler frontend.
+   ```console
+   $ cargo install --path ./compiler
+   ```
 
-More details about each step is provided in the rest of the book.
+## Preparing Dynamic Analysis
+
+1. Build a runtime backend, for example symbolic execution.
+   ```console
+   $ cargo build -p runtime_symex
+   ```
+
+1. Make the runtime shared library discoverable to the instrumented binary.
+   ```console
+   $ mkdir -p target/debug/runtime_symex
+   $ ln -sf "$(find target/debug -maxdepth 1 -name 'libleafrt*.so' | head -n 1)" target/debug/runtime_symex/libleafrt.so
+   $ export LD_LIBRARY_PATH="$PWD/target/debug/runtime_symex:$LD_LIBRARY_PATH"
+   ```
+
+## Analyzing a Program
+
+Leaf ships with sample programs under the `samples/` directory. A minimal example is the `hello_world` sample.
+```rust
+fn main() {
+    let x: u8 = core::hint::black_box(10);
+    #[cfg(leafc)]
+    let x: u8 = {
+        use leaf::annotations::*;
+        x.mark_symbolic()
+    };
+
+    if x < 5 {
+        println!("Hello, world!");
+    }
+}
+```
+
+1. Compile the sample with `leafc`.
+   ```console
+   $ leafc samples/hello_world.rs
+   ```
+
+2. Enable logging for the runtime.
+   ```console
+   $ export LEAF_LOG="info"
+   ```
+
+3. Run the generated binary.
+   ```console
+   $ ./hello_world
+   ```
+
+You should see runtime events emitted by the active backend. The exact output depends on the chosen backend and logging configuration, but the execution should complete and produce instrumentation traces or analysis data. With the example symbolic execution backend in effect, an output similar to the following is expected.
+```log
+2024-12-10 00:40:55  INFO leafrt Initializing runtime library
+2024-12-10 00:40:55  INFO leafrt::pri::basic::instance Initializing basic backend
+2024-12-10 00:40:55  INFO leafrt::backends::basic::outgen Setting up binary output writing to directory: output
+2024-12-10 00:40:55  INFO leafrt::pri::basic::instance Basic backend initialized
+2024-12-10 00:40:55  INFO leafrt::backends::basic::sym_vars Added a new symbolic variable: <Var1: u8> = 10u8
+2024-12-10 00:40:55  INFO leafrt::trace::log Notified about constraint {!(<(<Var1: u8>, 5u8))} at step Def(0:5)[2]
+2024-12-10 00:40:55  INFO leafrt::outgen Found a solution:
+{
+    "1": 0u8,
+}
+```
+
+## Next steps
+
+The rest of the book covers the compiler pipeline, runtime backends, and more advanced analysis workflows in greater detail.
