@@ -1,5 +1,6 @@
 [package]
 name = "runtime_backend_cf_tracer"
+license = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 

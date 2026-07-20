@@ -1,5 +1,6 @@
 [package]
 name = "runtime_mdsan"
+license = { workspace = true }
 version = { workspace = true }
 edition = "2021"
 
