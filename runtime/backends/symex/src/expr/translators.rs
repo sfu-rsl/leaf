@@ -8,10 +8,7 @@ pub(crate) mod z3 {
         ops::Not,
     };
 
-    use z3::{
-        Context,
-        ast::{self, Ast},
-    };
+    use z3::ast;
 
     use leaf_runtime::abs::{IntType, ValueType};
 
@@ -29,102 +26,100 @@ pub(crate) mod z3 {
     const POSSIBLE_VALUES_PREFIX: &str = "pvs";
 
     #[derive(Clone)]
-    pub(crate) struct Z3ValueTranslator<'ctx> {
-        context: &'ctx Context,
-        variables: HashMap<SymVarId, AstNode<'ctx>>,
+    pub(crate) struct Z3ValueTranslator {
+        variables: HashMap<SymVarId, AstNode>,
     }
 
-    impl<'ctx> Z3ValueTranslator<'ctx> {
-        pub(crate) fn new(context: &'ctx Context) -> Self {
+    impl Z3ValueTranslator {
+        pub(crate) fn new() -> Self {
             Self {
-                context,
                 variables: Default::default(),
             }
         }
     }
 
-    type TranslatedValue<'ctx> = AstAndVars<'ctx, SymVarId>;
+    type TranslatedValue = AstAndVars<SymVarId>;
 
-    impl<'ctx, 'a> FnOnce<(&'a ValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedValue<'ctx>;
+    impl<'ctx, 'a> FnOnce<(&'a ValueRef,)> for Z3ValueTranslator {
+        type Output = TranslatedValue;
         extern "rust-call" fn call_once(mut self, (value,): (&'a ValueRef,)) -> Self::Output {
             self.translate(value)
         }
     }
 
-    impl<'ctx, 'a> FnMut<(&'a ValueRef,)> for Z3ValueTranslator<'ctx> {
+    impl<'ctx, 'a> FnMut<(&'a ValueRef,)> for Z3ValueTranslator {
         extern "rust-call" fn call_mut(&mut self, (value,): (&'a ValueRef,)) -> Self::Output {
             self.translate(value)
         }
     }
 
-    impl<'ctx> FnOnce<(ValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedValue<'ctx>;
+    impl FnOnce<(ValueRef,)> for Z3ValueTranslator {
+        type Output = TranslatedValue;
         extern "rust-call" fn call_once(mut self, (value,): (ValueRef,)) -> Self::Output {
             self.translate(&value)
         }
     }
 
-    impl<'ctx> FnMut<(ValueRef,)> for Z3ValueTranslator<'ctx> {
+    impl FnMut<(ValueRef,)> for Z3ValueTranslator {
         extern "rust-call" fn call_mut(&mut self, (value,): (ValueRef,)) -> Self::Output {
             self.translate(&value)
         }
     }
 
-    impl<'ctx, 'a> FnOnce<(&'a ConstValue,)> for Z3ValueTranslator<'ctx> {
-        type Output = AstNode<'ctx>;
+    impl<'ctx, 'a> FnOnce<(&'a ConstValue,)> for Z3ValueTranslator {
+        type Output = AstNode;
         extern "rust-call" fn call_once(mut self, (value,): (&'a ConstValue,)) -> Self::Output {
             self.translate_const(value)
         }
     }
 
-    impl<'ctx, 'a> FnMut<(&'a ConstValue,)> for Z3ValueTranslator<'ctx> {
+    impl<'ctx, 'a> FnMut<(&'a ConstValue,)> for Z3ValueTranslator {
         extern "rust-call" fn call_mut(&mut self, (value,): (&'a ConstValue,)) -> Self::Output {
             self.translate_const(value)
         }
     }
 
-    impl<'ctx> FnOnce<(ConstValue,)> for Z3ValueTranslator<'ctx> {
-        type Output = AstNode<'ctx>;
+    impl FnOnce<(ConstValue,)> for Z3ValueTranslator {
+        type Output = AstNode;
         extern "rust-call" fn call_once(mut self, (value,): (ConstValue,)) -> Self::Output {
             self.translate_const(&value)
         }
     }
 
-    impl<'ctx> FnMut<(ConstValue,)> for Z3ValueTranslator<'ctx> {
+    impl FnMut<(ConstValue,)> for Z3ValueTranslator {
         extern "rust-call" fn call_mut(&mut self, (value,): (ConstValue,)) -> Self::Output {
             self.translate_const(&value)
         }
     }
 
-    impl<'ctx, 'a> FnOnce<(&'a SymValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedValue<'ctx>;
+    impl<'ctx, 'a> FnOnce<(&'a SymValueRef,)> for Z3ValueTranslator {
+        type Output = TranslatedValue;
         extern "rust-call" fn call_once(mut self, (value,): (&'a SymValueRef,)) -> Self::Output {
             self.translate(value.as_ref())
         }
     }
 
-    impl<'ctx, 'a> FnMut<(&'a SymValueRef,)> for Z3ValueTranslator<'ctx> {
+    impl<'ctx, 'a> FnMut<(&'a SymValueRef,)> for Z3ValueTranslator {
         extern "rust-call" fn call_mut(&mut self, (value,): (&'a SymValueRef,)) -> Self::Output {
             self.translate(value.as_ref())
         }
     }
 
-    impl<'ctx> FnOnce<(SymValueRef,)> for Z3ValueTranslator<'ctx> {
-        type Output = TranslatedValue<'ctx>;
+    impl FnOnce<(SymValueRef,)> for Z3ValueTranslator {
+        type Output = TranslatedValue;
         extern "rust-call" fn call_once(mut self, (value,): (SymValueRef,)) -> Self::Output {
             self.translate(&value.into())
         }
     }
 
-    impl<'ctx> FnMut<(SymValueRef,)> for Z3ValueTranslator<'ctx> {
+    impl FnMut<(SymValueRef,)> for Z3ValueTranslator {
         extern "rust-call" fn call_mut(&mut self, (value,): (SymValueRef,)) -> Self::Output {
             self.translate(&value.into())
         }
     }
 
-    impl<'ctx> Z3ValueTranslator<'ctx> {
-        pub(crate) fn translate(&mut self, value: &ValueRef) -> AstAndVars<'ctx, SymVarId> {
+    impl Z3ValueTranslator {
+        pub(crate) fn translate(&mut self, value: &ValueRef) -> AstAndVars<SymVarId> {
             log_debug!(target: TAG, "Translating value: {}", value);
             let ast = self.translate_value(value);
             AstAndVars {
@@ -134,15 +129,15 @@ pub(crate) mod z3 {
         }
     }
 
-    impl<'ctx> Z3ValueTranslator<'ctx> {
-        fn translate_value(&mut self, value: &ValueRef) -> AstNode<'ctx> {
+    impl Z3ValueTranslator {
+        fn translate_value(&mut self, value: &ValueRef) -> AstNode {
             match value.as_ref() {
                 Value::Concrete(c) => self.translate_concrete(c),
                 Value::Symbolic(s) => self.translate_symbolic(s),
             }
         }
 
-        fn translate_concrete(&mut self, concrete: &ConcreteValue) -> AstNode<'ctx> {
+        fn translate_concrete(&mut self, concrete: &ConcreteValue) -> AstNode {
             match concrete {
                 ConcreteValue::Const(c) => self.translate_const(c),
                 ConcreteValue::Adt(_) => {
@@ -161,11 +156,11 @@ pub(crate) mod z3 {
             }
         }
 
-        fn translate_const(&mut self, const_value: &ConstValue) -> AstNode<'ctx> {
+        fn translate_const(&mut self, const_value: &ConstValue) -> AstNode {
             match const_value {
-                ConstValue::Bool(b) => ast::Bool::from_bool(self.context, *b).into(),
+                ConstValue::Bool(b) => ast::Bool::from_bool(*b).into(),
                 ConstValue::Char(c) => {
-                    AstNode::from_ubv(ast::BV::from_u64(self.context, *c as u64, CHAR_BIT_SIZE))
+                    AstNode::from_ubv(ast::BV::from_u64(*c as u64, CHAR_BIT_SIZE))
                 }
                 ConstValue::Int {
                     bit_rep,
@@ -178,50 +173,46 @@ pub(crate) mod z3 {
                     let size = (*bit_size).try_into().unwrap();
                     let ast = if *bit_size <= 64 {
                         if !*is_signed {
-                            ast::BV::from_u64(self.context, bit_rep.0 as u64, size)
+                            ast::BV::from_u64(bit_rep.0 as u64, size)
                         } else {
-                            ast::BV::from_i64(self.context, bit_rep.0 as i64, size)
+                            ast::BV::from_i64(bit_rep.0 as i64, size)
                         }
                     } else {
-                        ast::BV::from_str(&self.context, size, &bit_rep.to_string()).unwrap()
+                        ast::BV::from_str(size, &bit_rep.to_string()).unwrap()
                     };
                     BVNode::new(ast, *is_signed).into()
                 }
                 ConstValue::Float { .. } => todo!(),
-                ConstValue::Addr(addr) => BVNode::new(
-                    ast::BV::from_u64(self.context, *addr as u64, ADDR_BIT_SIZE),
-                    false,
-                )
-                .into(),
+                ConstValue::Addr(addr) => {
+                    BVNode::new(ast::BV::from_u64(*addr as u64, ADDR_BIT_SIZE), false).into()
+                }
             }
         }
 
-        fn translate_array(&mut self, array: &ArrayValue) -> ArrayNode<'ctx> {
+        fn translate_array(&mut self, array: &ArrayValue) -> ArrayNode {
             self.translate_array_of_values("arr", array.elements.iter(), Self::translate_value)
         }
 
-        fn translate_symbolic(&mut self, symbolic: &SymValue) -> AstNode<'ctx> {
+        fn translate_symbolic(&mut self, symbolic: &SymValue) -> AstNode {
             match symbolic {
                 SymValue::Variable(var) => self.translate_symbolic_var(var),
                 SymValue::Expression(expr) => self.translate_symbolic_expr(expr),
             }
         }
 
-        fn translate_symbolic_var(&mut self, var: &SymbolicVar) -> AstNode<'ctx> {
+        fn translate_symbolic_var(&mut self, var: &SymbolicVar) -> AstNode {
             self.translate_symbolic_var_and_record(var)
         }
 
-        fn translate_symbolic_var_and_record(&mut self, var: &SymbolicVar) -> AstNode<'ctx> {
+        fn translate_symbolic_var_and_record(&mut self, var: &SymbolicVar) -> AstNode {
             let node = match var.ty {
-                ValueType::Bool => ast::Bool::new_const(self.context, var.id).into(),
-                ValueType::Char => {
-                    AstNode::from_ubv(ast::BV::new_const(self.context, var.id, CHAR_BIT_SIZE))
-                }
+                ValueType::Bool => ast::Bool::new_const(var.id).into(),
+                ValueType::Char => AstNode::from_ubv(ast::BV::new_const(var.id, CHAR_BIT_SIZE)),
                 ValueType::Int(IntType {
                     bit_size,
                     is_signed,
                 }) => {
-                    let ast = ast::BV::new_const(self.context, var.id, bit_size as u32);
+                    let ast = ast::BV::new_const(var.id, bit_size as u32);
                     BVNode::new(ast, is_signed).into()
                 }
                 ValueType::Float { .. } => todo!(),
@@ -230,7 +221,7 @@ pub(crate) mod z3 {
             node
         }
 
-        fn translate_symbolic_expr(&mut self, expr: &Expr) -> AstNode<'ctx> {
+        fn translate_symbolic_expr(&mut self, expr: &Expr) -> AstNode {
             log_debug!(target: TAG, "Translating symbolic expression: {}", expr);
             use Expr::*;
             match expr {
@@ -322,11 +313,7 @@ pub(crate) mod z3 {
             }
         }
 
-        fn translate_unary_expr(
-            &mut self,
-            operator: &UnaryOp,
-            operand: AstNode<'ctx>,
-        ) -> AstNode<'ctx> {
+        fn translate_unary_expr(&mut self, operator: &UnaryOp, operand: AstNode) -> AstNode {
             use UnaryOp::*;
             match (operator, operand) {
                 (Not, AstNode::Bool(ast)) => ast.not().into(),
@@ -348,7 +335,7 @@ pub(crate) mod z3 {
         fn translate_binary_operands(
             &mut self,
             operands: &SymBinaryOperands,
-        ) -> (AstNode<'ctx>, AstNode<'ctx>) {
+        ) -> (AstNode, AstNode) {
             (
                 self.translate_value(operands.first()),
                 self.translate_value(operands.second()),
@@ -358,9 +345,9 @@ pub(crate) mod z3 {
         fn translate_binary_expr(
             &mut self,
             operator: BinaryOp,
-            left: AstNode<'ctx>,
-            right: AstNode<'ctx>,
-        ) -> AstNode<'ctx> {
+            left: AstNode,
+            right: AstNode,
+        ) -> AstNode {
             assert_eq!(discriminant(&left), discriminant(&right));
 
             match left {
@@ -368,10 +355,10 @@ pub(crate) mod z3 {
                     let left = left.as_bool();
                     let right = right.as_bool();
                     match operator {
-                        BinaryOp::Eq => ast::Bool::_eq(left, right),
-                        BinaryOp::Ne => ast::Bool::_eq(left, right).not(),
-                        BinaryOp::BitAnd => ast::Bool::and(left.get_ctx(), &[left, right]),
-                        BinaryOp::BitOr => ast::Bool::or(left.get_ctx(), &[left, right]),
+                        BinaryOp::Eq => ast::Bool::eq(left, right),
+                        BinaryOp::Ne => ast::Bool::eq(left, right).not(),
+                        BinaryOp::BitAnd => ast::Bool::and(&[left, right]),
+                        BinaryOp::BitOr => ast::Bool::or(&[left, right]),
                         BinaryOp::BitXor => ast::Bool::xor(left, right),
                         _ => {
                             unreachable!(
@@ -415,7 +402,7 @@ pub(crate) mod z3 {
                     let is_signed = left_node.is_signed();
 
                     let handle_ar_op = || {
-                        let f: Option<fn(&_, &_) -> ast::BV<'ctx>> = match (operator, is_signed) {
+                        let f: Option<fn(&_, _) -> ast::BV> = match (operator, is_signed) {
                             (BinaryOp::Add, _) => Some(ast::BV::bvadd),
                             (BinaryOp::Sub, _) => Some(ast::BV::bvsub),
                             (BinaryOp::Mul, _) => Some(ast::BV::bvmul),
@@ -436,9 +423,9 @@ pub(crate) mod z3 {
                         f.map(|f| left_node.map(|left| f(left, right_bv)).into())
                     };
                     let handle_logical_op = || {
-                        let f: Option<fn(&_, &_) -> ast::Bool<'ctx>> = match (operator, is_signed) {
-                            (BinaryOp::Eq, _) => Some(ast::BV::_eq),
-                            (BinaryOp::Ne, _) => Some(|l, r| ast::BV::_eq(l, r).not()),
+                        let f: Option<fn(&_, _) -> ast::Bool> = match (operator, is_signed) {
+                            (BinaryOp::Eq, _) => Some(ast::BV::eq),
+                            (BinaryOp::Ne, _) => Some(|l, r| ast::BV::eq(l, r).not()),
                             (BinaryOp::Lt, true) => Some(ast::BV::bvslt),
                             (BinaryOp::Lt, false) => Some(ast::BV::bvult),
                             (BinaryOp::Le, true) => Some(ast::BV::bvsle),
@@ -452,9 +439,9 @@ pub(crate) mod z3 {
                         f.map(|f| f(&left_node.0, right_bv).into())
                     };
                     let handle_other_func = || {
-                        let f: Option<
-                            Box<dyn FnOnce(AstNode<'ctx>, AstNode<'ctx>) -> AstNode<'ctx>>,
-                        > = match (operator, is_signed) {
+                        let f: Option<Box<dyn FnOnce(AstNode, AstNode) -> AstNode>> = match (
+                            operator, is_signed,
+                        ) {
                             (BinaryOp::Cmp, _) => Some(Box::new(|left, right| {
                                 use core::cmp::Ordering::*;
                                 let lt_check = self.translate_binary_expr(
@@ -495,24 +482,24 @@ pub(crate) mod z3 {
 
         fn translate_offset_expr(
             &mut self,
-            pointer: AstNode<'ctx>,
-            offset: AstNode<'ctx>,
+            pointer: AstNode,
+            offset: AstNode,
             pointee_size: leaf_runtime::abs::TypeSize,
-        ) -> AstNode<'ctx> {
+        ) -> AstNode {
             let pointer = pointer.as_bit_vector();
             let offset = offset.as_bit_vector();
-            let size = ast::BV::from_u64(self.context, pointee_size as u64, USIZE_BIT_SIZE);
+            let size = ast::BV::from_u64(pointee_size as u64, USIZE_BIT_SIZE);
             let byte_offset = offset.bvmul(&size);
             BVNode::new(pointer.bvadd(&byte_offset), false).into()
         }
 
         fn translate_extension_expr(
             &mut self,
-            source: AstNode<'ctx>,
+            source: AstNode,
             is_zero_ext: bool,
             bits_to_add: u32,
             is_signed: bool,
-        ) -> AstNode<'ctx> {
+        ) -> AstNode {
             match source {
                 AstNode::BitVector(BVNode(ast, _)) => {
                     let ast = if is_zero_ext {
@@ -528,10 +515,10 @@ pub(crate) mod z3 {
 
         fn translate_truncation_expr(
             &mut self,
-            source: AstNode<'ctx>,
+            source: AstNode,
             high_exclusive: u32,
             is_signed: bool,
-        ) -> AstNode<'ctx> {
+        ) -> AstNode {
             match source {
                 AstNode::BitVector(BVNode(ast, _)) => {
                     BVNode::new(ast.extract(high_exclusive - 1, 0), is_signed).into()
@@ -542,10 +529,10 @@ pub(crate) mod z3 {
 
         fn translate_ite_expr(
             &mut self,
-            condition: AstNode<'ctx>,
-            if_target: AstNode<'ctx>,
-            else_target: AstNode<'ctx>,
-        ) -> AstNode<'ctx> {
+            condition: AstNode,
+            if_target: AstNode,
+            else_target: AstNode,
+        ) -> AstNode {
             match condition {
                 AstNode::Bool(_) => {
                     let condition = condition.as_bool();
@@ -558,21 +545,14 @@ pub(crate) mod z3 {
             }
         }
 
-        fn translate_select(
-            &mut self,
-            select: &MultiValue,
-            const_prefix: Option<&str>,
-        ) -> AstNode<'ctx> {
+        fn translate_select(&mut self, select: &MultiValue, const_prefix: Option<&str>) -> AstNode {
             let index = self.translate_symbolic(&select.index.index);
             let index = if select.index.from_end {
                 todo!("#485")
             } else {
                 index
             };
-            debug_assert_eq!(
-                index.z3_sort(),
-                z3::Sort::bitvector(self.context, USIZE_BIT_SIZE)
-            );
+            debug_assert_eq!(index.z3_sort(), z3::Sort::bitvector(USIZE_BIT_SIZE));
 
             /* NOTE: Do we need to add constraint that index is within bounds?
              * This code is meant for safe Rust. Thus,
@@ -613,13 +593,8 @@ pub(crate) mod z3 {
             &mut self,
             const_prefix: &str,
             values: impl Iterator<Item = &'a V>,
-            translate: impl Fn(&mut Self, &V) -> AstNode<'ctx>,
-        ) -> ArrayNode<'ctx>
-        where
-            'ctx: 'a,
-        {
-            let context = self.context;
-
+            translate: impl Fn(&mut Self, &V) -> AstNode,
+        ) -> ArrayNode {
             let mut values = values.map(|v| translate(self, v));
             let first = values
                 .next()
@@ -627,15 +602,14 @@ pub(crate) mod z3 {
             let element_sort = first.sort().clone();
 
             let mut array = ast::Array::fresh_const(
-                context,
                 const_prefix,
-                &z3::Sort::bitvector(context, USIZE_BIT_SIZE),
+                &z3::Sort::bitvector(USIZE_BIT_SIZE),
                 &first.z3_sort(),
             );
 
             for (i, value) in std::iter::once(first).chain(values).enumerate() {
                 array = array.store(
-                    &ast::BV::from_u64(context, i as u64, USIZE_BIT_SIZE),
+                    &ast::BV::from_u64(i as u64, USIZE_BIT_SIZE),
                     &value.dyn_ast(),
                 );
             }
@@ -648,7 +622,7 @@ pub(crate) mod z3 {
             )
         }
 
-        fn translate_multi_value_leaf(&mut self, leaf: &MultiValueLeaf) -> AstNode<'ctx> {
+        fn translate_multi_value_leaf(&mut self, leaf: &MultiValueLeaf) -> AstNode {
             self.translate_value(leaf)
         }
 
@@ -656,7 +630,7 @@ pub(crate) mod z3 {
             &mut self,
             tree: &MultiValueTree,
             const_prefix: Option<&str>,
-        ) -> AstNode<'ctx> {
+        ) -> AstNode {
             match tree {
                 MultiValueTree::Single(single) => self.translate_multi_value_leaf(single),
                 MultiValueTree::Array(values) => {
@@ -673,10 +647,10 @@ pub(crate) mod z3 {
         fn translate_binary_bound_check(
             &mut self,
             operator: OverflowingBinaryOp,
-            left: AstNode<'ctx>,
-            right: AstNode<'ctx>,
+            left: AstNode,
+            right: AstNode,
             is_overflow: bool,
-        ) -> AstNode<'ctx> {
+        ) -> AstNode {
             // debug_assert!(operator.is_with_overflow());
             let AstNode::BitVector(BVNode(_, BVSort { is_signed })) = left else {
                 unreachable!("Overflow only applies to numerical arithmetic operations.")
@@ -690,18 +664,18 @@ pub(crate) mod z3 {
                 (true, Add, _) => ast::BV::bvadd_no_overflow(left, right, is_signed),
                 (true, Sub, true) => ast::BV::bvsub_no_overflow(left, right),
                 // Impossible. Largest case: MAX - 0
-                (true, Sub, false) => ast::Bool::from_bool(left.get_ctx(), true),
+                (true, Sub, false) => ast::Bool::from_bool(true),
                 (true, Mul, _) => ast::BV::bvmul_no_overflow(left, right, is_signed),
                 (false, Add, true) => ast::BV::bvadd_no_underflow(left, right),
                 // Impossible. Smallest case: 0 . 0
-                (false, Add | Mul, false) => ast::Bool::from_bool(left.get_ctx(), true),
+                (false, Add | Mul, false) => ast::Bool::from_bool(true),
                 (false, Sub, _) => ast::BV::bvsub_no_underflow(left, right, is_signed),
                 (false, Mul, true) => ast::BV::bvmul_no_underflow(left, right),
             };
             ast::Bool::not(&in_bounds).into()
         }
 
-        fn translate_bitreverse_expr(&mut self, bv: BVNode<'ctx>) -> AstNode<'ctx> {
+        fn translate_bitreverse_expr(&mut self, bv: BVNode) -> AstNode {
             let size = bv.size();
             // Reverse a bit vector expression by extracting and concatenating the bits in reverse order.
             let mut reversed_bv = bv.0.extract(size - 1, size - 1);
@@ -711,47 +685,42 @@ pub(crate) mod z3 {
             BVNode::new(reversed_bv, bv.is_signed()).into()
         }
 
-        fn translate_count_zeros_expr<const IS_TRAILING: bool>(
-            &mut self,
-            bv: BVNode<'ctx>,
-        ) -> AstNode<'ctx> {
+        fn translate_count_zeros_expr<const IS_TRAILING: bool>(&mut self, bv: BVNode) -> AstNode {
             const RESULT_SIZE: u32 = u32::BITS;
             let size = bv.size();
-            let ctx = bv.0.get_ctx();
-            let mut trailing_zeros = ast::BV::from_u64(ctx, 0, RESULT_SIZE);
-            let mut all_zero = ast::Bool::from_bool(ctx, true);
+            let mut trailing_zeros = ast::BV::from_u64(0, RESULT_SIZE);
+            let mut all_zero = ast::Bool::from_bool(true);
 
             for idx in 0..size {
                 let bit_idx = if IS_TRAILING { idx } else { size - 1 - idx };
                 let bit = bv.0.extract(bit_idx, bit_idx);
-                let is_zero = bit._eq(&ast::BV::from_u64(ctx, 0, 1));
-                all_zero = ast::Bool::and(ctx, &[all_zero, is_zero]);
+                let is_zero = bit.eq(&ast::BV::from_u64(0, 1));
+                all_zero = ast::Bool::and(&[all_zero, is_zero]);
                 trailing_zeros = all_zero.ite(
-                    &ast::BV::from_u64(ctx, idx as u64 + 1, RESULT_SIZE),
+                    &ast::BV::from_u64(idx as u64 + 1, RESULT_SIZE),
                     &trailing_zeros,
                 )
             }
             BVNode::new(trailing_zeros, false).into()
         }
 
-        fn translate_count_ones_expr(&mut self, bv: BVNode<'ctx>) -> AstNode<'ctx> {
+        fn translate_count_ones_expr(&mut self, bv: BVNode) -> AstNode {
             const RESULT_SIZE: u32 = u32::BITS;
             let size = bv.size();
-            let ctx = bv.0.get_ctx();
-            let mut count = ast::BV::from_u64(ctx, 0, RESULT_SIZE);
+            let mut count = ast::BV::from_u64(0, RESULT_SIZE);
 
             for idx in 0..size {
                 let bit = bv.0.extract(idx, idx);
-                let is_one = bit._eq(&ast::BV::from_u64(ctx, 1, 1));
+                let is_one = bit.eq(&ast::BV::from_u64(1, 1));
                 count = count.bvadd(&is_one.ite(
-                    &ast::BV::from_u64(ctx, 1, RESULT_SIZE),
-                    &ast::BV::from_u64(ctx, 0, RESULT_SIZE),
+                    &ast::BV::from_u64(1, RESULT_SIZE),
+                    &ast::BV::from_u64(0, RESULT_SIZE),
                 ));
             }
             BVNode::new(count, false).into()
         }
 
-        fn translate_byte_swap_expr(&mut self, bv: BVNode<'ctx>) -> AstNode<'ctx> {
+        fn translate_byte_swap_expr(&mut self, bv: BVNode) -> AstNode {
             let size = bv.size();
             debug_assert!(size % 8 == 0);
             let swapped_bv = (0..size)
@@ -765,10 +734,10 @@ pub(crate) mod z3 {
 
         fn translate_carryless_mul_expr(
             &mut self,
-            left: AstNode<'ctx>,
-            right: AstNode<'ctx>,
+            left: AstNode,
+            right: AstNode,
             is_signed: bool,
-        ) -> AstNode<'ctx> {
+        ) -> AstNode {
             assert!(
                 !is_signed,
                 "Carryless multiplication is only expected for unsigned integers."
@@ -776,27 +745,23 @@ pub(crate) mod z3 {
             let left = left.as_bit_vector();
             let right = right.as_bit_vector();
             let size = left.get_size();
-            let zero = ast::BV::from_u64(self.context, 0, size);
-            let one = ast::BV::from_u64(self.context, 1, 1);
+            let zero = ast::BV::from_u64(0, size);
+            let one = ast::BV::from_u64(1, 1);
 
             let mut result = zero.clone();
             for i in 0..size {
                 // Reference: Documentation for uN::carryless_mul
                 // (rhs >> i) & 1
-                let enable = right.extract(i, i)._eq(&one);
+                let enable = ast::BV::eq(&right.extract(i, i), &one);
                 // (lhs << i)
-                let shifted = left.bvshl(&ast::BV::from_u64(self.context, i as u64, size));
+                let shifted = left.bvshl(&ast::BV::from_u64(i as u64, size));
                 // result ^= (rhs >> i) & 1 ? (lhs << i) : 0
                 result = result.bvxor(&enable.ite(&shifted, &zero));
             }
             BVNode::new(result, false).into()
         }
 
-        fn translate_concat_expr(
-            &mut self,
-            values: Vec<AstNode<'ctx>>,
-            is_signed: bool,
-        ) -> AstNode<'ctx> {
+        fn translate_concat_expr(&mut self, values: Vec<AstNode>, is_signed: bool) -> AstNode {
             // Concatenation leads to big-endianness.
             let concatenated = values
                 .into_iter()
@@ -812,7 +777,7 @@ pub(crate) mod z3 {
         fn transmute(self, to_sort: BVSort) -> Self::Result;
     }
 
-    impl<'ctx> BVSortTransmute for AstNode<'ctx> {
+    impl BVSortTransmute for AstNode {
         type Result = Self;
         fn transmute(mut self, to_sort: BVSort) -> Self {
             match &mut self {
@@ -836,8 +801,8 @@ pub(crate) mod z3 {
         }
     }
 
-    impl<'ctx> From<AstNode<'ctx>> for ValueRef {
-        fn from(ast: AstNode<'ctx>) -> Self {
+    impl From<AstNode> for ValueRef {
+        fn from(ast: AstNode) -> Self {
             match ast {
                 AstNode::Bool(ast) => super::super::ConstValue::Bool(ast.as_bool().unwrap()),
                 AstNode::BitVector(BVNode(ast, BVSort { is_signed })) => {

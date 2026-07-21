@@ -41,16 +41,16 @@ use utils::{
     dumping::{Dumper, DumperListExt, dump},
 };
 
-type CurrentSolver<'ctx> = Z3Solver<'ctx, SymVarId>;
-type CurrentSolverValue<'ctx> = <CurrentSolver<'ctx> as Solver>::Value;
-type CurrentSolverCase<'ctx> = <CurrentSolver<'ctx> as Solver>::Case;
-type CurrentSolverTranslator<'ctx> = Z3ValueTranslator<'ctx>;
+type CurrentSolver = Z3Solver<SymVarId>;
+type CurrentSolverValue = <CurrentSolver as Solver>::Value;
+type CurrentSolverCase = <CurrentSolver as Solver>::Case;
+type CurrentSolverTranslator = Z3ValueTranslator;
 
 // These are the types of steps, values, and cases for the inner managers.
 // You can use them to give explicit types as opposed to generics.
 type IStep = Tagged<Indexed<Step>>;
-type IValue<'ctx> = Translation<ValueRef, CurrentSolverValue<'ctx>>;
-type ICase<'ctx> = Translation<ConstValue, CurrentSolverCase<'ctx>>;
+type IValue = Translation<ValueRef, CurrentSolverValue>;
+type ICase = Translation<ConstValue, CurrentSolverCase>;
 
 struct SymExTraceManager<M> {
     inner: M,
@@ -119,7 +119,7 @@ pub(crate) fn create_trace_manager(
                 config.global_params.iter().map(|(k, v)| (k, v.to_string())),
             );
             let solver: CurrentSolver = Z3Solver::<SymVarId>::new_in_global_context();
-            let translator = Z3ValueTranslator::new(solver.context());
+            let translator = Z3ValueTranslator::new();
             (solver, translator)
         }
     };
@@ -277,15 +277,12 @@ fn is_inner_inspector(t: &TraceInspectorType) -> bool {
 
 // These functions help with constraining the types when it is (almost) not possible to write them explicitly.
 
-fn type_check_inner_manager<'ctx, T: AbsTraceManager<IStep, IValue<'ctx>, ICase<'ctx>>>(m: T) -> T {
+fn type_check_inner_manager<'ctx, T: AbsTraceManager<IStep, IValue, ICase>>(m: T) -> T {
     m
 }
 
-fn type_check_inner_filter<
-    'ctx,
-    F: FnMut(&IStep, Constraint<&IValue<'ctx>, &ICase<'ctx>>) -> bool + 'ctx,
->(
+fn type_check_inner_filter<'ctx, F: FnMut(&IStep, Constraint<&IValue, &ICase>) -> bool + 'ctx>(
     f: F,
-) -> Box<dyn FnMut(&IStep, Constraint<&IValue<'ctx>, &ICase<'ctx>>) -> bool + 'ctx> {
+) -> Box<dyn FnMut(&IStep, Constraint<&IValue, &ICase>) -> bool + 'ctx> {
     Box::new(f)
 }

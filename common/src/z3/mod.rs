@@ -12,7 +12,7 @@ pub trait BVExt {
     fn as_u128(&self) -> Option<u128>;
 }
 
-impl<'ctx> BVExt for ast::BV<'ctx> {
+impl<'ctx> BVExt for ast::BV {
     fn as_u128(&self) -> Option<u128> {
         if self.get_size() <= 128 {
             unsafe {

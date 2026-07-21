@@ -25,15 +25,15 @@ use backend::{
 
 pub(super) fn create_imm_diverging_ans_finder<'ctx, V: 'ctx, C: 'ctx>(
     sym_var_manager: RRef<impl SymVariablesManager + 'static>,
-    solver: CurrentSolver<'ctx>,
+    solver: CurrentSolver,
     check_optimistic: bool,
     filters_config: &Vec<DivergenceFilterType>,
     branch_depth_provider: Option<RRef<impl DepthProvider<Step, ConstValue> + 'ctx>>,
     output_config: &Vec<OutputConfig>,
 ) -> (impl TraceInspector<IStep, V, C> + 'ctx, impl Dumper + 'ctx)
 where
-    V: Borrow<CurrentSolverValue<'ctx>>,
-    C: Borrow<CurrentSolverCase<'ctx>>,
+    V: Borrow<CurrentSolverValue>,
+    C: Borrow<CurrentSolverCase>,
     C: Borrow<ConstValue>,
 {
     let mut output_generator = DefaultOutputGenerator::new(output_config);
@@ -133,7 +133,7 @@ fn create_branch_depth_filter<'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
 ) -> (impl DivergenceFilter<S, V, C> + 'ctx, Option<impl Dumper>)
 where
     S: Borrow<Step>,
-    V: Borrow<CurrentSolverValue<'ctx>>,
+    V: Borrow<CurrentSolverValue>,
     C: Borrow<ConstValue>,
 {
     let persistence = persistence.map(|cfg| match cfg {

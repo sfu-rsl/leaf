@@ -30,18 +30,16 @@ impl<T> Borrow<ConstValue> for Translation<ConstValue, T> {
     }
 }
 
-// impl<'ctx, V> Borrow<CurrentSolverValue<'ctx>> for Translation<V, CurrentSolverValue<'ctx>> {
-impl<'ctx, V> Borrow<common::z3::AstAndVars<'ctx, SymVarId>>
-    for Translation<V, CurrentSolverValue<'ctx>>
-{
-    fn borrow(&self) -> &CurrentSolverValue<'ctx> {
+// impl<V> Borrow<CurrentSolverValue> for Translation<V, CurrentSolverValue> {
+impl<V> Borrow<common::z3::AstAndVars<SymVarId>> for Translation<V, CurrentSolverValue> {
+    fn borrow(&self) -> &CurrentSolverValue {
         &self.1
     }
 }
 
-// impl<'ctx, V> Borrow<CurrentSolverCase<'ctx>> for Translation<V, CurrentSolverCase<'ctx>> {
-impl<'ctx, V> Borrow<common::z3::AstNode<'ctx>> for Translation<V, CurrentSolverCase<'ctx>> {
-    fn borrow(&self) -> &CurrentSolverCase<'ctx> {
+// impl<V> Borrow<CurrentSolverCase> for Translation<V, CurrentSolverCase> {
+impl<V> Borrow<common::z3::AstNode> for Translation<V, CurrentSolverCase> {
+    fn borrow(&self) -> &CurrentSolverCase {
         &self.1
     }
 }
