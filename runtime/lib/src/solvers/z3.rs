@@ -9,16 +9,16 @@ use crate::abs::{Constraint, IntType, ValueType, backend};
 
 use self::backend::SolveResult;
 
-pub type Z3Solver<'ctx, I> = common::z3::WrappedSolver<'ctx, I>;
+pub type Z3Solver<I> = common::z3::WrappedSolver<I>;
 
-impl<'a, 'ctx: 'a, I> backend::Solver for Z3Solver<'ctx, I>
+impl<'a, I> backend::Solver for Z3Solver<I>
 where
     I: Eq + Hash + Clone,
-    Self: 'ctx,
+    Self:,
 {
-    type Value = AstAndVars<'ctx, I>;
-    type Case = AstNode<'ctx>;
-    type Model = HashMap<I, AstNode<'ctx>>;
+    type Value = AstAndVars<I>;
+    type Case = AstNode;
+    type Model = HashMap<I, AstNode>;
 
     fn check(
         &mut self,

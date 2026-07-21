@@ -45,7 +45,7 @@ impl From<Expr> for SmtLibExpr {
     }
 }
 
-impl<'ctx, I: ToString + FromStr> AstAndVars<'ctx, I> {
+impl<I: ToString + FromStr> AstAndVars<I> {
     pub fn serializable(&self) -> impl Serialize {
         SmtLibExpr {
             expr: Expr {
@@ -72,7 +72,7 @@ impl<'ctx, I: ToString + FromStr> AstAndVars<'ctx, I> {
         }
     }
 
-    pub fn parse(context: &'ctx Context, smtlib: &SmtLibExpr) -> Self {
+    pub fn parse(context: &Context, smtlib: &SmtLibExpr) -> Self {
         let variables = smtlib
             .decls
             .iter()
@@ -93,11 +93,11 @@ impl<'ctx, I: ToString + FromStr> AstAndVars<'ctx, I> {
 }
 
 impl SmtLibExpr {
-    pub fn parse<'ctx, I: FromStr + Eq + Hash + Clone>(
+    pub fn parse<I: FromStr + Eq + Hash + Clone>(
         &self,
-        context: &'ctx Context,
-        vars: &mut HashMap<I, AstNode<'ctx>>,
-    ) -> AstAndVars<'ctx, I> {
+        context: &Context,
+        vars: &mut HashMap<I, AstNode>,
+    ) -> AstAndVars<I> {
         let variables = self
             .decls
             .iter()
@@ -114,14 +114,14 @@ impl SmtLibExpr {
         AstAndVars { variables, value }
     }
 
-    pub fn parse_as_const<'ctx>(&self, context: &'ctx Context) -> Option<AstNode<'ctx>> {
+    pub fn parse_as_const(&self, context: &Context) -> Option<AstNode> {
         self.decls
             .is_empty()
             .then(|| parse_expr(context, &self.expr, iter::empty()))
     }
 }
 
-impl<'ctx> AstNode<'ctx> {
+impl AstNode {
     pub fn serializable(&self) -> impl Serialize {
         Expr {
             sort: self.sort(),
@@ -130,7 +130,7 @@ impl<'ctx> AstNode<'ctx> {
     }
 }
 
-fn parse_var_decl<'ctx>(context: &'ctx Context, decl: &VarDecl) -> AstNode<'ctx> {
+fn parse_var_decl(context: &Context, decl: &VarDecl) -> AstNode {
     let smtlib = [
         decl.smtlib_rep.as_str(),
         dummy_assertion(&decl.name).as_str(),
@@ -140,11 +140,11 @@ fn parse_var_decl<'ctx>(context: &'ctx Context, decl: &VarDecl) -> AstNode<'ctx>
     extract_expr_from_dummy(dummy_ast, &decl.sort)
 }
 
-fn parse_expr<'ctx: 'a, 'a>(
-    context: &'ctx Context,
+fn parse_expr<'a>(
+    context: &Context,
     expr: &Expr,
-    decls: impl Iterator<Item = &'a AstNode<'ctx>>,
-) -> AstNode<'ctx> {
+    decls: impl Iterator<Item = &'a AstNode>,
+) -> AstNode {
     let smtlib = dummy_assertion(&expr.smtlib_rep);
     let dummy_ast = unsafe { parse_single_expr(context, smtlib, decls.map(|d| d.ast())) };
     extract_expr_from_dummy(dummy_ast, &expr.sort)
@@ -154,7 +154,7 @@ fn dummy_assertion(expr: &str) -> String {
     format!("(assert (= {expr} {expr}))")
 }
 
-fn extract_expr_from_dummy<'ctx>(ast: ast::Dynamic<'ctx>, sort: &AstNodeSort) -> AstNode<'ctx> {
+fn extract_expr_from_dummy(ast: ast::Dynamic, sort: &AstNodeSort) -> AstNode {
     assert_eq!(ast.num_children(), 2);
     AstNode::from_ast(
         ast.nth_child(0).expect("Unexpected structure").simplify(),
@@ -162,21 +162,25 @@ fn extract_expr_from_dummy<'ctx>(ast: ast::Dynamic<'ctx>, sort: &AstNodeSort) ->
     )
 }
 
-unsafe fn parse_single_expr<'ctx: 'a, 'a, S: Into<Vec<u8>>>(
-    context: &'ctx Context,
+unsafe fn parse_single_expr<'a, S: Into<Vec<u8>>>(
+    context: &Context,
     smtlib: S,
-    decls: impl Iterator<Item = &'a (dyn ast::Ast<'ctx> + 'a)>,
-) -> ast::Dynamic<'ctx> {
+    decls: impl Iterator<Item = &'a (dyn ast::Ast + 'a)>,
+) -> ast::Dynamic {
     let c = context.get_z3_context();
     let decls = decls
         .map(|d| {
-            let app = Z3_to_app(d.get_ctx().get_z3_context(), d.get_z3_ast());
-            Z3_get_app_decl(context.get_z3_context(), app)
+            let app = Z3_to_app(d.get_ctx().get_z3_context(), d.get_z3_ast())
+                .unwrap_or_else(|| core::panic!("Not an application AST: {:?}", d));
+            Z3_get_app_decl(context.get_z3_context(), app).unwrap()
         })
         .collect::<Vec<_>>();
     let decl_names = decls
         .iter()
-        .map(|d| Z3_get_decl_name(context.get_z3_context(), *d))
+        .map(|d| {
+            Z3_get_decl_name(context.get_z3_context(), *d)
+                .unwrap_or_else(|| core::panic!("Declaration has no name: {:?}", d))
+        })
         .collect::<Vec<_>>();
     let vec = Z3_parse_smtlib2_string(
         c,
@@ -187,7 +191,8 @@ unsafe fn parse_single_expr<'ctx: 'a, 'a, S: Into<Vec<u8>>>(
         decls.len() as u32,
         decl_names.as_ptr(),
         decls.as_ptr(),
-    );
+    )
+    .unwrap_or_else(|| core::panic!("Failed to parse SMT-LIB expression"));
     assert_eq!(Z3_ast_vector_size(c, vec), 1);
-    ast::Dynamic::wrap(context, Z3_ast_vector_get(c, vec, 0))
+    ast::Dynamic::wrap(context, Z3_ast_vector_get(c, vec, 0).unwrap())
 }

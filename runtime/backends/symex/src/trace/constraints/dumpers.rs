@@ -14,8 +14,8 @@ pub(super) fn create_solver_constraints_dumper<'ctx, S, V, C>(
 ) -> impl StepInspector<S, V, C>
 where
     S: Borrow<Step> + HasIndex,
-    V: Borrow<CurrentSolverValue<'ctx>>,
-    C: Borrow<CurrentSolverCase<'ctx>>,
+    V: Borrow<CurrentSolverValue>,
+    C: Borrow<CurrentSolverCase>,
 {
     let mut dumper_inspector = match config {
         OutputConfig::File(cfg) => {

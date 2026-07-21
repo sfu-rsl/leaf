@@ -24,14 +24,14 @@ const TAG: &str = leaf_runtime::trace::sanity_check::TAG;
 
 pub(super) fn create_trace_inspector<'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
     sym_var_manager: RRef<impl SymVariablesManager + 'ctx>,
-    translator: CurrentSolverTranslator<'ctx>,
+    translator: CurrentSolverTranslator,
     level: ConstraintSanityCheckLevel,
     output: Option<&OutputConfig>,
-    solver: CurrentSolver<'ctx>,
+    solver: CurrentSolver,
 ) -> Box<dyn TraceInspector<S, V, C> + 'ctx>
 where
-    V: Borrow<CurrentSolverValue<'ctx>>,
-    C: Borrow<CurrentSolverCase<'ctx>>,
+    V: Borrow<CurrentSolverValue>,
+    C: Borrow<CurrentSolverCase>,
     S: Debug + Display,
     V: Debug + Display,
     C: Debug + Display,
@@ -56,13 +56,13 @@ where
 
 pub(super) fn create_step_filter<'o, 'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
     sym_var_manager: RRef<impl SymVariablesManager + 'ctx>,
-    translator: CurrentSolverTranslator<'ctx>,
+    translator: CurrentSolverTranslator,
     output: Option<&'o OutputConfig>,
-    solver: CurrentSolver<'ctx>,
+    solver: CurrentSolver,
 ) -> impl FnMut(&S, Constraint<&V, &C>) -> bool + 'ctx
 where
-    V: Borrow<CurrentSolverValue<'ctx>>,
-    C: Borrow<CurrentSolverCase<'ctx>>,
+    V: Borrow<CurrentSolverValue>,
+    C: Borrow<CurrentSolverCase>,
     S: Debug + Display,
     V: Debug + Display,
     C: Debug + Display,
@@ -98,17 +98,16 @@ impl<M: SymVariablesManager, T, V, C> ConcretizationConstraintsCache<M, T, V, C>
 impl<'a, 'ctx, M: SymVariablesManager> IntoIterator
     for &'a mut ConcretizationConstraintsCache<
         M,
-        CurrentSolverTranslator<'ctx>,
-        CurrentSolverValue<'ctx>,
-        CurrentSolverCase<'ctx>,
+        CurrentSolverTranslator,
+        CurrentSolverValue,
+        CurrentSolverCase,
     >
 {
     // FIXME: Could not make generics work here.
-    type Item = Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>;
+    type Item = Constraint<CurrentSolverValue, CurrentSolverCase>;
 
-    type IntoIter = Box<
-        dyn Iterator<Item = Constraint<CurrentSolverValue<'ctx>, CurrentSolverCase<'ctx>>> + 'a,
-    >;
+    type IntoIter =
+        Box<dyn Iterator<Item = Constraint<CurrentSolverValue, CurrentSolverCase>> + 'a>;
 
     fn into_iter(self) -> Self::IntoIter {
         let manager: std::cell::Ref<'a, M> = RefCell::borrow(&self.manager);
@@ -146,7 +145,7 @@ mod dumping {
 
     const MAX_CONSTRAINT_LENGTH: usize = 100;
 
-    pub(super) fn trace_dumper<'ctx, S: 'ctx, V: 'ctx, C: 'ctx>(
+    pub(super) fn trace_dumper<S, V, C>(
         output: Option<&OutputConfig>,
     ) -> impl FnOnce(&[S], &[Constraint<V, C>])
     where

@@ -10,37 +10,37 @@ use z3::ast::{self, Ast};
  */
 #[derive(Debug, Clone, PartialEq, Eq, dm::Display)]
 #[display("{_0}")]
-pub enum AstNode<'ctx> {
-    Bool(ast::Bool<'ctx>),
-    BitVector(BVNode<'ctx>),
-    Array(ArrayNode<'ctx>),
+pub enum AstNode {
+    Bool(ast::Bool),
+    BitVector(BVNode),
+    Array(ArrayNode),
 }
 
-impl<'ctx> From<BVNode<'ctx>> for AstNode<'ctx> {
-    fn from(node: BVNode<'ctx>) -> Self {
+impl From<BVNode> for AstNode {
+    fn from(node: BVNode) -> Self {
         Self::BitVector(node)
     }
 }
 
-impl<'ctx> From<ArrayNode<'ctx>> for AstNode<'ctx> {
-    fn from(node: ArrayNode<'ctx>) -> Self {
+impl From<ArrayNode> for AstNode {
+    fn from(node: ArrayNode) -> Self {
         Self::Array(node)
     }
 }
 
 #[derive(Debug, Clone, dm::Display, PartialEq, Eq)]
 #[display("{_0}")]
-pub struct BVNode<'ctx>(pub ast::BV<'ctx>, pub BVSort);
+pub struct BVNode(pub ast::BV, pub BVSort);
 
-impl<'ctx> BVNode<'ctx> {
-    pub fn new(ast: ast::BV<'ctx>, is_signed: bool) -> Self {
+impl BVNode {
+    pub fn new(ast: ast::BV, is_signed: bool) -> Self {
         Self(ast, BVSort { is_signed })
     }
 
     #[inline]
     pub fn map<F>(&self, f: F) -> Self
     where
-        F: FnOnce(&ast::BV<'ctx>) -> ast::BV<'ctx>,
+        F: FnOnce(&ast::BV) -> ast::BV,
     {
         Self(f(&self.0), self.1)
     }
@@ -58,7 +58,7 @@ impl<'ctx> BVNode<'ctx> {
 
 #[derive(Debug, Clone, PartialEq, Eq, dm::Display)]
 #[display("{_0}")]
-pub struct ArrayNode<'ctx>(pub ast::Array<'ctx>, pub ArraySort);
+pub struct ArrayNode(pub ast::Array, pub ArraySort);
 
 #[derive(Debug, Clone, PartialEq, Eq, dm::From, Serialize, Deserialize)]
 pub enum AstNodeSort {
@@ -77,18 +77,18 @@ pub struct ArraySort {
     pub range: Box<AstNodeSort>,
 }
 
-impl<'ctx> From<ast::Bool<'ctx>> for AstNode<'ctx> {
-    fn from(ast: ast::Bool<'ctx>) -> Self {
+impl From<ast::Bool> for AstNode {
+    fn from(ast: ast::Bool) -> Self {
         Self::Bool(ast)
     }
 }
 
-impl<'ctx> AstNode<'ctx> {
-    pub fn from_ubv(ast: ast::BV<'ctx>) -> Self {
+impl AstNode {
+    pub fn from_ubv(ast: ast::BV) -> Self {
         BVNode::new(ast, false).into()
     }
 
-    pub fn from_ast(ast: ast::Dynamic<'ctx>, sort: &AstNodeSort) -> Self {
+    pub fn from_ast(ast: ast::Dynamic, sort: &AstNodeSort) -> Self {
         match sort {
             AstNodeSort::Bool => ast.as_bool().map(Self::Bool),
             AstNodeSort::BitVector(sort) => {
@@ -107,22 +107,22 @@ impl<'ctx> AstNode<'ctx> {
     }
 }
 
-impl<'ctx> AstNode<'ctx> {
-    pub fn as_bool(&self) -> &ast::Bool<'ctx> {
+impl AstNode {
+    pub fn as_bool(&self) -> &ast::Bool {
         match self {
             Self::Bool(ast) => ast,
             _ => core::panic!("Expected the value to be a boolean expression."),
         }
     }
 
-    pub fn as_bit_vector(&self) -> &ast::BV<'ctx> {
+    pub fn as_bit_vector(&self) -> &ast::BV {
         match self {
             Self::BitVector(BVNode(ast, _)) => ast,
             _ => core::panic!("Expected the value to be a bit vector: {:?}", self),
         }
     }
 
-    pub fn unwrap_as_bit_vector(self) -> ast::BV<'ctx> {
+    pub fn unwrap_as_bit_vector(self) -> ast::BV {
         match self {
             Self::BitVector(BVNode(ast, _)) => ast,
             _ => core::panic!("Expected the value to be a bit vector: {:?}", self),
@@ -130,8 +130,8 @@ impl<'ctx> AstNode<'ctx> {
     }
 }
 
-impl<'ctx> AstNode<'ctx> {
-    pub fn ast(&self) -> &dyn ast::Ast<'ctx> {
+impl AstNode {
+    pub fn ast(&self) -> &dyn ast::Ast {
         match self {
             Self::Bool(ast) => ast,
             Self::BitVector(BVNode(ast, _)) => ast,
@@ -139,7 +139,7 @@ impl<'ctx> AstNode<'ctx> {
         }
     }
 
-    pub fn dyn_ast(&self) -> ast::Dynamic<'ctx> {
+    pub fn dyn_ast(&self) -> ast::Dynamic {
         ast::Dynamic::from_ast(self.ast())
     }
 
@@ -151,7 +151,7 @@ impl<'ctx> AstNode<'ctx> {
         }
     }
 
-    pub fn z3_sort(&self) -> z3::Sort<'ctx> {
+    pub fn z3_sort(&self) -> z3::Sort {
         match self {
             Self::Bool(ast) => ast.get_sort(),
             Self::BitVector(BVNode(ast, _)) => ast.get_sort(),
@@ -175,8 +175,8 @@ impl<'ctx> AstNode<'ctx> {
 
 #[derive(Debug, Clone, dm::Deref, dm::Display)]
 #[display("{value}")]
-pub struct AstAndVars<'ctx, I> {
+pub struct AstAndVars<I> {
     #[deref]
-    pub value: AstNode<'ctx>,
-    pub variables: Vec<(I, AstNode<'ctx>)>,
+    pub value: AstNode,
+    pub variables: Vec<(I, AstNode)>,
 }

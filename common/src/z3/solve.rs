@@ -1,7 +1,7 @@
 use delegate::delegate;
 use z3::{
-    self, Context, Model, Optimize, SatResult, Solver,
-    ast::{self, Ast},
+    self, Model, Optimize, SatResult, Solver,
+    ast::{self},
 };
 
 use std::prelude::rust_2024::*;
@@ -10,34 +10,33 @@ use std::{collections::HashMap, hash::Hash};
 use super::super::{
     log_debug,
     types::trace::{Constraint, ConstraintKind},
-    utils,
 };
 
 use super::node::*;
 
-enum SolverImpl<'ctx> {
-    Solver(Solver<'ctx>),
-    Optimize(Optimize<'ctx>),
+enum SolverImpl {
+    Solver(Solver),
+    Optimize(Optimize),
 }
 
 /// An interface for both `Solver` and `Optimize`
-trait Z3Solver<'ctx> {
+trait Z3Solver {
     fn push(&self);
     fn pop(&self);
 
-    fn assert(&self, ast: &ast::Bool<'ctx>);
+    fn assert(&self, ast: &ast::Bool);
     fn check(&self) -> SatResult;
-    fn get_model(&self) -> Option<Model<'ctx>>;
+    fn get_model(&self) -> Option<Model>;
 }
 
-impl<'ctx> Z3Solver<'ctx> for Solver<'ctx> {
+impl Z3Solver for Solver {
     delegate! {
         to self {
             fn push(&self);
 
-            fn assert(&self, ast: &ast::Bool<'ctx>);
+            fn assert(&self, ast: &ast::Bool);
             fn check(&self) -> SatResult;
-            fn get_model(&self) -> Option<Model<'ctx>>;
+            fn get_model(&self) -> Option<Model>;
         }
     }
 
@@ -46,14 +45,14 @@ impl<'ctx> Z3Solver<'ctx> for Solver<'ctx> {
     }
 }
 
-impl<'ctx> Z3Solver<'ctx> for Optimize<'ctx> {
+impl Z3Solver for Optimize {
     delegate! {
         to self {
             fn push(&self);
             fn pop(&self);
 
-            fn assert(&self, ast: &ast::Bool<'ctx>);
-            fn get_model(&self) -> Option<Model<'ctx>>;
+            fn assert(&self, ast: &ast::Bool);
+            fn get_model(&self) -> Option<Model>;
         }
     }
 
@@ -62,7 +61,7 @@ impl<'ctx> Z3Solver<'ctx> for Optimize<'ctx> {
     }
 }
 
-impl<'ctx> Z3Solver<'ctx> for SolverImpl<'ctx> {
+impl Z3Solver for SolverImpl {
     delegate! {
         to match self {
             Self::Solver(solver) => solver,
@@ -74,60 +73,58 @@ impl<'ctx> Z3Solver<'ctx> for SolverImpl<'ctx> {
             fn pop(&self);
 
             #[through(Z3Solver)]
-            fn assert(&self, ast: &ast::Bool<'ctx>);
+            fn assert(&self, ast: &ast::Bool);
             #[through(Z3Solver)]
             fn check(&self) -> SatResult;
             #[through(Z3Solver)]
-            fn get_model(&self) -> Option<Model<'ctx>>;
+            fn get_model(&self) -> Option<Model>;
         }
     }
 }
 
-pub struct WrappedSolver<'ctx, I> {
-    context: &'ctx Context,
-    solver: SolverImpl<'ctx>,
+pub struct WrappedSolver<I> {
+    solver: SolverImpl,
     _phantom: core::marker::PhantomData<(I,)>,
 }
 
-impl<'ctx, I> WrappedSolver<'ctx, I> {
+impl<I> WrappedSolver<I> {
     pub fn new_in_global_context() -> Self {
-        Self::new(context::get_context_for_thread())
+        Self::new()
     }
 
-    pub fn new(context: &'ctx Context) -> Self {
+    pub fn new() -> Self {
         Self {
-            context,
-            solver: SolverImpl::Solver(Solver::new(context)),
+            solver: SolverImpl::Solver(Solver::new()),
             _phantom: Default::default(),
         }
     }
 
-    pub fn context(&self) -> &'ctx Context {
-        self.context
-    }
+    // pub fn context(&self) -> &'ctx Context {
+    //     self.context
+    // }
 }
 
-impl<I> Default for WrappedSolver<'_, I> {
+impl<I> Default for WrappedSolver<I> {
     fn default() -> Self {
         Self::new_in_global_context()
     }
 }
 
-impl<'ctx, I> Clone for WrappedSolver<'ctx, I> {
+impl<I> Clone for WrappedSolver<I> {
     fn clone(&self) -> Self {
         // Prevent cloning the assumptions in the solver
-        Self::new(self.context)
+        Self::new()
     }
 }
 
-impl<'ctx, I> WrappedSolver<'ctx, I>
+impl<I> WrappedSolver<I>
 where
     I: Eq + Hash,
 {
     pub fn check(
         &self,
-        constraints: impl Iterator<Item = Constraint<AstAndVars<'ctx, I>, AstNode<'ctx>>>,
-    ) -> (SatResult, HashMap<I, AstNode<'ctx>>) {
+        constraints: impl Iterator<Item = Constraint<AstAndVars<I>, AstNode>>,
+    ) -> (SatResult, HashMap<I, AstNode>) {
         let mut all_vars = HashMap::<I, AstNode>::new();
         let asts = constraints
             .map(|constraint| {
@@ -147,7 +144,7 @@ where
                         cases
                             .iter()
                             .map(|c| ast::Dynamic::from_ast(c.ast()))
-                            .map(|c| value_ast._eq(&c))
+                            .map(|c| ast::Dynamic::eq(&value_ast, &c))
                             .reduce(|all, m| all.xor(&m))
                             .unwrap()
                     }
@@ -163,10 +160,10 @@ where
 
     fn check_using(
         &self,
-        solver: &(impl Z3Solver<'ctx> + ?Sized),
-        constraints: &[ast::Bool<'ctx>],
-        vars: HashMap<I, AstNode<'ctx>>,
-    ) -> (SatResult, HashMap<I, AstNode<'ctx>>) {
+        solver: &(impl Z3Solver + ?Sized),
+        constraints: &[ast::Bool],
+        vars: HashMap<I, AstNode>,
+    ) -> (SatResult, HashMap<I, AstNode>) {
         log_debug!("Sending constraints to Z3: {:#?}", constraints);
 
         solver.push();
@@ -201,67 +198,29 @@ where
     }
 }
 
-impl<'ctx, I> WrappedSolver<'ctx, I>
+impl<I> WrappedSolver<I>
 where
     I: Eq + Hash,
 {
-    pub fn consider_possible_answer(&mut self, var: AstNode<'ctx>, answer: AstNode<'ctx>) {
+    pub fn consider_possible_answer(&mut self, var: AstNode, answer: AstNode) {
         if let SolverImpl::Solver(..) = self.solver {
-            self.solver = SolverImpl::Optimize(Optimize::new(self.context));
+            self.solver = SolverImpl::Optimize(Optimize::new());
         }
         let SolverImpl::Optimize(optimize) = &mut self.solver else {
             unreachable!();
         };
 
-        optimize.assert_soft(&var.dyn_ast()._eq(&answer.dyn_ast()), 1, None);
+        optimize.assert_soft(
+            &ast::Dynamic::eq(&var.dyn_ast(), &answer.dyn_ast()),
+            1,
+            None,
+        );
     }
 }
 
-mod context {
-    use std::{
-        collections::HashMap,
-        sync::{Mutex, OnceLock},
-        thread::ThreadId,
-    };
-
-    use z3::Config;
-
-    use super::*;
-    use utils::{UnsafeSend, UnsafeSync};
-
-    static CONTEXTS: OnceLock<Vec<UnsafeSync<UnsafeSend<Context>>>> = OnceLock::new();
-    static THREAD_MAP: OnceLock<Mutex<HashMap<ThreadId, usize>>> = OnceLock::new();
-
-    pub fn set_global_params<K: AsRef<str>, V: AsRef<str>>(params: impl Iterator<Item = (K, V)>) {
-        for (k, v) in params {
-            log_debug!("Setting global param: {} = {}", k.as_ref(), v.as_ref());
-            z3::set_global_param(k.as_ref(), v.as_ref());
-        }
-    }
-
-    fn init_contexts() -> Vec<UnsafeSync<UnsafeSend<Context>>> {
-        // Statically allocate some in advance.
-        const TOTAL_CONTEXTS: usize = 1;
-
-        let mut list = Vec::with_capacity(TOTAL_CONTEXTS);
-        for _ in 0..TOTAL_CONTEXTS {
-            list.push(UnsafeSync::new(UnsafeSend::new(Context::new(
-                &Config::new(),
-            ))));
-        }
-        list
-    }
-
-    pub(super) fn get_context_for_thread() -> &'static Context {
-        let contexts = CONTEXTS.get_or_init(init_contexts);
-        let thread_id = std::thread::current().id();
-        let mut thread_map = THREAD_MAP.get_or_init(Default::default).lock().unwrap();
-        let accessor_count = thread_map.len();
-        let index = *thread_map.entry(thread_id).or_insert(accessor_count);
-        let context = &contexts
-            .get(index)
-            .expect("Unexpected number of threads to access Z3 context");
-        *context
+pub fn set_global_params<K: AsRef<str>, V: AsRef<str>>(params: impl Iterator<Item = (K, V)>) {
+    for (k, v) in params {
+        log_debug!("Setting global param: {} = {}", k.as_ref(), v.as_ref());
+        z3::set_global_param(k.as_ref(), v.as_ref());
     }
 }
-pub use context::set_global_params;
