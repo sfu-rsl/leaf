@@ -1,4 +1,4 @@
-# Getting Started
+# First Dynamic Analysis with Leaf
 
 Leaf is a Rust-oriented framework for dynamic analysis built around MIR instrumentation. The workflow is:
 

@@ -1,4 +1,4 @@
-# Building Cargo Packages
+# Build a Cargo Package with Leaf
 
 As mentioned before, you can look at `leafc` as a wrapper around `rustc` and
 it should be work in any command using `rustc`.

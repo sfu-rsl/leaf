@@ -1,21 +1,34 @@
 # Summary
 
-[Leaf](./leaf.md)
-[Introduction](./intro.md)
+- [Leaf](./leaf.md)
+- [Introduction](./intro.md)
 
-# User Guide
+# Tutorials
 
-- [Getting Started](./user_guide/getting_started.md)
-- [Recipes](./user_guide/recipes/section.md)
-    - [Building Cargo Packages](./user_guide/recipes/cargo.md)
-    - [Diverging Input Generation](./user_guide/recipes/div_input.md)
-    - [Fuzzing](./user_guide/recipes/fuzzing.md)
-- [Configurations](./user_guide/configs.md)
+- [First Dynamic Analysis with Leaf](./tutorials/first_dynamic_analysis.md)
 
-# Technical Reference
-- [Workflow Overview]()
-- [Components]()
-    - [Compiler]()
-    - [Runtime]()
-    - [Orchestrators]()
-    - [Integrations]()
+# How-to Guides
+
+- [Build a Cargo Package with Leaf](./how-to/cargo.md)
+- [Generate Diverging Input](./how-to/div_input.md)
+- [Run Fuzzing with Leaf](./how-to/fuzzing.md)
+
+# Explanations
+
+- [Leaf's execution model](./explanations/execution-model.md)
+- [MIR, runtime facts, and DMIR](./explanations/dmir.md)
+- [How MIR instrumentation becomes runtime events](./explanations/instrumentation.md)
+- [How analysis callbacks receive and transform events](./explanations/callbacks.md)
+- [Runtime support utilities and shared services](./explanations/runtime-support.md)
+- [Dependency instrumentation and build strategy](./explanations/dependencies.md)
+
+# Reference
+
+- [Compiler](./reference/compiler.md)
+- [Runtime](./reference/runtime.md)
+- [Orchestrator](./reference/orchestrator.md)
+- [DMIR](./reference/dmir-callback.md)
+- [Configuration](./reference/configuration.md)
+- [MIR Intrinsics](./reference/intrinsics.md)
+- [Samples](./reference/samples.md)
+- [Glossary](./reference/glossary.md)

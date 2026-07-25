@@ -1,5 +1,5 @@
 fn main() {
-    let x: u8 = core::hint::black_box(10);
+    let x: u8 = core::hint::black_box(2);
     #[cfg(leafc)]
     let x: u8 = {
         use leaf::annotations::*;

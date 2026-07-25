@@ -44,11 +44,10 @@ impl TestTrait for TestStruct {
 
 const TRAIT_TEST: &dyn TestTrait = &TestStruct { a: 10 };
 
-// Not supported yet
-// const UNION_TEST: TestUnion = TestUnion { a: 10 };
-// const CLOSURE_TEST: fn(i32) -> i32 = |x| x + 1;
-// const RAW_PTR_TEST: *const i32 = &2 as *const i32;
-// const FN_PTR_TEST: fn() -> () = foo;
+const UNION_TEST: TestUnion = TestUnion { a: 10 };
+const CLOSURE_TEST: fn(i32) -> i32 = |x| x + 1;
+const RAW_PTR_TEST: *const i32 = &2 as *const i32;
+const FN_PTR_TEST: fn() -> () = foo;
 
 fn main() {
     use_item(BOOL_TEST);
@@ -80,11 +79,10 @@ fn main() {
     let const_param = bar::<20>();
     use_item(const_param);
 
-    // Not supported yet
-    // use_item(UNION_TEST);
-    // use_item(CLOSURE_TEST);
-    // use_item(RAW_PTR_TEST);
-    // use_item(FN_PTR_TEST);
+    use_item(UNION_TEST);
+    use_item(CLOSURE_TEST);
+    use_item(RAW_PTR_TEST);
+    use_item(FN_PTR_TEST);
 }
 
 fn use_item<T>(x: T) -> () {
