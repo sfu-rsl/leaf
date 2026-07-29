@@ -1,5 +1,5 @@
 # Leaf
-Concolic execution for Rust through MIR instrumentation.
+<img class="right" src="assets/LeafLogo.svg" style="width:10em" alt="The Leaf logo">
 
 Welcome to project Leaf, a tool to dynamic analysis for Rust programs by MIR instrumentation.
 

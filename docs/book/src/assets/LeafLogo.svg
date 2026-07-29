@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   width="650"
+   height="650"
+   viewBox="0 0 650 650"
+   version="1.1"
+   id="svg5"
+   sodipodi:docname="LeafLogo_Square.svg"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview5"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="0.53333333"
+     inkscape:cx="-337.5"
+     inkscape:cy="196.875"
+     inkscape:window-width="1920"
+     inkscape:window-height="1008"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="g5" />
+  <defs
+     id="defs1">
+    <inkscape:path-effect
+       effect="simplify"
+       id="path-effect8"
+       is_visible="true"
+       lpeversion="1.3"
+       threshold="2"
+       steps="1"
+       smooth_angles="360"
+       helper_size="10"
+       simplify_individual_paths="false"
+       simplify_just_coalesce="false" />
+    <style
+       id="style1">
+      .cls-1, .cls-4 {
+        fill: #333;
+      }
+
+      .cls-1, .cls-2, .cls-3 {
+        fill-rule: evenodd;
+      }
+
+      .cls-2 {
+        fill: #00a881;
+      }
+
+      .cls-3 {
+        fill: #a52b00;
+      }
+    </style>
+  </defs>
+  <g
+     id="g5"
+     transform="translate(-12.93085,-2.3666268)">
+    <path
+       id="Pincer_Top_1"
+       data-name="Pincer Top 1"
+       class="cls-1"
+       d="M 309.44874,344.01235 C 116.18639,413.41034 77.48204,138.16079 158.34691,2.3666268 150.09671,136.95628 206.72251,279.68832 309.44874,344.01235 Z"
+       sodipodi:nodetypes="ccc"
+       inkscape:label="Pincer_Top_1"
+       style="stroke-width:1.0018" />
+    <path
+       id="Leaf_1"
+       data-name="Leaf 1"
+       class="cls-2"
+       d="m 215.14216,345.31947 c 105.5243,40.76096 426.28736,-186.56606 447.78869,307.04716 v 0 C 529.71517,576.96369 310.62434,666.02756 149.81557,569.37671 12.976983,487.13265 -11.21086,293.32856 37.846839,165.06774 86.904537,36.806915 158.34691,2.3666268 158.34691,2.3666268 c 0,0 -101.960417,281.6301632 56.79525,342.9528432 z"
+       style="display:inline;stroke-width:1.14866"
+       sodipodi:nodetypes="sccszcs" />
+    <path
+       id="Pincer_Bottom_1"
+       data-name="Pincer Bottom 1"
+       class="cls-3"
+       d="m 315.86611,74.55097 c 0,0 180.91856,32.99833 250.38656,252.21593 C 521.08018,289.1878 460.23187,282.4144 394.43294,290.57812 449.33383,197.70125 315.86611,74.55097 315.86611,74.55097 Z"
+       sodipodi:nodetypes="cccc"
+       style="stroke-width:1.28347" />
+    <g
+       id="g8"
+       transform="translate(91.05396,41.36663)"
+       style="display:inline">
+      <g
+         id="g1"
+         transform="translate(-96.890793,-63.901282)">
+        <path
+           class="cls-1"
+           d="m 461.771,438.688 h 20 v 79.988 h -20 z"
+           id="path1" />
+        <circle
+           id="Ellipse_1_copy_2"
+           data-name="Ellipse 1 copy 2"
+           class="cls-4"
+           cx="471.828"
+           cy="416.76501"
+           r="28.233999" />
+      </g>
+      <g
+         id="g2"
+         transform="translate(26.39864,53.897)">
+        <path
+           id="Ellipse_1_copy"
+           data-name="Ellipse 1 copy"
+           class="cls-1"
+           d="M 284.11,440.625 A 28.366,28.366 0 1 1 256.062,468.99 28.207,28.207 0 0 1 284.11,440.625 Z" />
+        <path
+           class="cls-1"
+           d="m 429.427,459.175 v 20.016 h -120 v -20.016 z"
+           id="path2"
+           style="stroke-width:1.0954" />
+      </g>
+      <g
+         id="g4"
+         transform="translate(-12.59861,-17.135)"
+         style="display:none">
+        <path
+           class="cls-1"
+           d="m 224.426,185.906 c 15.268,0 27.645,12.708 27.645,28.384 0,15.676 -12.377,28.384 -27.645,28.384 -15.268,0 -27.645,-12.708 -27.645,-28.384 0,-15.676 12.377,-28.384 27.645,-28.384 z"
+           id="path3" />
+        <path
+           class="cls-1"
+           d="m 234.862,312.723 h -19.976 v -73.746 h 19.976 z"
+           id="path4" />
+      </g>
+      <path
+         class="cls-1"
+         d="m 319.31339,404.412 v 20.016 h -160.007 v -20.016 z"
+         id="path12"
+         style="display:inline;stroke-width:1.26489" />
+      <g
+         id="g13"
+         transform="rotate(-53.874158,217.80101,769.16964)">
+        <path
+           class="cls-1"
+           d="m 461.771,438.688 h 20 v 79.988 h -20 z"
+           id="path13" />
+        <circle
+           id="circle13"
+           data-name="Ellipse 1 copy 2"
+           class="cls-4"
+           cx="471.828"
+           cy="416.76501"
+           r="28.233999" />
+      </g>
+      <path
+         id="path16"
+         class="cls-1"
+         d="M 319.31244 404.41211 L 306.28705 419.58789 L 533.79291 594.33789 C 547.11676 598.72249 559.84739 604.19104 571.87689 611 C 571.68433 606.57925 571.46865 602.21596 571.22845 597.91015 L 319.31244 404.41211 z "
+         inkscape:label="line_cut" />
+      <path
+         class="cls-1"
+         d="m 578.38989,603.412 -13.026,15.176 -259.0765,-199 13.026,-15.176 z"
+         id="path5"
+         sodipodi:nodetypes="ccccc"
+         style="display:none"
+         inkscape:label="line" />
+    </g>
+  </g>
+</svg>

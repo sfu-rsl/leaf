@@ -1,4 +1,5 @@
 # Leaf
+<img class="right" src="docs/book/src/assets/LeafLogo.svg" style="width:10em" alt="The Leaf logo">
 
 Leaf is a Rust-oriented framework for dynamic analysis built around MIR instrumentation. It wraps the Rust compiler through `leafc`, instruments a program at compile time, and routes runtime events to pluggable backends for tracing, symbolic execution, and related analyses.
 
