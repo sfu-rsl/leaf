@@ -37,7 +37,6 @@ samples/**/main
 # Performance test results
 *.bench
 *.data
-*.svg
 
 scripts/**/out
 scripts/**/work

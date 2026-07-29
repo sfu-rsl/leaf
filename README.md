@@ -50,8 +50,8 @@ The generated program will emit runtime events through the active backend, which
 
 ## Documentation
 
-Further information, tutorials, and technical details are collected in Leaf Book hosted at:
-[sfu-rsl.github.io/leaf](https://sfu-rsl.github.io/leaf).
+Further information, tutorials, and technical details are collected in Leaf Book @
+[sfu-rsl.github.io/leaf](https://sfu-rsl.github.io/leaf) (WIP).
 
 ## License
 
