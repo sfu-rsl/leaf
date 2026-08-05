@@ -6,6 +6,7 @@
 # Tutorials
 
 - [First Dynamic Analysis with Leaf](./tutorials/first_dynamic_analysis.md)
+- [Write a Counter Backend](./tutorials/write_a_backend.md)
 
 # How-to Guides
 
@@ -15,20 +16,20 @@
 
 # Explanations
 
-- [Leaf's execution model](./explanations/execution-model.md)
-- [MIR, runtime facts, and DMIR](./explanations/dmir.md)
-- [How MIR instrumentation becomes runtime events](./explanations/instrumentation.md)
-- [How analysis callbacks receive and transform events](./explanations/callbacks.md)
-- [Runtime support utilities and shared services](./explanations/runtime-support.md)
-- [Dependency instrumentation and build strategy](./explanations/dependencies.md)
+- [Leaf's execution model]()
+- [MIR, runtime facts, and DMIR]()
+- [How MIR instrumentation becomes runtime events]()
+- [How analysis callbacks receive and transform events]()
+- [Runtime support utilities and shared services]()
+- [Dependency instrumentation and build strategy]()
 
 # Reference
 
-- [Compiler](./reference/compiler.md)
-- [Runtime](./reference/runtime.md)
-- [Orchestrator](./reference/orchestrator.md)
-- [DMIR](./reference/dmir-callback.md)
-- [Configuration](./reference/configuration.md)
-- [MIR Intrinsics](./reference/intrinsics.md)
+- [Compiler]()
+- [Runtime]()
+- [Orchestrator]()
+- [DMIR]()
+- [Configuration]()
+- [MIR Intrinsics]()
 - [Samples](./reference/samples.md)
-- [Glossary](./reference/glossary.md)
+- [Glossary]()
