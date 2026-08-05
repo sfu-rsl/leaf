@@ -145,7 +145,11 @@ impl<P: HasMetadata<Metadata = DefaultPlaceMetadata>> PlaceMetadataHandler
 pub mod noop {
     use super::*;
 
+    pub type NullPlaceInfo = ();
+
     pub type NullPlace = ();
+
+    pub type NullOperand = ();
 
     #[derive(Default)]
     pub struct NoOpPlaceBuilder<P, I>(PhantomData<(P, I)>);
@@ -176,7 +180,7 @@ pub mod noop {
     }
 
     #[derive(Default)]
-    pub struct NoOpPlaceHandler<PI, P>(PhantomData<(PI, P)>);
+    pub struct NoOpPlaceHandler<PI = NullPlaceInfo, P = NullPlace>(PhantomData<(PI, P)>);
 
     impl<PI, P: Default> PlaceHandler for NoOpPlaceHandler<PI, P> {
         type PlaceInfo<'a> = PI;
@@ -192,7 +196,7 @@ pub mod noop {
     }
 
     #[derive(Default)]
-    pub struct NoOpOperandHandler<P, O>(PhantomData<(P, O)>);
+    pub struct NoOpOperandHandler<P = NullPlace, O = NullOperand>(PhantomData<(P, O)>);
 
     impl<P, O: Default> OperandHandler for NoOpOperandHandler<P, O> {
         type Operand = O;
@@ -220,7 +224,7 @@ pub mod noop {
     }
 
     #[derive(Default)]
-    pub struct NoOpAssignmentHandler<P, O>(PhantomData<(P, O)>);
+    pub struct NoOpAssignmentHandler<P = NullPlace, O = NullOperand>(PhantomData<(P, O)>);
 
     impl<P, O> AssignmentHandler for NoOpAssignmentHandler<P, O> {
         type Place = P;
@@ -313,7 +317,7 @@ pub mod noop {
     }
 
     #[derive(Default)]
-    pub struct NoOpRawMemoryHandler<P, O>(PhantomData<(P, O)>);
+    pub struct NoOpRawMemoryHandler<P = NullPlace, O = NullOperand>(PhantomData<(P, O)>);
 
     impl<P: Default, O: Default> RawMemoryHandler for NoOpRawMemoryHandler<P, O> {
         type Place = P;
@@ -393,7 +397,7 @@ pub mod noop {
         }
     }
 
-    pub struct NoOpConstraintHandler<O>(PhantomData<O>);
+    pub struct NoOpConstraintHandler<O = NullOperand>(PhantomData<O>);
 
     impl<O> Default for NoOpConstraintHandler<O> {
         fn default() -> Self {
@@ -431,6 +435,64 @@ pub mod noop {
         fn take_otherwise(self, _non_values: Option<Vec<Constant>>) {
             Default::default()
         }
+    }
+
+    #[derive(Default)]
+    pub struct NoOpCallHandler<P = NullPlace, O = NullOperand>(PhantomData<(P, O)>);
+
+    impl<P, O> CallHandler for NoOpCallHandler<P, O> {
+        type Place = P;
+        type Operand = O;
+
+        fn before_call(self, _def: CalleeDef, _call_site: BasicBlockIndex) {}
+
+        fn before_call_some(self) {}
+
+        fn take_data_before_call(
+            self,
+            _func: Self::Operand,
+            _args: impl IntoIterator<Item = Self::Operand>,
+            _are_args_tupled: bool,
+        ) {
+        }
+
+        fn enter(self, _def: FuncDef) {}
+
+        fn emplace_arguments(
+            self,
+            _arg_places: Vec<Self::Place>,
+            _ret_val_place: Self::Place,
+            _tupling: ArgsTupling,
+        ) {
+        }
+
+        fn override_return_value(self, _value: Self::Operand) {}
+
+        fn ret(self, _ret_point: BasicBlockIndex) {}
+
+        fn after_call(self, _assignment_id: AssignmentId, _result_dest: Self::Place) {}
+    }
+
+    #[derive(Default)]
+    pub struct NoOpDropHandler<P = NullPlace, O = NullOperand>(PhantomData<(P, O)>);
+
+    impl<P, O> DropHandler for NoOpDropHandler<P, O> {
+        type Place = P;
+        type Operand = O;
+
+        fn before_drop(self, _def: CalleeDef, _call_site: BasicBlockIndex) {}
+
+        fn before_drop_some(self) {}
+
+        fn take_data_before_drop(
+            self,
+            _func: Self::Operand,
+            _arg: Self::Operand,
+            _place: Self::Place,
+        ) {
+        }
+
+        fn after_drop(self) {}
     }
 
     #[derive(Default)]

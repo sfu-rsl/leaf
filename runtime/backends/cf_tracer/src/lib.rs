@@ -41,17 +41,17 @@ impl CftBackend {
 
 impl RuntimeBackend for CftBackend {
     type PlaceHandler<'a>
-        = NoOpPlaceHandler<Self::PlaceInfo, Self::Place>
+        = NoOpPlaceHandler
     where
         Self: 'a;
 
     type OperandHandler<'a>
-        = NoOpOperandHandler<Self::Place, Self::Operand>
+        = NoOpOperandHandler
     where
         Self: 'a;
 
     type AssignmentHandler<'a>
-        = NoOpAssignmentHandler<Self::Place, Self::Operand>
+        = NoOpAssignmentHandler
     where
         Self: 'a;
 
@@ -61,7 +61,7 @@ impl RuntimeBackend for CftBackend {
         Self: 'a;
 
     type RawMemoryHandler<'a>
-        = NoOpRawMemoryHandler<Self::Place, Self::Operand>
+        = NoOpRawMemoryHandler
     where
         Self: 'a;
 
@@ -85,7 +85,7 @@ impl RuntimeBackend for CftBackend {
     where
         Self: 'a;
 
-    type PlaceInfo = NullPlace;
+    type PlaceInfo = NullPlaceInfo;
     type Place = NullPlace;
     type DiscriminablePlace = NullPlace;
 
@@ -144,6 +144,3 @@ impl RuntimeBackend for CftBackend {
 impl Shutdown for CftBackend {
     fn shutdown(&mut self) {}
 }
-
-pub(crate) type NullPlace = ();
-pub(crate) type NullOperand = ();
