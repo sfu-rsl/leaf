@@ -13,7 +13,7 @@ pub use common::{
     types::{trace::*, *},
 };
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum BinaryOp {
     Add = common::pri::BinaryOp::ADD.to_raw(),
@@ -53,7 +53,7 @@ pub enum BinaryOp {
     Offset = common::pri::BinaryOp::OFFSET.to_raw(),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum UnaryOp {
     Not = common::pri::UnaryOp::NOT.to_raw(),

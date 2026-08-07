@@ -1,10 +1,5 @@
-#[derive(Default)]
-pub struct LateInitPri<P> {
-    _phantom: core::marker::PhantomData<P>,
-}
-
 #[macro_export]
-macro_rules! late_init_func_defs {
+macro_rules! def_late_init {
     ($(#[$($attr: meta)*])* fn init_runtime_lib ($($(#[$($arg_attr: meta)*])* $arg:ident : $arg_type:ty),* $(,)?) $(-> $ret_ty:ty)?;) => {
         $(#[$($attr)*])*
         #[inline(always)]
@@ -35,22 +30,26 @@ macro_rules! late_init_func_defs {
 }
 
 #[macro_export]
-macro_rules! impl_pri_for_late_init_pri_of {
+macro_rules! make_late_init_pri_of {
     ($t:ident) => {
         paste::paste! {
             #[allow(non_snake_case)]
             mod [<_for_ $t>] {
                 use common::pri::*;
 
-                use $crate::{abs, pri::{LateInitPri, NoOpPri}};
-
+                use $crate::{abs, pri::NoOpPri};
                 use super::*;
 
                 type MainPri = $t;
 
                 static mut IS_ACTIVE: bool = false;
 
-                impl common::pri::ProgramRuntimeInterface for LateInitPri<MainPri> {
+                #[derive(Default)]
+                pub struct [<$t LateInit>] {
+                    _phantom: core::marker::PhantomData<MainPri>,
+                }
+
+                impl common::pri::ProgramRuntimeInterface for [<$t LateInit>] {
                     type U128 = u128;
                     type Char = char;
                     type ConstStr = &'static str;
@@ -65,9 +64,10 @@ macro_rules! impl_pri_for_late_init_pri_of {
                     type DebugInfo = common::pri::DebugInfo;
                     type Tag = abs::Tag;
 
-                    common::pri::list_func_decls! { modifier: $crate::late_init_func_defs, (from Self) }
+                    common::pri::list_func_decls! { modifier: $crate::def_late_init, (from Self) }
                 }
             }
+            pub use [<_for_ $t>]::[<$t LateInit>];
         }
     };
 }
