@@ -53,6 +53,9 @@ The generated program will emit runtime events through the active backend, which
 Further information, tutorials, and technical details are collected in Leaf Book @
 [sfu-rsl.github.io/leaf](https://sfu-rsl.github.io/leaf) (WIP).
 
+## Publications
+- Leaf: An Instrumentation-based Dynamic Analysis Framework for Rust: [arXiv](https://arxiv.org/abs/2607.15025)
+
 ## License
 
 Leaf is licensed under the MIT or Apache-2.0 licenses.
