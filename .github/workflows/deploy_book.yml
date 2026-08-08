@@ -29,6 +29,7 @@ jobs:
           # This assumes your book is in the root of your repository.
           # Just add a `cd` here if you need to change to another directory.
           cd docs
+          cd book
           mdbook build
       - name: Setup Pages
         uses: actions/configure-pages@v4
