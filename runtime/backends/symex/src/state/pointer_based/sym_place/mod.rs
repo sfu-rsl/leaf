@@ -232,7 +232,17 @@ impl<EB: SymValueRefExprBuilder> RawPointerVariableState<EB> {
                 .map(|_| {
                     let _index_place = todo!("#480: Index metadata is required for concretization");
                 }),
-            _ => unreachable!("Expecting only index projections. Got: {:?}", index_proj),
+            Projection::ConstantIndex {
+                from_end: false, ..
+            } => None,
+            Projection::Field(_)
+            | Projection::Deref
+            | Projection::Subslice { .. }
+            | Projection::Downcast(_)
+            | Projection::OpaqueCast
+            | Projection::UnwrapUnsafeBinder => {
+                unreachable!("Expecting only index projections. Got: {:?}", index_proj)
+            }
         };
 
         opt_sym_index_val.map(|index_val| {
