@@ -480,7 +480,8 @@ mod driver_callbacks {
 
             log_debug!("The current sysroot is probably not compatible for codegen all MIR.");
 
-            let sysroot = try_find_compatible_toolchain(&current_sysroot)
+            let target_triple = rustc_config.opts.target_triple.tuple();
+            let sysroot = try_find_compatible_toolchain(&current_sysroot, target_triple)
                 .unwrap_or_else(|| build_toolchain(&current_sysroot, rustc_config));
             log_info!(
                 "Overriding the sysroot with the one found at: {}",

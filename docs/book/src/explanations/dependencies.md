@@ -105,11 +105,7 @@ it is not part of the generated sysroot. The builder copies the resulting
 `lib*.r*` files, excluding the dummy crate's own library, into the
 target-specific Rust library directory.
 
-The current builder uses `x86_64-unknown-linux-gnu` and the `release` profile
-for this process. Those are implementation constraints of this builder, not
-universal requirements of Leaf. A request using another target or profile can
-therefore fail or produce artifacts that this builder does not know how to
-assemble.
+The builder uses the `release` profile.
 
 ### Runtime shim placement
 
@@ -144,12 +140,10 @@ to move the artifact into the persistent `leafc_toolchains` directory beside
 
 The persistent directory name is derived from the `libcore` artifact found
 under the requested target's library directory. The target triple is used to
-find that artifact, so the target participates in the cache identity and
-prevents a target's `libcore` from being mistaken for another target's during
-assembly. The current cache lookup itself first filters for non-empty
-directories and then checks the original-sysroot marker; when maintaining this
-code, remember that the target-specific identity and the marker compatibility
-check are separate mechanisms.
+find that artifact, and cache lookup also requires the matching
+`lib/rustlib/<target>/lib` directory before checking the original-sysroot
+marker. This prevents a cached sysroot for one architecture from being reused
+for another.
 
 If two compiler processes build the same artifact concurrently, an existing
 persistent destination wins when the Rust side reaches it first. If persistence

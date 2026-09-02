@@ -15,6 +15,7 @@ Currently, all the parameters are taken using environment variables listed below
 - `WORK_DIR`: The directory to be used for building the dummy crate.
 - `OUT_DIR`: The directory which the built toolchain will be put in.
 - `LEAF_WORKSPACE`: The root of Leaf's source code.
+- `TARGET`: The target triple, fetched from `rustc -vV` by default.
 - `LEAFS_LOG_LEVEL`: Logging level of the script, which is `info` by default.
   Setting it to `debug` and lower, causes the standard output of the executed command (e.g., building the crate)
   to be redirected as well.
