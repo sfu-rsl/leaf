@@ -56,3 +56,6 @@ scripts/**/venv
 **/leaf_out/**
 
 *.rkyv
+
+# Agent-related files
+.github/prompts
