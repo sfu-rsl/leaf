@@ -22,6 +22,7 @@ const PREFIX_LEAF_SCRIPT_CONFIG: &str = "LEAFS";
 const ENV_WORK_DIR: &str = "WORK_DIR";
 const ENV_OUT_DIR: &str = "OUT_DIR";
 const ENV_LEAFC: &str = "LEAFC";
+const ENV_TARGET: &str = "TARGET";
 const ENV_TOOLCHAIN_MARKER: &str = concatcp!(PREFIX_LEAF_SCRIPT_CONFIG, "_TOOLCHAIN_MARKER_FILE");
 const ENV_LEAF_WORKSPACE: &str = "LEAF_WORKSPACE";
 
@@ -41,6 +42,7 @@ pub(super) fn build_toolchain(
 
     let mut cmd = process::Command::new(&builder);
     set_env_vars(&mut cmd, &work_dir, &out_dir, sysroot)?;
+    cmd.env(ENV_TARGET, target_triple);
     let log_filename = set_log_file(&mut cmd, &work_dir)?;
     cmd.current_dir(&work_dir);
 
@@ -186,7 +188,10 @@ fn persist_toolchain(built_toolchain_path: &Path, target_triple: &str) -> Result
     Ok(dest)
 }
 
-pub(super) fn try_find_compatible_toolchain(provided_sysroot: &Path) -> Option<PathBuf> {
+pub(super) fn try_find_compatible_toolchain(
+    provided_sysroot: &Path,
+    target_triple: &str,
+) -> Option<PathBuf> {
     let toolchains = persistent_toolchains_path();
     fs::read_dir(toolchains)
         .ok()?
@@ -194,7 +199,8 @@ pub(super) fn try_find_compatible_toolchain(provided_sysroot: &Path) -> Option<P
         .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
         .filter(|e| fs::read_dir(e.path()).is_ok_and(|mut d| d.next().is_some()))
         .map(|e| e.path())
-        .find(|p| is_sysroot_compatible(provided_sysroot, Some(&p)))
+        .filter(|p| libs_path(p, target_triple).is_dir())
+        .find(|p| is_sysroot_compatible(provided_sysroot, Some(p)))
 }
 
 #[tracing::instrument(level = "debug", ret)]
@@ -234,12 +240,8 @@ fn persistent_toolchains_path() -> PathBuf {
 }
 
 fn get_unique_id(toolchain_path: &Path, target_triple: &str) -> String {
-    let libs_path = toolchain_path
-        .join("lib")
-        .join("rustlib")
-        .join(target_triple)
-        .join("lib");
     const PREFIX: &str = "libcore-";
+    let libs_path = libs_path(toolchain_path, target_triple);
     fs::read_dir(&libs_path)
         .unwrap()
         .filter_map(|e| e.ok())
@@ -255,6 +257,14 @@ fn get_unique_id(toolchain_path: &Path, target_triple: &str) -> String {
         })
         .expect("Could not find libcore to get the unique id for the toolchain")
         .to_owned()
+}
+
+fn libs_path(toolchain_path: &Path, target_triple: &str) -> PathBuf {
+    toolchain_path
+        .join("lib")
+        .join("rustlib")
+        .join(target_triple)
+        .join("lib")
 }
 
 fn current_instant() -> String {

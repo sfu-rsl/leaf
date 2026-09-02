@@ -16,13 +16,13 @@ ENV_LEAF_WORKSPACE = "LEAF_WORKSPACE"
 ENV_LOG_LEVEL = "LEAFS_LOG_LEVEL"
 ENV_ADD_LEAF_AS_DEP = "LEAFS_ADD_LEAF_AS_DEP"
 ENV_TOOLCHAIN_MARKER = "LEAFS_TOOLCHAIN_MARKER_FILE"
+ENV_TARGET = "TARGET"
 
 ENV_LEAFC = "LEAFC"
 ENV_LEAFC_BUILDING_CORE = "LEAFC_BUILDING_CORE"
 ENV_CARGO = "CARGO"
 ENV_RUSTC = "RUSTC"
 
-BUILD_TARGET = "x86_64-unknown-linux-gnu"
 # debug or release
 BUILD_PROFILE = "release"
 
@@ -30,7 +30,6 @@ SHIM_MODULE_NAME = "leafrtsh"
 
 OPTS_BUILD_STD = [
     "-Zbuild-std=core,std,panic_unwind,panic_abort,test",
-    f"--target={BUILD_TARGET}",
 ]
 
 
@@ -40,6 +39,14 @@ class Paths:
     out: Path
     res: Path
     leaf_workspace: Path
+
+    def resolve(self) -> Path:
+        return Paths(
+            work=self.work.resolve(),
+            out=self.out.resolve(),
+            res=self.res.resolve(),
+            leaf_workspace=self.leaf_workspace.resolve(),
+        )
 
 
 def run_command(**kwargs):
@@ -113,16 +120,17 @@ def should_add_leaf_as_dep() -> bool:
     ]
 
 
-def common_cargo_options(dummy_crate_dir: Path) -> list[str]:
+def common_cargo_options(dummy_crate_dir: Path, target: str) -> list[str]:
     return [
         f"--manifest-path={dummy_crate_dir.joinpath('Cargo.toml')}",
         *OPTS_BUILD_STD,
+        f"--target={target}",
     ]
 
 
-def common_cargo_build_options(dummy_crate_dir: Path) -> list[str]:
+def common_cargo_build_options(dummy_crate_dir: Path, target: str) -> list[str]:
     return [
-        *common_cargo_options(dummy_crate_dir),
+        *common_cargo_options(dummy_crate_dir, target),
         f"--profile={'dev' if BUILD_PROFILE == 'debug' else BUILD_PROFILE}",
         # You can switch to a single thread for easier debugging
         # "-j1",
@@ -144,7 +152,7 @@ def common_env_vars() -> dict[str, str]:
     }
 
 
-def get_toolchain_path(dummy_crate_dir: Path, env={}) -> Path:
+def get_toolchain_path(dummy_crate_dir: Path, target: str, env={}) -> Path:
     try:
         process = run_command(
             args=[
@@ -152,7 +160,7 @@ def get_toolchain_path(dummy_crate_dir: Path, env={}) -> Path:
                 "rustc",
                 # Cargo tries to build the dependencies, even if we only want to work with rustc.
                 # So, we need to make sure that build succeeds.
-                *common_cargo_build_options(dummy_crate_dir),
+                *common_cargo_build_options(dummy_crate_dir, target),
                 "--",
                 "--print=sysroot",
             ],
@@ -296,7 +304,7 @@ def add_leaf_to_core(core_src_dir: Path, leaf_workspace_dir: Path, res_dir: Path
     apply_patches()
 
 
-def ensure_no_trans_dependency(dummy_crate_dir: Path):
+def ensure_no_trans_dependency(dummy_crate_dir: Path, target: str):
     logging.info("Checking the dependency tree of the dummy crate")
 
     process = run_command(
@@ -307,7 +315,7 @@ def ensure_no_trans_dependency(dummy_crate_dir: Path):
             "none",
             "--format",
             r"{lib}",
-            *common_cargo_options(dummy_crate_dir),
+            *common_cargo_options(dummy_crate_dir, target),
         ],
         cwd=dummy_crate_dir,
         env=common_env_vars(),
@@ -356,7 +364,7 @@ def build_env_vars(toolchain_path: Path):
     }
 
 
-def build_crate_with_core(dummy_crate_dir: Path, toolchain_path):
+def build_crate_with_core(dummy_crate_dir: Path, toolchain_path: Path, target: str):
     logging.info("Building the core library through dummy crate")
 
     run_command(
@@ -373,7 +381,7 @@ def build_crate_with_core(dummy_crate_dir: Path, toolchain_path):
         args=[
             "cargo",
             "build",
-            *common_cargo_build_options(dummy_crate_dir),
+            *common_cargo_build_options(dummy_crate_dir, target),
             "--verbose",
         ],
         cwd=dummy_crate_dir,
@@ -389,10 +397,10 @@ def build_crate_with_core(dummy_crate_dir: Path, toolchain_path):
     logging.info("Successfully built the core library.")
 
 
-def make_toolchain(dummy_crate_dir: Path, out_dir: Path) -> Path:
+def make_toolchain(dummy_crate_dir: Path, out_dir: Path, target: str) -> Path:
     logging.info("Making a toolchain from the built libraries")
 
-    deps_dir = dummy_crate_dir.joinpath("target", BUILD_TARGET, BUILD_PROFILE, "deps")
+    deps_dir = dummy_crate_dir.joinpath("target", target, BUILD_PROFILE, "deps")
     # As this dummy crate depends only on the core lib, all of the dependencies
     # are part of the sysroot.
     logging.debug("Globbing lib files in %s", deps_dir)
@@ -400,7 +408,7 @@ def make_toolchain(dummy_crate_dir: Path, out_dir: Path) -> Path:
     logging.debug("Found lib files: %s", lib_files)
 
     toolchain_dir = out_dir.joinpath("toolchain")
-    dst_dir = toolchain_dir.joinpath("lib", "rustlib", BUILD_TARGET, "lib")
+    dst_dir = toolchain_dir.joinpath("lib", "rustlib", target, "lib")
     dst_dir.mkdir(parents=True, exist_ok=True)
     # Clear the destination directory
     for file in dst_dir.glob("lib*.r*"):
@@ -411,6 +419,31 @@ def make_toolchain(dummy_crate_dir: Path, out_dir: Path) -> Path:
     return toolchain_dir
 
 
+def resolve_target() -> str:
+    try:
+        result = subprocess.run(
+            args=["rustc", "-vV"],
+            env=common_env_vars(),
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (OSError, subprocess.CalledProcessError) as e:
+        raise RuntimeError(
+            "Could not resolve the host target: failed to run the selected rustc with -vV"
+        ) from e
+
+    for line in result.stdout.splitlines():
+        if line.startswith("host: "):
+            target = line.removeprefix("host: ").strip()
+            if target:
+                return target
+
+    raise RuntimeError(
+        "Could not resolve the host target: selected rustc -vV output did not contain a host triple"
+    )
+
+
 def add_marker_file(folder: Path, name: str, original_toolchain_path: Path):
     file = folder.joinpath(name)
     with open(file, "w") as f:
@@ -419,6 +452,13 @@ def add_marker_file(folder: Path, name: str, original_toolchain_path: Path):
 
 
 def main():
+    try:
+        target = os.environ.get(ENV_TARGET) or resolve_target()
+    except RuntimeError as e:
+        logging.error(str(e))
+        raise SystemExit(1) from e
+
+    logging.info("Building for target: %s", target)
     logging.info("Building core lib with leaf")
     logging.info(
         "You can control the log level of this script with the environment variable %s",
@@ -432,6 +472,7 @@ def main():
         res=Path(__file__).parent.joinpath(f"res"),
         leaf_workspace=find_leaf_workspace_dir(),
     )
+    paths = paths.resolve()
     logging.debug("Paths: %s", paths.__repr__())
 
     add_leaf_as_dep = should_add_leaf_as_dep()
@@ -453,7 +494,7 @@ def main():
     )
 
     logging.debug("Getting original toolchain path")
-    orig_toolchain_path = get_toolchain_path(dummy_crate_dir)
+    orig_toolchain_path = get_toolchain_path(dummy_crate_dir, target)
 
     target_toolchain_path = orig_toolchain_path
     if not add_leaf_as_dep:
@@ -466,7 +507,7 @@ def main():
         "Getting and ensuring toolchain path for building: %s", orig_toolchain_path
     )
     toolchain_path = get_toolchain_path(
-        dummy_crate_dir, env=build_env_vars(target_toolchain_path)
+        dummy_crate_dir, target, env=build_env_vars(target_toolchain_path)
     )
     assert toolchain_path.absolute() == target_toolchain_path.absolute(), (
         toolchain_path,
@@ -478,10 +519,10 @@ def main():
         logging.debug("Core source dir: %s", core_src)
         add_leaf_to_core(core_src, paths.leaf_workspace, paths.res)
     else:
-        ensure_no_trans_dependency(dummy_crate_dir)
+        ensure_no_trans_dependency(dummy_crate_dir, target)
 
-    build_crate_with_core(dummy_crate_dir, toolchain_path)
-    out_toolchain_path = make_toolchain(dummy_crate_dir, paths.out)
+    build_crate_with_core(dummy_crate_dir, toolchain_path, target)
+    out_toolchain_path = make_toolchain(dummy_crate_dir, paths.out, target)
 
     if ENV_TOOLCHAIN_MARKER in os.environ:
         logging.debug("Adding a toolchain marker file")
