@@ -21,7 +21,7 @@
 - [How MIR instrumentation becomes runtime events]()
 - [How analysis callbacks receive and transform events]()
 - [Runtime support utilities and shared services]()
-- [Dependency instrumentation and build strategy]()
+- [How Leaf Builds a Compatible Compiler Toolchain](./explanations/dependencies.md)
 
 # Reference
 
