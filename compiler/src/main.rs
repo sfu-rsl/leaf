@@ -5,6 +5,7 @@
 #![feature(iter_order_by)]
 #![feature(macro_metavar_expr)]
 #![feature(exitcode_exit_method)]
+#![feature(thread_id_value)]
 
 mod config;
 mod mir_transform;

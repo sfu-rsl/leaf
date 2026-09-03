@@ -5,7 +5,7 @@ use std::{
     process,
 };
 
-use common::{log_debug, log_warn};
+use common::{log_debug, log_info, log_warn};
 use const_format::concatcp;
 
 use crate::utils::file::try_find_dependency_path;
@@ -62,24 +62,32 @@ pub(super) fn build_toolchain(
         .inspect_err(|e| log_warn!("Failed to persist the toolchain: {}", e))
         .unwrap_or(built_toolchain_path);
 
-    log_debug!("Toolchain is now available at: {}", result.display());
+    log_debug!("Deleting the out directory");
+    let _ = fs::remove_dir_all(&out_dir)
+        .inspect_err(|e| log_warn!("Could not delete the out directory: {}", e));
+
+    log_info!(
+        "Finished building the toolchain. Persisted at: {}",
+        result.display(),
+    );
     Ok(result)
 }
 
 fn setup_work_and_out_dirs(crate_out_dir: Option<&Path>) -> Result<(PathBuf, PathBuf), String> {
     fn create_new_dir(path: &Path) -> Result<(), String> {
         if path.exists() {
-            let _ = fs::remove_dir_all(&path).inspect_err(|e| {
-                log_warn!("Could not delete the existing work directory: {}", e);
-            });
+            return Err(format!(
+                "The work/out directory should have a unique name: {}",
+                path.display()
+            ));
         }
         fs::create_dir_all(&path)
-            .map_err(|e| format!("Failed to create a work directory: {}", e))?;
-        log_debug!("Created a work directory: {}", path.display());
+            .map_err(|e| format!("Failed to create a work/out directory: {}", e))?;
+        log_debug!("Created a work/out directory: {}", path.display());
         Ok(())
     }
 
-    let id = current_instant();
+    let id = unique_id();
     let work_dir = crate_out_dir
         .map(Path::to_path_buf)
         .unwrap_or_else(env::temp_dir)
@@ -100,7 +108,7 @@ fn setup_work_and_out_dirs(crate_out_dir: Option<&Path>) -> Result<(PathBuf, Pat
 }
 
 fn set_log_file(cmd: &mut process::Command, work_dir: &Path) -> Result<PathBuf, String> {
-    let filename = work_dir.join(format!("log_{}.log", current_instant()));
+    let filename = work_dir.join(format!("log_{}.log", unique_id()));
     let file = fs::File::create_new(&filename)
         .map_err(|e| format!("Failed to create the toolchain builder stderr file: {}", e))?;
 
@@ -174,7 +182,6 @@ fn persist_toolchain(built_toolchain_path: &Path, target_triple: &str) -> Result
     // Parallel build
     if dest.exists() {
         log_debug!("Found a persisted toolchain at: {}", dest.display());
-        return Ok(dest);
     } else {
         fs::rename(&built_toolchain_path, &dest).map_err(|e| format!("Failed to move: {}", e))?;
     }
@@ -267,6 +274,11 @@ fn libs_path(toolchain_path: &Path, target_triple: &str) -> PathBuf {
         .join("lib")
 }
 
-fn current_instant() -> String {
-    common::utils::current_instant_millis().to_string()
+fn unique_id() -> String {
+    format!(
+        "{}_{:x}_{:x}",
+        common::utils::current_instant_millis().to_string(),
+        std::process::id(),
+        std::thread::current().id().as_u64(),
+    )
 }
