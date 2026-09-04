@@ -298,6 +298,7 @@ macro_rules! of_simd_op_funcs {
             simd_bitmask,
             simd_bitreverse,
             simd_bswap,
+            simd_carryless_mul,
             simd_cast,
             simd_cast_ptr,
             simd_ceil,
@@ -314,8 +315,8 @@ macro_rules! of_simd_op_funcs {
             simd_fexp,
             simd_fexp2,
             simd_flog,
-            simd_flog2,
             simd_flog10,
+            simd_flog2,
             simd_floor,
             simd_fma,
             simd_fsin,
@@ -360,12 +361,11 @@ macro_rules! of_simd_op_funcs {
             simd_shl,
             simd_shr,
             simd_shuffle,
+            simd_splat,
             simd_sub,
             simd_trunc,
             simd_with_exposed_provenance,
             simd_xor,
-            simd_splat,
-            simd_carryless_mul
         )
     };
 }
