@@ -364,6 +364,7 @@ macro_rules! of_simd_op_funcs {
             simd_trunc,
             simd_with_exposed_provenance,
             simd_xor,
+            simd_splat
         )
     };
 }
@@ -479,7 +480,7 @@ mod sanity_check {
     /* NTOE: This is used as a test to make sure that the list do not contain duplicates.
      * Do not change the count unless some intrinsics are added or removed to Rust.
      */
-    const EXPECTED_COUNT: usize = 303;
+    const EXPECTED_COUNT: usize = 304;
     const _ALL_INTRINSICS: [(); EXPECTED_COUNT] = [(); LISTED_COUNT];
 }
 
