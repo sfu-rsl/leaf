@@ -6,5 +6,9 @@ title = "Leaf Book"
 [output.html]
 git-repository-url = "https://github.com/sfu-rsl/leaf"
 
+[preprocessor.permalinks]
+after = ["links"]
+repo-url-template = "https://github.com/sfu-rsl/leaf/{tree}/main/{path}"
+
 [output.html.playground]
 runnable = false
