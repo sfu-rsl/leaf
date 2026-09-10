@@ -24,8 +24,13 @@ jobs:
           mkdir mdbook
           curl -sSL $url | tar -xz --directory=./mdbook
           echo `pwd`/mdbook >> $GITHUB_PATH
-      - name: Install mdbook-permalinks
-        run: cargo install mdbook-permalinks
+      - name: Install latest mdbook-permalinks
+        run: |
+          tag=$(curl 'https://api.github.com/repos/tonywu6/mdbookkit/releases' | jq -r '[ .[] | .tag_name | select(startswith("mdbook-permalinks-v")) ][0]')
+          url="https://github.com/tonywu6/mdbookkit/releases/download/${tag}/mdbook-permalinks-x86_64-unknown-linux-gnu.tar.gz"
+          mkdir mdbook-permalinks
+          curl -sSL $url | tar -xz --directory=./mdbook-permalinks
+          echo `pwd`/mdbook-permalinks >> $GITHUB_PATH
       - name: Build Book
         run: |
           # This assumes your book is in the root of your repository.
