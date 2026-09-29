@@ -332,9 +332,9 @@ enabled = false
   and environment naming.
 - [`compiler/src/config.rs`](/compiler/src/config.rs): compiler schema, defaults, runtime-shim values,
   pass gates, formulas, and legacy-rule migration.
-- [`compiler/src/passes/instr/config.rs`](/compiler/src/passes/instr/config.rs): instrumentation entities, aliases,
+- [`compiler/src/passes/main/instr/config/mod.rs`](/compiler/src/passes/main/instr/config/mod.rs): instrumentation entities, aliases,
   fields, and enum values.
-- [`compiler/src/passes/codegen.rs`](/compiler/src/passes/codegen.rs): internalization rule shape and behavior.
+- [`compiler/src/passes/main/internalizer.rs`](/compiler/src/passes/main/internalizer.rs): internalization rule shape and behavior.
 
 [^ai-content-note]: This page was created with AI assistance under the supervision and review of the maintainers.
 
