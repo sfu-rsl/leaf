@@ -9,6 +9,14 @@ env:
   RUST_LOG: error
 
 jobs:
+  mdbook-test:
+    name: Build book
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/build-book
+
   rust-test:
     name: Run tests
     runs-on: ubuntu-latest

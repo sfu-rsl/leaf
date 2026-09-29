@@ -1,0 +1,28 @@
+name: Build mdBook
+description: Install mdBook and mdbook-permalinks, then build the Leaf book.
+
+runs:
+  using: composite
+  steps:
+    - name: Install latest mdbook
+      shell: bash
+      run: |
+        tag=$(curl 'https://api.github.com/repos/rust-lang/mdbook/releases/latest' | jq -r '.tag_name')
+        url="https://github.com/rust-lang/mdbook/releases/download/${tag}/mdbook-${tag}-x86_64-unknown-linux-gnu.tar.gz"
+        mkdir mdbook
+        curl -sSL $url | tar -xz --directory=./mdbook
+        echo `pwd`/mdbook >> $GITHUB_PATH
+
+    - name: Install latest mdbook-permalinks
+      shell: bash
+      run: |
+        tag=$(curl 'https://api.github.com/repos/tonywu6/mdbookkit/releases' | jq -r '[ .[] | .tag_name | select(startswith("mdbook-permalinks-v")) ][0]')
+        url="https://github.com/tonywu6/mdbookkit/releases/download/${tag}/mdbook-permalinks-x86_64-unknown-linux-gnu.tar.gz"
+        mkdir mdbook-permalinks
+        curl -sSL $url | tar -xz --directory=./mdbook-permalinks
+        echo `pwd`/mdbook-permalinks >> $GITHUB_PATH
+
+    - name: Build book
+      shell: bash
+      working-directory: docs/book
+      run: mdbook build
