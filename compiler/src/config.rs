@@ -1,5 +1,6 @@
 use derive_more::{Deref, derive::From};
 use serde::Deserialize;
+use std::path::PathBuf;
 
 use crate::CONFIG_ENV_PREFIX;
 use crate::passes::{InstrumentationRules, InternalizationRules};
@@ -117,7 +118,7 @@ pub(crate) struct PassesConfig {
     #[serde(default)]
     pub program_dep: GatedPassConfig<()>,
     #[serde(default)]
-    pub type_export: GatedPassConfig<()>,
+    pub type_export: GatedPassConfig<TypeExportConfig>,
     #[serde(default)]
     pub md_info: GatedPassConfig<()>,
 }
@@ -154,6 +155,12 @@ pub(crate) struct InstrumentationPassConfig {
 pub(crate) struct InternalizationPassConfig {
     #[serde(default)]
     pub(crate) rules: InternalizationRules,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(crate) struct TypeExportConfig {
+    #[serde(default)]
+    pub(crate) output_dir: Option<PathBuf>,
 }
 
 pub(super) fn load_config() -> LeafCompilerConfig {

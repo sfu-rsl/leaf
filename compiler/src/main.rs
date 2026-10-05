@@ -194,7 +194,8 @@ mod driver_callbacks {
         let passes = chain!(
             prerequisites_pass,
             MdInfoExporter::default().into_gated(config.passes.md_info.enabled),
-            TypeInfoExporter::default().into_gated(config.passes.type_export.enabled),
+            TypeInfoExporter::new(config.passes.type_export.output_dir.clone())
+                .into_gated(config.passes.type_export.enabled),
             ProgramMapExporter::default().into_gated(config.passes.program_map.enabled),
             ProgramDependenceMapExporter::default().into_gated(config.passes.program_dep.enabled),
             instrumentation_pass.into_gated(config.passes.instrumentation.enabled),
