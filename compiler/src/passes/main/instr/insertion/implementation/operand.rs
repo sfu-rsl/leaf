@@ -119,7 +119,7 @@ where
                 .then(|| self.internal_reference_const_ptr(constant))
         }
         // &str
-        else if ty.peel_refs().is_str() {
+        else if ty.is_imm_ref_str() {
             config.str.is_enabled().then(|| {
                 self.internal_reference_const_operand_directly(sym::ref_operand_const_str, constant)
             })
