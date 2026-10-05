@@ -1,4 +1,5 @@
 use rustc_abi::{FieldIdx, FieldsShape, Layout, Scalar, TagEncoding, VariantIdx, Variants};
+use rustc_hir::def_id::LOCAL_CRATE;
 use rustc_middle::ty::{
     EarlyBinder, GenericArgsRef, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
     TypeVisitableExt, TypeVisitor, TypingEnv,
@@ -10,8 +11,7 @@ use rustc_middle::{
 };
 use rustc_type_ir::inherent::AdtDef;
 
-use std::collections::HashMap;
-use std::env::{self};
+use std::{collections::HashMap, env, path::PathBuf};
 
 use common::{
     log_debug, log_info, log_warn,
@@ -26,7 +26,15 @@ use super::super::{CompilationPass, OverrideFlags, Storage};
 const TAG_TYPE_EXPORT: &str = "type_export";
 
 #[derive(Default)]
-pub(crate) struct TypeInfoExporter;
+pub(crate) struct TypeInfoExporter {
+    output_dir: Option<PathBuf>,
+}
+
+impl TypeInfoExporter {
+    pub(crate) fn new(output_dir: Option<PathBuf>) -> Self {
+        Self { output_dir }
+    }
+}
 
 impl CompilationPass for TypeInfoExporter {
     fn override_flags() -> OverrideFlags {
@@ -42,35 +50,26 @@ impl CompilationPass for TypeInfoExporter {
 
         let type_map = capture_all_types(tcx);
 
-        let out_dir = tcx.output_dir();
-        let is_single_file_program =
-            out_dir.as_os_str().is_empty() || !rustc_session::utils::was_invoked_from_cargo();
-        let out_dirs = if is_single_file_program {
-            vec![out_dir.as_path()]
-        } else if env::var("CARGO_PRIMARY_PACKAGE").is_ok() {
-            /* For compiling a single file program, the final type export file is placed in the same directory as the program file.
-             * For compiling a project, the final type export file is also placed in the output directory (i.e. "./target/debug/") */
-            vec![out_dir.as_path(), out_dir.parent().unwrap()]
-        } else {
-            // Types for dependencies should not be required.
-            vec![]
-        };
+        let artifact_dir = tcx.output_dir();
+        let stable_file_name =
+            type_info::rw::stable_db_file_name(tcx.stable_crate_id(LOCAL_CRATE).as_u64());
+        let out_dir = self.output_dir.as_ref().unwrap_or(&artifact_dir);
+        let out_file = out_dir.join(stable_file_name);
+        let write_compatibility_db = artifact_dir.as_os_str().is_empty()
+            || !rustc_session::utils::was_invoked_from_cargo()
+            || env::var("CARGO_PRIMARY_PACKAGE").is_ok();
 
-        let write = move || -> Result<(), Box<dyn core::error::Error>> {
-            let mut out_dirs = out_dirs.into_iter();
-            if let Some(out_dir) = out_dirs.next() {
-                let path = type_info::rw::write_types_db_in(
-                    type_map.values(),
-                    get_core_types(tcx).map(|t| type_id(tcx, t)),
-                    take_metadata_for_types_db(storage),
-                    &out_dir,
-                )?;
-                for out_dir in out_dirs {
-                    std::fs::copy(&path, out_dir.join(path.file_name().unwrap()))
-                        .map_err(|e| Box::new(e))?;
-                }
-            } else {
-                log_debug!("Type info export is skipped")
+        let mut write = move || -> Result<(), Box<dyn core::error::Error>> {
+            let path = type_info::rw::write_types_db_to(
+                type_map.values(),
+                get_core_types(tcx).map(|t| type_id(tcx, t)),
+                take_metadata_for_types_db(storage),
+                &out_file,
+            )?;
+
+            if write_compatibility_db {
+                std::fs::copy(&path, artifact_dir.join(type_info::rw::FILENAME_DB))
+                    .map_err(Box::new)?;
             }
             Ok(())
         };
