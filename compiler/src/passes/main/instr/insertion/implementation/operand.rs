@@ -125,7 +125,7 @@ where
             })
         }
         // &[u8]
-        else if ty::is_u8_slice_ref(tcx, ty) {
+        else if ty::is_imm_ref_u8_slice(tcx, ty) {
             config.byte_str.is_enabled().then(|| {
                 self.internal_reference_const_operand_directly(
                     sym::ref_operand_const_byte_str,
@@ -134,7 +134,7 @@ where
             })
         }
         // &[u8; N]
-        else if ty::is_u8_array_ref(tcx, ty) {
+        else if ty::is_imm_ref_u8_array(tcx, ty) {
             config
                 .byte_str
                 .is_enabled()
@@ -151,7 +151,7 @@ where
                 "FnDef is expected to be a ZST and handled above, found {:?}",
                 ty
             )
-        } else if let Some(def_id) = Self::try_as_immut_static(tcx, constant) {
+        } else if let Some(def_id) = Self::try_as_imm_static(tcx, constant) {
             log_debug!("Static reference constant is not transferred: {:?}", def_id);
             None
         } else {
@@ -370,7 +370,7 @@ where
     }
 
     #[inline]
-    fn try_as_immut_static(tcx: TyCtxt<'tcx>, constant: &Box<ConstOperand<'tcx>>) -> Option<DefId> {
+    fn try_as_imm_static(tcx: TyCtxt<'tcx>, constant: &Box<ConstOperand<'tcx>>) -> Option<DefId> {
         /* Immutable statics are accessed by a constant reference which points to a statically
          * allocated program memory block. If the static item's type is T then the constant is
          * of type &T. */
@@ -424,21 +424,22 @@ mod utils {
     }
 
     pub(super) mod ty {
+        use rustc_ast::Mutability;
+
         pub use super::super::super::utils::ty::*;
 
         use super::*;
 
-        pub fn is_u8_array_ref<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
-            if let TyKind::Ref(_, ty, _) = ty.kind() {
+        pub fn is_imm_ref_u8_array<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
+            if let TyKind::Ref(_, ty, Mutability::Not) = ty.kind() {
                 return ty.is_array() && ty.sequence_element_type(tcx) == tcx.types.u8;
             }
 
             false
         }
 
-        pub fn is_u8_slice_ref<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
-            // This is just for mitigating the bug in rustfmt. Track: rustfmt#5863
-            if let TyKind::Ref(_, ty, _) = ty.kind() {
+        pub fn is_imm_ref_u8_slice<'tcx>(tcx: TyCtxt<'tcx>, ty: Ty<'tcx>) -> bool {
+            if let TyKind::Ref(_, ty, Mutability::Not) = ty.kind() {
                 if let TyKind::Slice(ty) = ty.kind() {
                     return *ty == tcx.types.u8;
                 }
