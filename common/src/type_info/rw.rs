@@ -268,6 +268,99 @@ pub const FILENAME_DB: &str = rkyving::FILENAME_DB;
 pub const FILENAME_STABLE_PREFIX: &str = "types-";
 pub const ENV_TYPES_DB: &str = "LEAF_TYPES_DB";
 
+mod merge {
+    use std::collections::hash_map::Entry;
+
+    use crate::utils::JsonLikeValue;
+
+    use super::*;
+
+    /// Merge multiple type databases into a single one.
+    /// # Remarks
+    /// Metadata values are merged recursively, so if a key exists in both databases,
+    /// the values are merged, if possible: arrays are concatenated, objects are merged recursively.
+    pub fn merge_types_dbs(
+        databases: impl IntoIterator<Item = TypesData>,
+    ) -> Result<TypesData, Box<dyn StdError>> {
+        let mut merged: Option<TypesData> = None;
+
+        for database in databases {
+            if let Some(existing) = &mut merged {
+                for (id, type_info) in database.all_types {
+                    match existing.all_types.get(&id) {
+                        Some(previous) if previous != &type_info => {
+                            return Err(
+                                format!("Conflicting type information for TypeId {id}").into()
+                            );
+                        }
+                        Some(_) => {}
+                        None => {
+                            existing.all_types.insert(id, type_info);
+                        }
+                    }
+                }
+
+                for ((key, value), previous_value) in database
+                    .core_types
+                    .to_pairs()
+                    .into_iter()
+                    .zip(existing.core_types.clone().to_pairs())
+                {
+                    if value != previous_value.1 {
+                        return Err(format!("Conflicting core type mapping for `{key}`").into());
+                    }
+                }
+
+                for (key, value) in database.metadata {
+                    match existing.metadata.entry(key) {
+                        Entry::Occupied(mut existing) => {
+                            existing.get_mut().merge(value).map_err(|e| {
+                                format!("Cannot merge metadata for `{}`: {}", existing.key(), e)
+                            })?;
+                        }
+                        Entry::Vacant(e) => {
+                            e.insert(value);
+                        }
+                    }
+                }
+            } else {
+                merged = Some(database);
+            }
+        }
+
+        merged.ok_or_else(|| "Cannot merge an empty collection of type databases".into())
+    }
+
+    impl JsonLikeValue {
+        fn merge(&mut self, other: JsonLikeValue) -> Result<(), Box<dyn StdError>> {
+            match (self, other) {
+                (JsonLikeValue::Object(ref mut existing), JsonLikeValue::Object(new)) => {
+                    for (key, value) in new {
+                        match existing.entry(key) {
+                            Entry::Occupied(mut existing) => {
+                                existing.get_mut().merge(value).map_err(|e| {
+                                    format!("Cannot merge metadata for `{}`: {}", existing.key(), e)
+                                })?;
+                            }
+                            Entry::Vacant(e) => {
+                                e.insert(value);
+                            }
+                        }
+                    }
+                    Ok(())
+                }
+                (JsonLikeValue::Array(ref mut existing), JsonLikeValue::Array(new)) => {
+                    existing.extend(new);
+                    Ok(())
+                }
+                (this, other) if this == &other => Ok(()),
+                (this, other) => Err(format!("Conflicting values: {this:?} vs {other:?}").into()),
+            }
+        }
+    }
+}
+pub use merge::merge_types_dbs;
+
 pub fn stable_db_file_name(stable_crate_id: impl std::fmt::Display) -> String {
     format!(
         "{FILENAME_STABLE_PREFIX}{stable_crate_id}.{}",
@@ -321,55 +414,6 @@ pub fn read_types_db() -> Result<LoadedTypeDatabase, Box<dyn StdError>> {
     result
 }
 
-pub fn merge_types_dbs(
-    databases: impl IntoIterator<Item = TypesData>,
-) -> Result<TypesData, Box<dyn StdError>> {
-    let mut merged: Option<TypesData> = None;
-
-    for database in databases {
-        if let Some(existing) = &mut merged {
-            for (id, type_info) in database.all_types {
-                match existing.all_types.get(&id) {
-                    Some(previous) if previous != &type_info => {
-                        return Err(format!("Conflicting type information for TypeId {id}").into());
-                    }
-                    Some(_) => {}
-                    None => {
-                        existing.all_types.insert(id, type_info);
-                    }
-                }
-            }
-
-            for ((key, value), previous_value) in database
-                .core_types
-                .to_pairs()
-                .into_iter()
-                .zip(existing.core_types.clone().to_pairs())
-            {
-                if value != previous_value.1 {
-                    return Err(format!("Conflicting core type mapping for `{key}`").into());
-                }
-            }
-
-            for (key, value) in database.metadata {
-                match existing.metadata.get(&key) {
-                    Some(previous) if previous != &value => {
-                        return Err(format!("Conflicting metadata value for `{key}`").into());
-                    }
-                    Some(_) => {}
-                    None => {
-                        existing.metadata.insert(key, value);
-                    }
-                }
-            }
-        } else {
-            merged = Some(database);
-        }
-    }
-
-    merged.ok_or_else(|| "Cannot merge an empty collection of type databases".into())
-}
-
 pub fn write_types_db_to<'a>(
     types: impl Iterator<Item = &'a TypeInfo> + Clone,
     core_types: CoreTypes<TypeId>,
@@ -400,6 +444,8 @@ pub fn write_types_db_to<'a>(
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::JsonLikeValue;
+
     use super::*;
 
     fn type_id(value: u128) -> TypeId {
@@ -517,5 +563,41 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn merge_merges_metadata_objects() {
+        let merged = merge_types_dbs([
+            database(
+                None,
+                type_id(2),
+                MetadataValue::Object(HashMap::from([(
+                    "profile".to_owned(),
+                    JsonLikeValue::String("debug".to_owned()),
+                )])),
+            ),
+            database(
+                None,
+                type_id(2),
+                MetadataValue::Object(HashMap::from([(
+                    "version".to_owned(),
+                    JsonLikeValue::String("1.0".to_owned()),
+                )])),
+            ),
+        ])
+        .unwrap();
+
+        let expected_metadata = MetadataValue::Object(HashMap::from([
+            (
+                "profile".to_owned(),
+                JsonLikeValue::String("debug".to_owned()),
+            ),
+            (
+                "version".to_owned(),
+                JsonLikeValue::String("1.0".to_owned()),
+            ),
+        ]));
+
+        assert_eq!(merged.metadata.get("build").unwrap(), &expected_metadata);
     }
 }
