@@ -1334,10 +1334,16 @@ mod core {
 
         fn expose_prov<'a, 'b>(
             &mut self,
-            _operand: Self::ExprRef<'a>,
-            _metadata: Self::Metadata<'b>,
+            operand: Self::ExprRef<'a>,
+            metadata: Self::Metadata<'b>,
         ) -> Self::Expr<'a> {
-            todo!("#331: Add support for casting symbolic pointers")
+            // Source: https://doc.rust-lang.org/nightly/std/primitive.pointer.html#method.expose_provenance
+            // On most platforms this will produce a value with the same bytes as the
+            // original pointer, because all the bytes are dedicated to describing the
+            // address. Platforms which need to store additional information in the pointer
+            // may not support this operation, since the ‘expose’ side-effect which is
+            // required for with_exposed_provenance to work is typically not available.
+            self.trans(operand, metadata)
         }
 
         fn transmute<'a, 'b>(

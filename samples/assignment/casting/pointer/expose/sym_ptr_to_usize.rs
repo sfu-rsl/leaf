@@ -6,9 +6,13 @@ fn main() {
     let b = 30;
     let arr = [&a as *const i32, &b as *const i32];
     let y = arr[x];
-    let z = y as usize;
-    foo(z);
+    do_cast(y);
+
+    let arr_start_ptr = arr.as_ptr();
+    let y = unsafe { arr_start_ptr.offset(x as isize) };
+    do_cast(y);
 }
 
-#[inline(never)]
-fn foo<T>(x: T) {}
+fn do_cast<T>(x: *const T) -> usize {
+    core::hint::black_box(x) as usize
+}
