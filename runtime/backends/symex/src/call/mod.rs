@@ -297,9 +297,10 @@ mod tupling {
                 },
                 |head_places| {
                     debug_assert!(
-                        head_places.len() == 1
+                        head_places.len() == 2 /* One for the closure and one for the tupled argument */
                             && head_places[0].type_info().get_size(type_manager) == Some(0),
-                        "Expected to happen only in FnOnce implementation of a non-capturing closure",
+                        "Expected to happen only in FnOnce implementation of a non-capturing closure, head places: {:?}",
+                        head_places,
                     );
                     vec![Implied::always(Value::from(Constant::Zst).to_value_ref())]
                 },

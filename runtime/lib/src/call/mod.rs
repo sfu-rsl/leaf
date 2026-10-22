@@ -732,7 +732,7 @@ mod implementation {
                 head_args: impl FnOnce(&[P]) -> Vec<V> + 'f,
             ) -> impl FnOnce() -> ArgsTuplingInfo<'h, 'f, P, V> + 'f {
                 let tuple_type = matches!(tupling, ArgsTupling::Tupled)
-                    .then(|| arg_places.get(0).map(|p| get_tuple_type(p)))
+                    .then(|| arg_places.get(1).map(|p| get_tuple_type(p)))
                     .flatten();
                 move || match tupling {
                     ArgsTupling::Untupled {
