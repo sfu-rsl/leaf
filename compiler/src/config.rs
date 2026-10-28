@@ -1,10 +1,11 @@
 use derive_more::{Deref, derive::From};
 use serde::Deserialize;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 
 use crate::CONFIG_ENV_PREFIX;
 use crate::passes::{InstrumentationRules, InternalizationRules};
-use common::{log_error, log_info};
+use common::{log_error, log_info, log_warn};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub(crate) struct LeafCompilerConfig {
@@ -18,6 +19,8 @@ pub(crate) struct LeafCompilerConfig {
     pub codegen_all_mir: bool,
     #[serde(default = "default_marker_cfg_name")]
     pub marker_cfg_name: String,
+    #[serde(default)]
+    pub stable_crate_numbering: bool,
     #[serde(default)]
     #[serde(alias = "rules")]
     instr_rules: InstrumentationRules,
@@ -114,7 +117,7 @@ pub(crate) struct PassesConfig {
     #[serde(default)]
     pub internalization: GatedPassConfig<InternalizationPassConfig>,
     #[serde(default)]
-    pub program_map: GatedPassConfig<()>,
+    pub program_map: GatedPassConfig<ProgramMapConfig>,
     #[serde(default)]
     pub program_dep: GatedPassConfig<()>,
     #[serde(default)]
@@ -161,6 +164,31 @@ pub(crate) struct InternalizationPassConfig {
 pub(crate) struct TypeExportConfig {
     #[serde(default)]
     pub(crate) output_dir: Option<PathBuf>,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(crate) struct ProgramMapConfig {
+    #[serde(default)]
+    pub(crate) output_dir: Option<PathBuf>,
+}
+
+static STABLE_CRATE_NUMBERING: OnceLock<bool> = OnceLock::new();
+
+/// Fix the crate numbering for this process. Call once, before any pass runs.
+///
+/// Later calls are ignored
+pub(crate) fn set_stable_crate_numbering(stable: bool) {
+    if STABLE_CRATE_NUMBERING.set(stable).is_err() {
+        log_warn!(
+            "Crate numbering was already set to {:?}; ignoring {}.",
+            STABLE_CRATE_NUMBERING.get(),
+            stable,
+        );
+    }
+}
+
+pub(crate) fn stable_crate_numbering() -> bool {
+    STABLE_CRATE_NUMBERING.get().copied().unwrap_or_default()
 }
 
 pub(super) fn load_config() -> LeafCompilerConfig {

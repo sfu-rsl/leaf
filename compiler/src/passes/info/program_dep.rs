@@ -75,7 +75,7 @@ fn visit_and_add<'tcx>(pdm: &mut PlainProgramDependenceMap, tcx: TyCtxt<'tcx>, b
         // Skip if the InstanceKindId is not enough to distinguish the body.
         return;
     }
-    let key = instance_kind.to_plain_id();
+    let key = instance_kind.to_plain_id(tcx);
 
     pdm.control_dep
         .entry(key)

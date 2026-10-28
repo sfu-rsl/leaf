@@ -22,11 +22,24 @@ type Calls = Vec<CallGraphEdgeDestination>;
 type ReturnPoints = Vec<BasicBlockIndex>;
 
 #[derive(Default)]
-pub(crate) struct ProgramMapExporter;
+pub(crate) struct ProgramMapExporter {
+    output_dir: Option<std::path::PathBuf>,
+}
+
+impl ProgramMapExporter {
+    pub(crate) fn new(output_dir: Option<std::path::PathBuf>) -> Self {
+        Self { output_dir }
+    }
+}
 
 const KEY_MAP: &str = "program_map";
 
-const FILE_OUTPUT: &str = "program_map.json";
+const FILENAME_MAP: &str = "program_map.json";
+const FILENAME_STABLE_PREFIX: &str = "program_map-";
+
+fn stable_map_file_name(stable_crate_id: impl std::fmt::Display) -> String {
+    format!("{FILENAME_STABLE_PREFIX}{stable_crate_id}.json")
+}
 
 impl CompilationPass for ProgramMapExporter {
     fn override_flags() -> OverrideFlags {
@@ -65,17 +78,32 @@ impl CompilationPass for ProgramMapExporter {
         p_map.entry_points.extend(
             tcx.entry_fn(())
                 .iter()
-                .map(|(def_id, _)| InstanceKind::Item(*def_id).to_plain_id()),
+                .map(|(def_id, _)| InstanceKind::Item(*def_id).to_plain_id(tcx)),
         );
 
+        let artifact_dir = tcx.output_dir();
+        let out_dir = self.output_dir.as_ref().unwrap_or(&artifact_dir);
+        let out_file = out_dir.join(stable_map_file_name(
+            tcx.stable_crate_id(rustc_span::def_id::LOCAL_CRATE).as_u64(),
+        ));
+
         p_map
-            .write(tcx.output_dir().join(FILE_OUTPUT))
+            .write(&out_file)
             .expect("Failed to write program map");
+
+        let write_compatibility_map = artifact_dir.as_os_str().is_empty()
+            || !rustc_session::utils::was_invoked_from_cargo()
+            || std::env::var("CARGO_PRIMARY_PACKAGE").is_ok();
+        if write_compatibility_map
+            && let Err(e) = std::fs::copy(&out_file, artifact_dir.join(FILENAME_MAP))
+        {
+            common::log_warn!("Could not write the compatibility program map: {e}");
+        }
     }
 }
 
 fn visit_and_add<'tcx>(p_map: &mut ProgramMap, tcx: TyCtxt<'tcx>, body: &Body<'tcx>) {
-    let key = body.source.instance.to_plain_id();
+    let key = body.source.instance.to_plain_id(tcx);
     if p_map.cfgs.contains_key(&key) {
         return;
     }
@@ -141,7 +169,7 @@ fn visit_body<'tcx>(
                 def_id,
                 generic_args,
             ) {
-                calls.push((index.as_u32(), instance_kind.def.to_plain_id(), dbg));
+                calls.push((index.as_u32(), instance_kind.def.to_plain_id(tcx), dbg));
             }
         };
 

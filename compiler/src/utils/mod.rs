@@ -35,9 +35,25 @@ pub(crate) mod mir {
         mir::{Body, Local, Location, Statement, Terminator},
         ty::{GenericArgsRef, Instance, InstanceKind, ShimKind, TyCtxt, TypingEnv, TypingMode},
     };
-    use rustc_span::def_id::{DefId, LocalDefId};
+    use rustc_span::def_id::{CrateNum, DefId, LocalDefId};
 
     use common::types::{InstanceKindDiscr, InstanceKindId};
+
+
+    pub(crate) fn krate_num(tcx: TyCtxt<'_>, krate: CrateNum) -> u32 {
+        if crate::config::stable_crate_numbering() {
+            stable_krate_num(tcx, krate)
+        } else {
+            krate.as_u32()
+        }
+    }
+
+    fn stable_krate_num(tcx: TyCtxt<'_>, krate: CrateNum) -> u32 {
+        let truncated = tcx.stable_crate_id(krate).as_u64() as u32;        
+        // `DefId(0, 0)` is the unset sentinel (`DefId` derives `Default`), so
+        // keep 0 out of the range of real crates.
+        if truncated == 0 { 1 } else { truncated }
+    }
 
     pub(crate) trait TyCtxtExt<'tcx> {
         fn is_llvm_intrinsic(self, def_id: DefId) -> bool;
@@ -219,7 +235,7 @@ pub(crate) mod mir {
 
         fn has_identical_polymorphic_body(&self) -> bool;
 
-        fn to_plain_id(self) -> InstanceKindId;
+        fn to_plain_id(self, tcx: TyCtxt<'tcx>) -> InstanceKindId;
     }
 
     impl<'tcx> InstanceKindExt<'tcx> for InstanceKind<'tcx> {
@@ -273,11 +289,14 @@ pub(crate) mod mir {
             }
         }
 
-        fn to_plain_id(self) -> InstanceKindId {
+        fn to_plain_id(self, tcx: TyCtxt<'tcx>) -> InstanceKindId {
             let def_id = self.def_id();
             InstanceKindId(
                 self.discriminant(),
-                common::types::DefId(def_id.krate.as_u32(), def_id.index.as_u32()),
+                common::types::DefId(
+                    krate_num(tcx, def_id.krate),
+                    def_id.index.as_u32(),
+                ),
             )
         }
     }
