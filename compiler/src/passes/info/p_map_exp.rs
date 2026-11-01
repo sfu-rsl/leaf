@@ -12,7 +12,7 @@ use common::{
 };
 
 use crate::utils::{
-    file::TyCtxtFileExt,
+    file::InfoArtifact,
     mir::{InstanceKindExt, TyCtxtExt},
 };
 
@@ -37,9 +37,7 @@ const KEY_MAP: &str = "program_map";
 const FILENAME_MAP: &str = "program_map.json";
 const FILENAME_STABLE_PREFIX: &str = "program_map-";
 
-fn stable_map_file_name(stable_crate_id: impl std::fmt::Display) -> String {
-    format!("{FILENAME_STABLE_PREFIX}{stable_crate_id}.json")
-}
+const EXTENSION_MAP: &str = "json";
 
 impl CompilationPass for ProgramMapExporter {
     fn override_flags() -> OverrideFlags {
@@ -81,24 +79,18 @@ impl CompilationPass for ProgramMapExporter {
                 .map(|(def_id, _)| InstanceKind::Item(*def_id).to_plain_id(tcx)),
         );
 
-        let artifact_dir = tcx.output_dir();
-        let out_dir = self.output_dir.as_ref().unwrap_or(&artifact_dir);
-        let out_file = out_dir.join(stable_map_file_name(
-            tcx.stable_crate_id(rustc_span::def_id::LOCAL_CRATE).as_u64(),
-        ));
+        let artifact = InfoArtifact::new(
+            tcx,
+            self.output_dir.as_deref(),
+            FILENAME_STABLE_PREFIX,
+            EXTENSION_MAP,
+        );
 
         p_map
-            .write(&out_file)
+            .write(&artifact.out_file)
             .expect("Failed to write program map");
 
-        let write_compatibility_map = artifact_dir.as_os_str().is_empty()
-            || !rustc_session::utils::was_invoked_from_cargo()
-            || std::env::var("CARGO_PRIMARY_PACKAGE").is_ok();
-        if write_compatibility_map
-            && let Err(e) = std::fs::copy(&out_file, artifact_dir.join(FILENAME_MAP))
-        {
-            common::log_warn!("Could not write the compatibility program map: {e}");
-        }
+        artifact.write_compatibility_copy(FILENAME_MAP, "program map");
     }
 }
 

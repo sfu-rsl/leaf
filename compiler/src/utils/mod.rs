@@ -39,17 +39,16 @@ pub(crate) mod mir {
 
     use common::types::{InstanceKindDiscr, InstanceKindId};
 
-
-    pub(crate) fn krate_num(tcx: TyCtxt<'_>, krate: CrateNum) -> u32 {
+    pub(crate) fn crate_num(tcx: TyCtxt<'_>, krate: CrateNum) -> u32 {
         if crate::config::stable_crate_numbering() {
-            stable_krate_num(tcx, krate)
+            stable_crate_num(tcx, krate)
         } else {
             krate.as_u32()
         }
     }
 
-    fn stable_krate_num(tcx: TyCtxt<'_>, krate: CrateNum) -> u32 {
-        let truncated = tcx.stable_crate_id(krate).as_u64() as u32;        
+    fn stable_crate_num(tcx: TyCtxt<'_>, krate: CrateNum) -> u32 {
+        let truncated = tcx.stable_crate_id(krate).as_u64() as u32;
         // `DefId(0, 0)` is the unset sentinel (`DefId` derives `Default`), so
         // keep 0 out of the range of real crates.
         if truncated == 0 { 1 } else { truncated }
@@ -293,10 +292,7 @@ pub(crate) mod mir {
             let def_id = self.def_id();
             InstanceKindId(
                 self.discriminant(),
-                common::types::DefId(
-                    krate_num(tcx, def_id.krate),
-                    def_id.index.as_u32(),
-                ),
+                common::types::DefId(crate_num(tcx, def_id.krate), def_id.index.as_u32()),
             )
         }
     }
@@ -352,6 +348,52 @@ pub(super) mod file {
             .or_else(try_deps)
             .or_else(try_cwd)
             .or_else(try_exe_path)
+    }
+
+    pub(crate) struct InfoArtifact {
+        pub(crate) out_file: PathBuf,
+        artifact_dir: PathBuf,
+        eligible: bool,
+    }
+
+    impl InfoArtifact {
+        pub(crate) fn new(
+            tcx: rustc_middle::ty::TyCtxt<'_>,
+            override_dir: Option<&Path>,
+            stable_prefix: &str,
+            extension: &str,
+        ) -> Self {
+            let artifact_dir = tcx.output_dir();
+            let out_dir = override_dir.unwrap_or(&artifact_dir);
+            let stable_crate_id = tcx
+                .stable_crate_id(rustc_span::def_id::LOCAL_CRATE)
+                .as_u64();
+            let out_file = out_dir.join(format!("{stable_prefix}{stable_crate_id}.{extension}"));
+
+            let eligible = artifact_dir.as_os_str().is_empty()
+                || !rustc_session::utils::was_invoked_from_cargo()
+                || env::var_os("CARGO_PRIMARY_PACKAGE").is_some();
+            Self {
+                out_file,
+                artifact_dir,
+                eligible,
+            }
+        }
+
+        pub(crate) fn write_compatibility_copy(&self, compat_name: &str, what: &str) {
+            if !self.eligible {
+                return;
+            }
+
+            let dest = self.artifact_dir.join(compat_name);
+            std::fs::copy(&self.out_file, &dest)
+                .unwrap_or_else(|e| panic!("Failed to write the compatibility {what}: {e}"));
+            log_debug!(
+                "Wrote the compatibility {what} to `{}` from `{}`",
+                dest.display(),
+                self.out_file.display()
+            );
+        }
     }
 
     pub(crate) trait TyCtxtFileExt<'tcx> {

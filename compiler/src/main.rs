@@ -84,8 +84,6 @@ pub fn set_up_compiler() {
 pub fn run_compiler(args: impl IntoIterator<Item = String>) -> std::process::ExitCode {
     let config = config::load_config();
 
-    config::set_stable_crate_numbering(config.stable_crate_numbering);
-
     let args = driver_args::set_up_args(args);
     log_info!("Running compiler with args: {:?}", args);
 
@@ -200,7 +198,8 @@ mod driver_callbacks {
                 .into_gated(config.passes.type_export.enabled),
             ProgramMapExporter::new(config.passes.program_map.output_dir.clone())
                 .into_gated(config.passes.program_map.enabled),
-            ProgramDependenceMapExporter::default().into_gated(config.passes.program_dep.enabled),
+            ProgramDependenceMapExporter::new(config.passes.program_dep.output_dir.clone())
+                .into_gated(config.passes.program_dep.enabled),
             instrumentation_pass.into_gated(config.passes.instrumentation.enabled),
             InstrumentationCounter::default()
                 .into_gated(config.passes.instrumentation_counter.enabled),

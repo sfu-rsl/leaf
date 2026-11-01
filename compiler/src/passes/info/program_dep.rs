@@ -12,20 +12,28 @@ use rustc_middle::{
 
 use common::{
     log_debug, log_info,
-    program_dep::{AssignmentsInfo, ControlDependencyGraph, PlainProgramDependenceMap},
+    program_dep::{AssignmentsInfo, ControlDependencyGraph, PlainProgramDependenceMap, rw},
 };
 
 use crate::utils::{
     assignment_ids::{AssignmentDestination, assignment_ids_split_agnostic},
     control_dependence::PostDominators,
-    file::TyCtxtFileExt,
+    file::InfoArtifact,
     mir::InstanceKindExt,
 };
 
 use super::super::{CompilationPass, OverrideFlags, Storage, StorageExt};
 
 #[derive(Default)]
-pub(crate) struct ProgramDependenceMapExporter;
+pub(crate) struct ProgramDependenceMapExporter {
+    output_dir: Option<std::path::PathBuf>,
+}
+
+impl ProgramDependenceMapExporter {
+    pub(crate) fn new(output_dir: Option<std::path::PathBuf>) -> Self {
+        Self { output_dir }
+    }
+}
 
 const KEY_MAP: &str = "program_dep";
 
@@ -64,8 +72,17 @@ impl CompilationPass for ProgramDependenceMapExporter {
                 visit_and_add(&mut pdm, tcx, tcx.instance_mir(instance_kind));
             });
 
-        common::program_dep::rw::write_program_dep_map(&pdm, tcx.output_dir())
+        let artifact = InfoArtifact::new(
+            tcx,
+            self.output_dir.as_deref(),
+            rw::FILENAME_STABLE_PREFIX,
+            rw::EXTENSION_MAP,
+        );
+
+        rw::write_program_dep_map(&pdm, &artifact.out_file)
             .expect("Failed to write program dependence map");
+
+        artifact.write_compatibility_copy(rw::FILENAME_MAP, "program dependence map");
     }
 }
 

@@ -1187,10 +1187,7 @@ mod utils {
         def_id: DefId,
     ) -> (Operand<'tcx>, Operand<'tcx>) {
         (
-            operand::const_from_uint(
-                tcx,
-                crate::utils::mir::krate_num(tcx, def_id.krate),
-            ),
+            operand::const_from_uint(tcx, crate::utils::mir::crate_num(tcx, def_id.krate)),
             operand::const_from_uint(tcx, def_id.index.as_u32()),
         )
     }
