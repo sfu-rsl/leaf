@@ -268,6 +268,13 @@ pub const FILENAME_DB: &str = rkyving::FILENAME_DB;
 pub const FILENAME_STABLE_PREFIX: &str = "types-";
 pub const ENV_TYPES_DB: &str = "LEAF_TYPES_DB";
 
+#[cfg(info_db_fmt = "json")]
+pub const EXTENSION_DB: &str = "json";
+#[cfg(info_db_fmt = "rkyv")]
+pub const EXTENSION_DB: &str = "rkyv";
+
+const EXTENSION_DB_JSON: &str = "json";
+
 mod merge {
     use std::collections::hash_map::Entry;
 
@@ -362,12 +369,7 @@ mod merge {
 pub use merge::merge_types_dbs;
 
 pub fn stable_db_file_name(stable_crate_id: impl std::fmt::Display) -> String {
-    format!(
-        "{FILENAME_STABLE_PREFIX}{stable_crate_id}.{}",
-        FILENAME_DB
-            .rsplit_once('.')
-            .map_or("", |(_, extension)| extension)
-    )
+    format!("{FILENAME_STABLE_PREFIX}{stable_crate_id}.{EXTENSION_DB}")
 }
 
 pub fn is_stable_db_file_name(name: &str) -> bool {
@@ -423,11 +425,13 @@ pub fn write_types_db_to<'a>(
     log_info!("Writing type info db to: `{}`", out_file.as_ref().display());
 
     if cfg!(debug_assertions) {
+        // `with_extension` supplies the dot, and `FILENAME_DB_EXT` carries one
+        // of its own, which produced `types-<id>..json`.
         serdes::write(
             types.clone(),
             core_types.clone(),
             metadata.clone(),
-            out_file.as_ref().with_extension(serdes::FILENAME_DB_EXT),
+            out_file.as_ref().with_extension(EXTENSION_DB_JSON),
         )?;
     }
 

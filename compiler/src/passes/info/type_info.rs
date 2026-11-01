@@ -1,5 +1,5 @@
 use rustc_abi::{FieldIdx, FieldsShape, Layout, Scalar, TagEncoding, VariantIdx, Variants};
-use rustc_hir::def_id::LOCAL_CRATE;
+
 use rustc_middle::ty::{
     EarlyBinder, GenericArgsRef, Ty, TyCtxt, TyKind, TypeSuperVisitable, TypeVisitable,
     TypeVisitableExt, TypeVisitor, TypingEnv,
@@ -11,7 +11,7 @@ use rustc_middle::{
 };
 use rustc_type_ir::inherent::AdtDef;
 
-use std::{collections::HashMap, env, path::PathBuf};
+use std::{collections::HashMap, path::PathBuf};
 
 use common::{
     log_debug, log_info, log_warn,
@@ -19,7 +19,7 @@ use common::{
 };
 
 use crate::passes::StorageExt;
-use crate::utils::file::TyCtxtFileExt;
+use crate::utils::file::InfoArtifact;
 
 use super::super::{CompilationPass, OverrideFlags, Storage};
 
@@ -50,30 +50,22 @@ impl CompilationPass for TypeInfoExporter {
 
         let type_map = capture_all_types(tcx);
 
-        let artifact_dir = tcx.output_dir();
-        let stable_file_name =
-            type_info::rw::stable_db_file_name(tcx.stable_crate_id(LOCAL_CRATE).as_u64());
-        let out_dir = self.output_dir.as_ref().unwrap_or(&artifact_dir);
-        let out_file = out_dir.join(stable_file_name);
-        let write_compatibility_db = artifact_dir.as_os_str().is_empty()
-            || !rustc_session::utils::was_invoked_from_cargo()
-            || env::var("CARGO_PRIMARY_PACKAGE").is_ok();
+        let artifact = InfoArtifact::new(
+            tcx,
+            self.output_dir.as_deref(),
+            type_info::rw::FILENAME_STABLE_PREFIX,
+            type_info::rw::EXTENSION_DB,
+        );
 
-        let mut write = move || -> Result<(), Box<dyn core::error::Error>> {
-            let path = type_info::rw::write_types_db_to(
-                type_map.values(),
-                get_core_types(tcx).map(|t| type_id(tcx, t)),
-                take_metadata_for_types_db(storage),
-                &out_file,
-            )?;
+        type_info::rw::write_types_db_to(
+            type_map.values(),
+            get_core_types(tcx).map(|t| type_id(tcx, t)),
+            take_metadata_for_types_db(storage),
+            &artifact.out_file,
+        )
+        .expect("Failed to write type info");
 
-            if write_compatibility_db {
-                std::fs::copy(&path, artifact_dir.join(type_info::rw::FILENAME_DB))
-                    .map_err(Box::new)?;
-            }
-            Ok(())
-        };
-        write().expect("Failed to write type info");
+        artifact.write_compatibility_copy(type_info::rw::FILENAME_DB, "types database");
     }
 }
 

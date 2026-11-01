@@ -119,7 +119,7 @@ pub(crate) struct PassesConfig {
     #[serde(default)]
     pub program_map: GatedPassConfig<ProgramMapConfig>,
     #[serde(default)]
-    pub program_dep: GatedPassConfig<()>,
+    pub program_dep: GatedPassConfig<ProgramDepConfig>,
     #[serde(default)]
     pub type_export: GatedPassConfig<TypeExportConfig>,
     #[serde(default)]
@@ -172,12 +172,15 @@ pub(crate) struct ProgramMapConfig {
     pub(crate) output_dir: Option<PathBuf>,
 }
 
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(crate) struct ProgramDepConfig {
+    #[serde(default)]
+    pub(crate) output_dir: Option<PathBuf>,
+}
+
 static STABLE_CRATE_NUMBERING: OnceLock<bool> = OnceLock::new();
 
-/// Fix the crate numbering for this process. Call once, before any pass runs.
-///
-/// Later calls are ignored
-pub(crate) fn set_stable_crate_numbering(stable: bool) {
+fn set_stable_crate_numbering(stable: bool) {
     if STABLE_CRATE_NUMBERING.set(stable).is_err() {
         log_warn!(
             "Crate numbering was already set to {:?}; ignoring {}.",
@@ -234,6 +237,8 @@ pub(super) fn load_config() -> LeafCompilerConfig {
         }
         instr_configs.rules = core::mem::replace(&mut config.instr_rules, Default::default());
     }
+
+    set_stable_crate_numbering(config.stable_crate_numbering);
 
     config
 }

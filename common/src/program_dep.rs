@@ -70,7 +70,10 @@ impl ProgramDepAssignmentQuery for AssignmentsInfo {
 
 pub mod rw {
     use core::error::Error as StdError;
-    use std::{fs::File, path::Path};
+    use std::{
+        fs::File,
+        path::{Path, PathBuf},
+    };
 
     use super::super::log_info;
 
@@ -85,7 +88,9 @@ pub mod rw {
         #[cfg(info_db_fmt = "json")]
         type SerializedMap = PlainProgramDependenceMap;
 
+        #[cfg(info_db_fmt = "json")]
         pub(super) const FILENAME: &str = "program_dep.json";
+        pub(super) const EXTENSION: &str = "json";
 
         #[cfg(info_db_fmt = "json")]
         pub(super) fn read(
@@ -181,6 +186,7 @@ pub mod rw {
         }
 
         pub(super) const FILENAME: &str = "program_dep.rkyv";
+        pub(super) const EXTENSION: &str = "rkyv";
 
         pub(super) fn read(path: impl AsRef<Path>) -> Result<OwnedArchivedMap, Box<dyn StdError>> {
             let raw = std::fs::read(path)?;
@@ -198,59 +204,86 @@ pub mod rw {
     }
 
     #[cfg(info_db_fmt = "json")]
-    pub type LoadedTypeDatabase = TypesData;
+    pub type LoadedProgramDepMap = PlainProgramDependenceMap;
     #[cfg(info_db_fmt = "rkyv")]
     pub type LoadedProgramDepMap = rkyving::OwnedArchivedMap;
 
     #[cfg(info_db_fmt = "json")]
     pub const FILENAME_MAP: &str = serdes::FILENAME;
 
-    // #[cfg(info_db_fmt = "rkyv")]
+    #[cfg(info_db_fmt = "rkyv")]
     pub const FILENAME_MAP: &str = rkyving::FILENAME;
+
+    pub const FILENAME_STABLE_PREFIX: &str = "program_dep-";
+    pub const ENV_PROGRAM_DEP_MAP: &str = "LEAF_PROGRAM_DEP_MAP";
+
+    #[cfg(info_db_fmt = "json")]
+    pub const EXTENSION_MAP: &str = serdes::EXTENSION;
+    #[cfg(info_db_fmt = "rkyv")]
+    pub const EXTENSION_MAP: &str = rkyving::EXTENSION;
 
     pub fn read_program_dep_map() -> Result<LoadedProgramDepMap, Box<dyn StdError>> {
         log_info!("Finding and reading dependence map");
 
-        let path = crate::utils::search_next_to_exe_for(FILENAME_MAP)
+        let path = std::env::var_os(ENV_PROGRAM_DEP_MAP)
+            .map(PathBuf::from)
+            .map(|path| {
+                if path
+                    .parent()
+                    .is_some_and(|parent| parent.as_os_str().is_empty())
+                {
+                    path.to_str()
+                        .and_then(crate::utils::search_next_to_exe_for)
+                        .unwrap_or(path)
+                } else {
+                    path
+                }
+            })
+            .or_else(|| crate::utils::search_next_to_exe_for(FILENAME_MAP))
             .ok_or_else(|| Box::<dyn StdError>::from("Failed to find program dependence map"))?;
 
         #[cfg(info_db_fmt = "json")]
-        let result = serdes::read();
+        let result = serdes::read(path);
         #[cfg(info_db_fmt = "rkyv")]
         let result = rkyving::read(path);
         result
     }
 
-    pub fn write_program_dep_map<'a>(
+    pub fn write_program_dep_map(
         pdm: &PlainProgramDependenceMap,
-        out_dir: impl AsRef<Path>,
-    ) -> Result<(), Box<dyn StdError>> {
+        out_file: impl AsRef<Path>,
+    ) -> Result<PathBuf, Box<dyn StdError>> {
         log_info!(
-            "Writing program dependence map in: `{}`",
-            out_dir.as_ref().display()
+            "Writing program dependence map to: `{}`",
+            out_file.as_ref().display()
         );
 
-        let create_file = |name: &str| {
+        let create_file = |path: &Path| {
             OpenOptions::new()
                 .create(true)
                 .write(true)
                 .truncate(true)
-                .open(out_dir.as_ref().join(name))
+                .open(path)
                 .map_err(Box::<dyn StdError>::from)
         };
 
+        let path = out_file.as_ref();
+
         if cfg!(debug_assertions) {
-            serdes::write(pdm, create_file(serdes::FILENAME)?)?;
+            serdes::write(
+                pdm, 
+                create_file(&path.with_extension(serdes::EXTENSION))?
+            )?;
         }
 
-        let result = if cfg!(info_db_fmt = "json") {
-            serdes::write(pdm, create_file(serdes::FILENAME)?)?;
+        if cfg!(info_db_fmt = "json") {
+            serdes::write(pdm, create_file(path)?)?;
         } else if cfg!(info_db_fmt = "rkyv") {
-            rkyving::write(pdm, create_file(rkyving::FILENAME)?)?;
+            rkyving::write(pdm, create_file(path)?)?;
         } else {
             unreachable!()
         };
 
-        Ok(result)
+        Ok(path.to_path_buf())
     }
 }
