@@ -19,7 +19,7 @@ pub(crate) struct LeafCompilerConfig {
     pub codegen_all_mir: bool,
     #[serde(default = "default_marker_cfg_name")]
     pub marker_cfg_name: String,
-    #[serde(default)]
+    #[serde(default = "default_stable_crate_numbering")]
     pub stable_crate_numbering: bool,
     #[serde(default)]
     #[serde(alias = "rules")]
@@ -38,6 +38,10 @@ fn default_codegen_all_mir() -> bool {
 
 fn default_marker_cfg_name() -> String {
     "leafc".to_string()
+}
+
+fn default_stable_crate_numbering() -> bool {
+    false
 }
 
 impl LeafCompilerConfig {
