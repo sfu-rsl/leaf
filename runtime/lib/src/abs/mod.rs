@@ -107,7 +107,7 @@ pub use place::{Local, LocalWithMetadata, PlaceUsage, PlaceWithMetadata};
 pub type Place<L = Local, P = Projection<L>> = place::Place<L, P>;
 pub type Projection<L> = place::Projection<L>;
 
-#[derive(Debug, dm::From)]
+#[derive(Debug, dm::From, Clone)]
 pub enum Constant {
     Bool(bool),
     Char(char),

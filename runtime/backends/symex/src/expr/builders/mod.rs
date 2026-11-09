@@ -1186,7 +1186,8 @@ mod core {
         fn if_then_else<'a>(&mut self, operands: Self::ExprRefTriple<'a>) -> Self::Expr<'a> {
             debug_assert!(
                 operands.0.is_symbolic(),
-                "An ITE with non-symbolic condition is expected to be simplified at higher levels"
+                "An ITE with non-symbolic condition is expected to be simplified at higher levels: {:?}",
+                operands.0
             );
             Expr::Ite {
                 condition: SymValueRef::new(operands.0),

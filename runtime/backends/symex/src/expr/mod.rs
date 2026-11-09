@@ -1014,7 +1014,7 @@ mod subtype {
     }
 
     impl ConstValue {
-        fn as_int(&self) -> Option<(&u128, &IntType)> {
+        pub(crate) fn as_int(&self) -> Option<(&u128, &IntType)> {
             match self {
                 Self::Int { bit_rep, ty } => Some((&bit_rep.0, ty)),
                 _ => None,

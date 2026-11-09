@@ -8,6 +8,7 @@ const N: usize = 3;
 
 fn main() {
     sym_content();
+    sym_content_partial();
 
     sym_count();
     sym_left_ptr();
@@ -59,6 +60,19 @@ fn sym_content() {
         20u8.mark_symbolic(),
         30u8.mark_symbolic(),
     ];
+
+    let mut right: [u8; N] = [10u8, 20, 30];
+
+    let count = left.len();
+    let left_ptr = &left as *const u8;
+    let right_ptr = &mut right as *const u8;
+
+    let result = compare_bytes(left_ptr, right_ptr, count);
+    use_result(result);
+}
+
+fn sym_content_partial() {
+    let left: [u8; N] = [10u8, 20u8.mark_symbolic(), 30u8];
 
     let mut right: [u8; N] = [10u8, 20, 30];
 
