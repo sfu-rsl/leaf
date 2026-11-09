@@ -300,6 +300,8 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
         conc_count: usize,
         ptr_type_id: TypeId,
     ) -> Self::Operand {
+        // fn compare_bytes(left: *const u8, right: *const u8, bytes: usize) -> i32
+
         self.check_count(&count, conc_count);
         let count = count.map_value(|_| conc_count);
 
@@ -307,7 +309,15 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
             return Implied::always(ConstValue::from(0i32).to_value_ref());
         }
 
-        let first_values = self
+        debug_assert_eq!(
+            self.services.type_manager.get_pointee_ty(&ptr_type_id),
+            Some({
+                let u8_type: LazyTypeInfo = self.services.type_manager.u8();
+                u8_type.id().unwrap()
+            })
+        );
+
+        let first_values_and_ptrs = self
             .ptr_at_offsets(&first_ptr, conc_first_ptr, count.clone(), 1)
             .map(|(first_at_i, conc_first_at_i)| {
                 let first_place_at_i = self.place_from_ptr_inner(
@@ -318,7 +328,7 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
                 );
                 self.services.vars_state.copy_place(&first_place_at_i)
             });
-        let second_values = self
+        let second_values_and_ptrs = self
             .ptr_at_offsets(&second_ptr, conc_second_ptr, count.clone(), 1)
             .map(|(second_at_i, conc_second_at_i)| {
                 let second_place_at_i = self.place_from_ptr_inner(
@@ -332,27 +342,59 @@ impl<'a, EB: SymExValueExprBuilder + 'static> RawMemoryHandler for SymExRawMemor
 
         let expr_builder = self.services.expr_builder.clone();
 
-        let result = first_values
-            .zip(second_values)
-            .map(|pair| expr_builder.borrow_mut().cmp(pair))
+        let resolve_as_int = |v: ValueRef| {
+            v.as_conc()
+                .and_then(|v| v.try_resolve_as_const(self.type_manager()))
+                .and_then(|v| v.as_int().map(|v| *v.0))
+                .unwrap_or_else(|| panic!("Expected a concrete integer value, got: {:?}", v))
+        };
+
+        let result = core::iter::zip(first_values_and_ptrs, second_values_and_ptrs)
+            .map(|pair| {
+                let cmp = expr_builder.borrow_mut().cmp(pair.clone());
+                cmp.map_value(|cmp| {
+                    // TODO: There should be a variation of expression builder that does not abstract concrete values
+                    if cmp.is_symbolic() {
+                        cmp
+                    } else {
+                        let first_value = pair.0.map_value(resolve_as_int);
+                        let second_value = pair.1.map_value(resolve_as_int);
+                        ConstValue::from(first_value.value.cmp(&second_value.value)).to_value_ref()
+                    }
+                })
+            })
             .rev()
-            .reduce(|acc, prev| {
-                let eq = expr_builder.borrow_mut().eq((
-                    prev.clone(),
-                    Implied::always(ConstValue::from(core::cmp::Ordering::Equal).to_value_ref()),
+            .reduce(|acc, cur| {
+                // acc: n to k, cur: k-1
+                use core::cmp::Ordering;
+                let cur_is_eq = expr_builder.borrow_mut().eq((
+                    cur.clone(),
+                    Implied::always(ConstValue::from(Ordering::Equal).clone().to_value_ref()),
                 ));
-                expr_builder.borrow_mut().if_then_else((eq, acc, prev))
+                let cur_is_eq = cur_is_eq.map_value(|eq| {
+                    if eq.is_symbolic() {
+                        eq
+                    } else {
+                        let is_eq =
+                            (resolve_as_int(cur.value.clone()) as i8) == Ordering::Equal as i8;
+                        ConstValue::from(is_eq).to_value_ref()
+                    }
+                });
+
+                expr_builder
+                    .borrow_mut()
+                    .if_then_else((cur_is_eq, acc, cur))
             })
             .unwrap();
 
         let i8_type: LazyTypeInfo = self.services.type_manager.i8();
-        let x = self.services.expr_builder.borrow_mut().transmute(
+        let result = self.services.expr_builder.borrow_mut().transmute(
             result,
             i8_type.id().unwrap(),
             i8_type,
         );
         self.services.expr_builder.borrow_mut().to_int(
-            x,
+            result,
             IntType {
                 bit_size: i32::BITS as _,
                 is_signed: true,
