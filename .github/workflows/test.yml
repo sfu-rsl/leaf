@@ -18,8 +18,24 @@ jobs:
       - uses: ./.github/actions/build-book
 
   rust-test:
-    name: Run tests
+    name: Run tests (${{ matrix.backend }})
     runs-on: ubuntu-latest
+    env:
+      LEAF_TEST_RUNTIME: ${{ github.workspace }}/target/debug/${{ matrix.artifact }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: noop
+            artifact: libleafrt_noop.so
+          - backend: cf_tracer
+            artifact: libleafrt_cf_tracer.so
+          - backend: mdsan
+            artifact: libleafrt_mdsan.so
+          - backend: symex
+            artifact: libleafrt_symex.so
+          - backend: symex_no_implicit
+            artifact: libleafrt_symex_no_implicit.so
     steps:
       - uses: actions/checkout@v2
 
@@ -35,13 +51,6 @@ jobs:
 
       - name: Build
         run: cargo build --verbose
-
-      - name: Add no-op runtime to path
-        run: |
-          mkdir -p libleafrt_dir
-          ln -s target/debug/libleafrt_noop.so libleafrt_dir/libleafrt_noop.so
-        env:
-          LD_LIBRARY_PATH: $PWD/libleafrt_dir:$LD_LIBRARY_PATH     
 
       - name: Run tests
         run: cargo test --verbose
