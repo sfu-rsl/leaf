@@ -202,8 +202,8 @@ fn link_test_runtime() {
             runtime.display()
         );
 
-        let target_dir = env::current_exe()
-            .expect("Failed to locate the compiler test executable")
+        let executable = env::current_exe().expect("Failed to locate the compiler test executable");
+        let target_dir = executable
             .parent()
             .and_then(Path::parent)
             .expect("Compiler test executable is not under target/debug/deps");
