@@ -12,6 +12,7 @@ doctest = false
 
 [features]
 std = []
+testing = ["std"]
 logging = ["dep:tracing"]
 serde = ["dep:serde"]
 type_info = ["std", "dep:delegate"]

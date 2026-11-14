@@ -14,3 +14,14 @@ common = { workspace = true }
 backend = { path = "../../backends/cf_tracer", package = "runtime_backend_cf_tracer", features = [
     "runtime_access_raw_ptr",
 ] }
+
+[features]
+run_sample_sanity_tests = ["common/testing"]
+
+[[test]]
+name = "sample_sanity"
+path = "../sample_sanity_tests.rs"
+required-features = ["run_sample_sanity_tests"]
+
+[dev-dependencies]
+macros = { workspace = true }

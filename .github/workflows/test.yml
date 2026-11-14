@@ -17,31 +17,56 @@ jobs:
 
       - uses: ./.github/actions/build-book
 
-  rust-test:
-    name: Run tests
+  build:
+    name: Build workspace
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
 
       - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
 
-      - name: Prerequisite - Souffle
-        run: |
-          # Define the version you want to install
-          SOUFFLE_VERSION="2.5"  # Change this to the desired version
-          wget "https://github.com/souffle-lang/souffle/releases/download/${SOUFFLE_VERSION}/x86_64-ubuntu-2404-souffle-${SOUFFLE_VERSION}-Linux.deb"
-          sudo apt-get update
-          sudo dpkg -i "x86_64-ubuntu-2404-souffle-${SOUFFLE_VERSION}-Linux.deb" || sudo apt-get install -f
+      - name: Build workspace
+        run: cargo build --workspace --verbose
 
-      - name: Build
-        run: cargo build --verbose
+  compiler-test:
+    name: Run compiler tests
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v2
 
-      - name: Add no-op runtime to path
-        run: |
-          mkdir -p libleafrt_dir
-          ln -s target/debug/libleafrt_noop.so libleafrt_dir/libleafrt_noop.so
-        env:
-          LD_LIBRARY_PATH: $PWD/libleafrt_dir:$LD_LIBRARY_PATH     
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
 
-      - name: Run tests
-        run: cargo test --verbose
+      - name: Run compiler tests
+        run: cargo test --verbose -p compiler
+
+  rust-test:
+    name: Run tests (${{ matrix.backend }})
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      LEAFC: ${{ github.workspace }}/target/debug/leafc
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - backend: cf_tracer
+          - backend: mdsan
+          - backend: symex
+          - backend: symex_no_implicit
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: workspace
+
+      - name: Build compiler and runtime backends
+        run: cargo build --verbose -p compiler -p runtime_${{ matrix.backend }}
+
+      - name: Run sample sanity tests for backends
+        run: cargo test --verbose -p runtime_${{ matrix.backend }} --no-default-features --features run_sample_sanity_tests --test sample_sanity

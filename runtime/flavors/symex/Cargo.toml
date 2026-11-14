@@ -16,3 +16,14 @@ backend = { path = "../../backends/symex", package = "runtime_backend_symex", fe
     "runtime_access_raw_ptr",
     "release_value_loss_checks",
 ] }
+
+[features]
+run_sample_sanity_tests = ["common/testing"]
+
+[[test]]
+name = "sample_sanity"
+path = "../sample_sanity_tests.rs"
+required-features = ["run_sample_sanity_tests"]
+
+[dev-dependencies]
+macros = { workspace = true }
