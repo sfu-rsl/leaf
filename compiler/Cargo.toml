@@ -15,6 +15,7 @@ path = "src/utils/typedb_merge.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dev-dependencies]
+common = { workspace = true, features = ["testing"] }
 ignore = "0.4.22"
 
 [build-dependencies]

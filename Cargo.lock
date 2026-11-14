@@ -1274,7 +1274,6 @@ dependencies = [
  "ignore",
  "proc-macro2",
  "quote",
- "regex",
  "syn 2.0.119",
 ]
 
@@ -1623,18 +1622,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "regex"
-version = "1.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f020237b6c8eed93db2e2cb53c00c60a8e1bc73da7d073199a1180401450218d"
-dependencies = [
- "aho-corasick",
- "memchr",
- "regex-automata",
- "regex-syntax",
-]
-
-[[package]]
 name = "regex-automata"
 version = "0.4.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1855,6 +1842,7 @@ name = "runtime_cf_tracer"
 version = "0.3.0"
 dependencies = [
  "common",
+ "macros",
  "runtime_backend_cf_tracer",
 ]
 
@@ -1863,6 +1851,7 @@ name = "runtime_mdsan"
 version = "0.3.0"
 dependencies = [
  "common",
+ "macros",
  "runtime_backend_mdsan",
 ]
 
@@ -1871,6 +1860,7 @@ name = "runtime_noop"
 version = "0.3.0"
 dependencies = [
  "common",
+ "macros",
  "runtime",
 ]
 
@@ -1879,6 +1869,7 @@ name = "runtime_symex"
 version = "0.3.0"
 dependencies = [
  "common",
+ "macros",
  "runtime_backend_symex",
 ]
 
@@ -1887,6 +1878,7 @@ name = "runtime_symex_no_implicit"
 version = "0.3.0"
 dependencies = [
  "common",
+ "macros",
  "runtime_backend_symex",
 ]
 

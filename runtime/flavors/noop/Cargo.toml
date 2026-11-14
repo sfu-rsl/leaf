@@ -12,3 +12,14 @@ crate-type = ["cdylib"]
 [dependencies]
 common = { workspace = true }
 runtime = { path = "../../lib" }
+
+[features]
+run_sample_sanity_tests = ["common/testing"]
+
+[[test]]
+name = "sample_sanity"
+path = "../sample_sanity_tests.rs"
+required-features = ["run_sample_sanity_tests"]
+
+[dev-dependencies]
+macros = { workspace = true }

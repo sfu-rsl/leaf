@@ -28,6 +28,8 @@ pub mod program_dep;
 mod rkyving;
 #[cfg(feature = "serde")]
 mod serdes;
+#[cfg(feature = "testing")]
+pub mod testing;
 #[cfg(feature = "type_info")]
 pub mod type_info;
 #[cfg(feature = "z3")]

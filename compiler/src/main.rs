@@ -546,6 +546,7 @@ mod driver_args {
     pub(super) use rustc_session::config::CrateType;
 
     use super::{utils::file::*, *};
+    use common::log_warn;
 
     use std::path::{Path, PathBuf};
     use std::{env, fs, iter};
@@ -670,27 +671,44 @@ mod driver_args {
             fs::symlink_metadata(sym_path).is_ok()
         }
 
-        let sym_dylib_path = runtime_dylib_dir.join(FILE_RUNTIME_DYLIB);
-        if sym_link_exists(&sym_dylib_path) && sym_dylib_path.exists() {
-            return;
+        fn sym_link_points_to(sym_path: &Path, target_path: &Path) -> bool {
+            let (Ok(sym_target), Ok(target)) =
+                (fs::canonicalize(sym_path), fs::canonicalize(target_path))
+            else {
+                return false;
+            };
+            sym_target == target
         }
 
+        let sym_dylib_path = runtime_dylib_dir.join(FILE_RUNTIME_DYLIB);
         let physical_dylib_path = if use_noop_runtime {
             find_dependency_path(FILE_RUNTIME_DYLIB_NOOP, iter::empty())
         } else {
             find_dependency_path(FILE_RUNTIME_DYLIB_DEFAULT, iter::empty())
         };
+        if sym_link_exists(&sym_dylib_path)
+            && sym_link_points_to(&sym_dylib_path, &physical_dylib_path)
+        {
+            return;
+        }
 
         // NOTE: Parallel execution of the compiler may cause race conditions.
         // FIXME: Come up with a better solution.
         retry(MAX_RETRY, std::time::Duration::from_secs(1), || {
             if sym_link_exists(&sym_dylib_path) {
-                if sym_dylib_path.exists() {
+                if sym_link_points_to(&sym_dylib_path, &physical_dylib_path) {
                     return Ok(());
-                } else {
-                    // Invalid symbolic link.
-                    fs::remove_file(&sym_dylib_path)?;
                 }
+                let stale_target = fs::read_link(&sym_dylib_path)
+                    .map(|path| path.display().to_string())
+                    .unwrap_or_else(|_| "<unavailable>".to_owned());
+                fs::remove_file(&sym_dylib_path)?;
+                log_warn!(
+                    "Removed stale runtime dylib symlink `{}` -> `{}`; expected `{}`",
+                    sym_dylib_path.display(),
+                    stale_target,
+                    physical_dylib_path.display()
+                );
             }
 
             #[cfg(unix)]

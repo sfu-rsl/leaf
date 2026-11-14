@@ -1,12 +1,7 @@
-branching/assert/misaligned.rs
-branching/assert/null_ptr_deref.rs
-casting/dyn_star/symbolic.rs
-casting/dyn_star/symbolic_inner.rs
-casting/pointer/expose/sym_ptr_to_usize.rs
-casting/transmute/sym_partial_mid.rs
+assignment/casting/pointer/expose/sym_ptr_to_usize.rs
+assignment/casting/transmute/sym_partial_mid.rs
 function/async/basic.rs
 function/coroutines/basic.rs
-place/projection/unwrap_unsafe_binder/main.rs
 sym_place/read/addr_of.rs
 sym_place/read/agg_raw_ptr.rs
 sym_place/read/deref_ptr.rs
@@ -16,7 +11,7 @@ sym_place/read/index_on_transmute.rs
 sym_place/read/ptr_metadata_len_late_use.rs
 sym_place/read/ptr_metadata_len_on_transmute.rs
 sym_place/read/ptr_metadata_len_on_agg_raw_ptr.rs
-sym_place/read/long_chain.rs
 sym_place/read/ptr_metadata_on_transmute.rs
 sym_place/read/transmute_on_index.rs
+sym_place/read/long_chain.rs
 sym_place/write/index.rs
