@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::process::ExitStatus;
+use std::sync::Once;
 
 use macros::{gen_tests_rs, gen_tests_toml};
 
@@ -15,7 +16,10 @@ const ENV_LEAFC_CODEGEN_ALL_MIR: &str = "LEAFC_CODEGEN_ALL_MIR";
 const ENV_RUSTC: &str = "RUSTC";
 const ENV_RUST_FLAGS: &str = "RUSTFLAGS";
 const ENV_RUST_BACKTRACE: &str = "RUST_BACKTRACE";
+const ENV_TEST_RUNTIME: &str = "LEAF_TEST_RUNTIME";
 const LOG_CONFIG: &str = "info";
+const FILE_RUNTIME_DYLIB: &str = "libleafrt.so";
+const DIR_RUNTIME_DYLIB: &str = "runtime_noop";
 
 // Disable warnings to avoid polluting the output
 const RUST_FLAGS: [&str; 2] = ["-Awarnings", "-Coverflow-checks=off"];
@@ -137,6 +141,7 @@ fn path_in_proj_root(name: &str) -> std::path::PathBuf {
 }
 
 fn set_leafc_env(cmd: &mut Command) -> &mut Command {
+    link_test_runtime();
     cmd.get_envs()
         .filter_map(|(k, _)| k.to_str())
         .filter(|k| k.starts_with("CARGO_"))
@@ -182,6 +187,64 @@ fn run_compilation(src_file: &Path) -> CompilationResult {
             output: out_file,
         })
         .expect("Failed to spawn and wait for command termination")
+}
+
+fn link_test_runtime() {
+    static LINK_RUNTIME: Once = Once::new();
+    LINK_RUNTIME.call_once(|| {
+        let Some(runtime) = env::var_os(ENV_TEST_RUNTIME) else {
+            return;
+        };
+        let runtime = PathBuf::from(runtime);
+        assert!(
+            runtime.is_file(),
+            "Configured test runtime does not exist: {}",
+            runtime.display()
+        );
+
+        let executable = env::current_exe().expect("Failed to locate the compiler test executable");
+        let target_dir = executable
+            .parent()
+            .and_then(Path::parent)
+            .expect("Compiler test executable is not under target/debug/deps");
+        let runtime_dir = target_dir.join(DIR_RUNTIME_DYLIB);
+        fs::create_dir_all(&runtime_dir).unwrap_or_else(|error| {
+            panic!(
+                "Failed to create runtime directory {}: {error}",
+                runtime_dir.display()
+            )
+        });
+        let link = runtime_dir.join(FILE_RUNTIME_DYLIB);
+        if fs::symlink_metadata(&link).is_ok() {
+            fs::remove_file(&link).unwrap_or_else(|error| {
+                panic!(
+                    "Failed to replace test runtime link {}: {error}",
+                    link.display()
+                )
+            });
+        }
+
+        link_runtime(&runtime, &link);
+    });
+}
+
+fn link_runtime(runtime: &Path, link: &Path) {
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(runtime, link).unwrap_or_else(|error| {
+        panic!(
+            "Failed to link test runtime {} as {}: {error}",
+            runtime.display(),
+            link.display()
+        )
+    });
+    #[cfg(windows)]
+    std::os::windows::fs::symlink_file(runtime, link).unwrap_or_else(|error| {
+        panic!(
+            "Failed to link test runtime {} as {}: {error}",
+            runtime.display(),
+            link.display()
+        )
+    });
 }
 
 struct CompilationResult {
