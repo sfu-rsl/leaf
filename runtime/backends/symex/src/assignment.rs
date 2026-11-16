@@ -1,4 +1,7 @@
 use core::{iter, ops::DerefMut};
+use std::ptr;
+
+use itertools::Either;
 
 use common::type_info::TagEncodingInfo;
 
@@ -283,9 +286,13 @@ impl<EB: SymExValueExprBuilder> AssignmentHandler for SymExAssignmentHandler<'_,
         self.set_adt_value(AdtKind::Struct, fields.into_iter())
     }
 
-    fn raw_ptr_from(self, data_ptr: Self::Operand, metadata: Self::Operand, _is_mutable: bool) {
-        let data_ptr = self.ensure_type_of_ptr_for_raw_ptr(data_ptr);
-        self.adt_from([data_ptr, metadata].into_iter(), None)
+    fn raw_ptr_from(mut self, data_ptr: Self::Operand, metadata: Self::Operand, _is_mutable: bool) {
+        let raw_ptr = self.preprocess_raw_ptr_value(data_ptr, metadata);
+
+        match raw_ptr {
+            Either::Left(ptr) => self.set(ptr),
+            Either::Right([data_ptr, meta]) => self.adt_from([data_ptr, meta].into_iter(), None),
+        }
     }
 
     // TODO: Need to add support for the Deinit MIR instruction to have this working properly.
@@ -489,7 +496,40 @@ impl<EB> SymExAssignmentHandler<'_, '_, EB> {
         }
     }
 
-    fn ensure_type_of_ptr_for_raw_ptr(&self, data_ptr: SymExValue) -> SymExValue
+    fn preprocess_raw_ptr_value(
+        &self,
+        data_ptr: SymExValue,
+        metadata: SymExValue,
+    ) -> Either<SymExValue, [SymExValue; 2]>
+    where
+        EB: SymExValueExprBuilder,
+    {
+        if !cfg!(feature = "implicit_flow") && !data_ptr.is_symbolic() && !metadata.is_symbolic() {
+            return Either::Left(Implied::by_unknown(UnevalValue::Some.to_value_ref()));
+        }
+
+        let raw_ptr_kind = self
+            .type_manager()
+            .layouts()
+            .resolve_raw_ptr_kind(self.dest.type_id());
+
+        use leaf_runtime::type_info::RawPtrKind;
+        match raw_ptr_kind {
+            RawPtrKind::Thin(type_info) => Either::Left(
+                self.ensure_type_of_ptr_for_raw_ptr(data_ptr, LazyTypeInfo::Fetched(type_info)),
+            ),
+            RawPtrKind::Fat([(_, type_id, _, _), _]) => Either::Right([
+                self.ensure_type_of_ptr_for_raw_ptr(data_ptr, LazyTypeInfo::Id(type_id)),
+                metadata,
+            ]),
+        }
+    }
+
+    fn ensure_type_of_ptr_for_raw_ptr(
+        &self,
+        data_ptr: SymExValue,
+        field_ty: LazyTypeInfo,
+    ) -> SymExValue
     where
         EB: SymExValueExprBuilder,
     {
@@ -497,16 +537,8 @@ impl<EB> SymExAssignmentHandler<'_, '_, EB> {
             return data_ptr;
         }
 
-        let field_ty = self
-            .type_manager()
-            .layouts()
-            .resolve_adt_fields(self.dest.type_id(), None)
-            .next()
-            .unwrap()
-            .1;
-
         self.expr_builder()
-            .transmute(data_ptr, field_ty, LazyTypeInfo::from(field_ty))
+            .transmute(data_ptr, field_ty.id().unwrap(), field_ty)
     }
 
     fn to_expr_builder_binary_op(
