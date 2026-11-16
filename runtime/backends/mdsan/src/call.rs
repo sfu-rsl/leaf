@@ -258,7 +258,14 @@ mod tupling {
                         variables_state_factory(),
                     ))
                 },
-                |places| core::iter::repeat_n(MdSanValue::non_rel(), places.len()).collect(),
+                |places| {
+                    debug_assert_eq!(
+                        places.len(),
+                        2,
+                        "Expected to happen only in FnOnce implementation of a non-capturing closure",
+                    );
+                    vec![MdSanValue::non_rel()]
+                },
             )
         }
     }
