@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 pub use common::{
     type_info::*,
     types::{FieldIndex, PointerOffset, VariantIndex},
@@ -138,6 +140,13 @@ impl FieldsShapeInfoExt for FieldsShapeInfo {
     }
 }
 
+pub type ResolvedFieldInfo = (FieldIndex, TypeId, PointerOffset, TypeSize);
+
+pub enum RawPtrKind<'t> {
+    Thin(&'t TypeInfo),
+    Fat([ResolvedFieldInfo; 2]),
+}
+
 pub trait TypeLayoutResolver<'t> {
     fn resolve_array_elements(
         &self,
@@ -150,7 +159,9 @@ pub trait TypeLayoutResolver<'t> {
         &self,
         type_id: TypeId,
         variant: Option<VariantIndex>,
-    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't;
+    ) -> impl Iterator<Item = ResolvedFieldInfo> + 't;
+
+    fn resolve_raw_ptr_kind(&self, type_id: TypeId) -> RawPtrKind<'t>;
 }
 
 struct LayoutResolver<'a, D: ?Sized>(&'a D);
@@ -177,7 +188,7 @@ impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutReso
         &self,
         type_id: TypeId,
         variant: Option<crate::abs::VariantIndex>,
-    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't {
+    ) -> impl Iterator<Item = ResolvedFieldInfo> + 't {
         let ty = self.0.get_type(&type_id);
         let variant = match variant {
             Some(variant) => ty.get_variant(variant).unwrap(),
@@ -187,30 +198,57 @@ impl<'a, 't, D: TypeDatabase<'t> + ?Sized> TypeLayoutResolver<'t> for LayoutReso
         use FieldsShapeInfo::*;
         match &variant.fields {
             Struct(shape) | Union(shape) => {
-                let fields = shape.fields_in_offset_order();
-                if cfg!(debug_assertions) {
-                    if matches!(&variant.fields, Union(..)) {
-                        assert!(
-                            fields.clone().into_iter().all(|(_, f)| f.offset == 0),
-                            "Union fields must have zero offset"
-                        );
-                    }
-                }
-
-                // We collect them to break the borrow
-                let field_sizes = fields
-                    .clone()
-                    .map(|(_, f)| self.0.get_size(&f.ty).unwrap())
-                    .collect::<Vec<_>>();
-                fields
-                    .zip(field_sizes.into_iter())
-                    .map(|((index, f), size)| (index, f.ty, f.offset, size))
+                let is_union = matches!(&variant.fields, Union(..));
+                self.resolve_struct_shape_fields(shape)
+                    .inspect(move |(_, _, offset, _)| {
+                        if cfg!(debug_assertions) {
+                            if is_union {
+                                assert_eq!(*offset, 0, "Union fields must have zero offset");
+                            }
+                        }
+                    })
             }
             NoFields | Array(..) => panic!(
                 "Unexpected shape for fields of an ADT: {:?}",
                 variant.fields
             ),
         }
+    }
+
+    fn resolve_raw_ptr_kind(&self, type_id: TypeId) -> RawPtrKind<'t> {
+        let ty = self.0.get_type(&type_id);
+
+        let panic_unexpected = || -> ! { panic!("Unexpected type for raw pointer: {:?}", ty) };
+        let variant = ty.as_single_variant().unwrap_or_else(|| panic_unexpected());
+
+        use FieldsShapeInfo::*;
+        match &variant.fields {
+            NoFields => RawPtrKind::Thin(ty),
+            Struct(shape) => RawPtrKind::Fat(
+                self.resolve_struct_shape_fields(&shape)
+                    .collect_array()
+                    .unwrap_or_else(|| panic_unexpected()),
+            ),
+            Array(..) | Union(..) => panic_unexpected(),
+        }
+    }
+}
+
+impl<'a, 't, D: TypeDatabase<'t> + ?Sized> LayoutResolver<'a, D> {
+    fn resolve_struct_shape_fields(
+        &self,
+        shape: &'t StructShape,
+    ) -> impl Iterator<Item = (FieldIndex, TypeId, PointerOffset, TypeSize)> + 't {
+        let fields = shape.fields_in_offset_order();
+
+        // We collect them to break the borrow
+        let field_sizes = fields
+            .clone()
+            .map(|(_, f)| self.0.get_size(&f.ty).unwrap())
+            .collect::<Vec<_>>();
+        fields
+            .zip(field_sizes.into_iter())
+            .map(|((index, f), size)| (index, f.ty, f.offset, size))
     }
 }
 
