@@ -8,6 +8,7 @@ edition = "2021"
 name = "macros"
 path = "src/lib.rs"
 proc-macro = true
+test = false
 
 [dependencies]
 ignore = "0.4"
