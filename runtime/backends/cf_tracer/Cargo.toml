@@ -9,6 +9,7 @@ edition = "2021"
 [lib]
 name = "leafrtb_cf_tracer"
 crate-type = ["rlib"]
+test = false
 
 [profile.release]
 debug = true

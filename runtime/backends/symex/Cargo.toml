@@ -9,6 +9,7 @@ edition = "2021"
 [lib]
 name = "leafrtb_symex"
 crate-type = ["rlib"]
+test = false
 
 [profile.release]
 debug = true

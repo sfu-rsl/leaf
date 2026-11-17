@@ -8,6 +8,7 @@ edition = "2021"
 [lib]
 name = "leafrt_mdsan"
 crate-type = ["cdylib"]
+test = false
 
 [dependencies]
 common = { workspace = true }

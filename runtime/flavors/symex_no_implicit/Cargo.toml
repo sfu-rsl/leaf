@@ -8,6 +8,7 @@ edition = "2021"
 [lib]
 name = "leafrt_symex_no_implicit"
 crate-type = ["cdylib"]
+test = false
 
 [dependencies]
 common = { workspace = true }
