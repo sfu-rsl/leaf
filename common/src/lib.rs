@@ -18,12 +18,12 @@ pub mod building;
 pub mod conc_loop;
 #[cfg(feature = "config")]
 pub mod config;
-#[cfg(feature = "directed")]
-pub mod directed;
 #[cfg(feature = "logging")]
 pub mod logging;
 #[cfg(feature = "program_dep")]
 pub mod program_dep;
+#[cfg(feature = "program_map")]
+pub mod program_map;
 #[cfg(feature = "rkyv")]
 mod rkyving;
 #[cfg(feature = "serde")]

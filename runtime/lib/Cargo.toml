@@ -24,7 +24,7 @@ common = { workspace = true, features = [
     "trace_types",
     "z3",
     "answers",
-    "directed",
+    "program_map",
     "program_dep",
     "ffi_ty_std_convert",
 ] }
@@ -60,4 +60,3 @@ implicit_flow = []
 
 runtime_access_raw_ptr = ["common/type_db_access_unsync"]
 runtime_access_mutex = []
-

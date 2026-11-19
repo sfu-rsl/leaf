@@ -156,7 +156,7 @@ macro_rules! array_backed_struct {
 #[cfg(any(feature = "type_info"))]
 pub(crate) use array_backed_struct;
 
-#[cfg(any(feature = "type_info_rw", feature = "directed"))]
+#[cfg(any(feature = "type_info_rw", feature = "program_map"))]
 mod msg_err {
     use core::{error::Error, fmt::Display};
     use std::boxed::Box;
@@ -196,7 +196,7 @@ mod msg_err {
         }
     }
 }
-#[cfg(any(feature = "type_info_rw", feature = "directed"))]
+#[cfg(any(feature = "type_info_rw", feature = "program_map"))]
 pub(crate) use msg_err::MessagedError;
 
 mod comma_sep {
