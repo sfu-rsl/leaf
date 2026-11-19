@@ -28,7 +28,7 @@ common = { workspace = true, features = [
     "type_info_rw",
     "config",
     "logging",
-    "directed",
+    "program_map",
     "program_dep",
 ] }
 macros = { workspace = true }

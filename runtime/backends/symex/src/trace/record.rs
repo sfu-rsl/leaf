@@ -5,8 +5,8 @@ use serde::{Serialize, Serializer};
 use serde_json::Serializer as JsonSerializer;
 
 use common::{
-    directed::RawCaseValue,
     log_debug, log_warn,
+    program_map::RawCaseValue,
     types::{InstanceKindId, trace::BranchRecord},
 };
 

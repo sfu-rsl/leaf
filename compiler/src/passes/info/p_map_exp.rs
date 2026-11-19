@@ -4,11 +4,11 @@ use rustc_middle::{
 };
 
 use common::{
-    directed::{
+    log_info,
+    program_map::{
         BasicBlockIndex, CallDebugInfo, CallGraphEdgeDestination, CfgConstraint,
         CfgEdgeDestination, ControlFlowGraph, ProgramMap,
     },
-    log_info,
 };
 
 use crate::utils::{
