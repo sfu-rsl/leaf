@@ -83,6 +83,9 @@ fn visit_and_add<'tcx>(p_map: &mut ProgramMap, tcx: TyCtxt<'tcx>, body: &Body<'t
     }
 
     p_map.cfgs.insert(key, cfg::from_body(body));
+    p_map
+        .assignment_id_maps
+        .insert(key, assignment_id_map::from_body(tcx, body));
     p_map.ret_points.insert(key, return_points::from_body(body));
     p_map
         .call_graph
@@ -91,6 +94,20 @@ fn visit_and_add<'tcx>(p_map: &mut ProgramMap, tcx: TyCtxt<'tcx>, body: &Body<'t
         .debug_info
         .func_names
         .insert(key, debug_info::function_name(tcx, body));
+}
+
+mod assignment_id_map {
+    use rustc_middle::{mir::Body, ty::TyCtxt};
+
+    use common::program_map::AssignmentIdMap;
+
+    use crate::utils::assignment_ids::assignment_ids_split_agnostic;
+
+    pub(super) fn from_body<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> AssignmentIdMap {
+        assignment_ids_split_agnostic(tcx, body)
+            .map(|(location, _, _)| location.block.as_u32())
+            .collect()
+    }
 }
 
 mod cfg {

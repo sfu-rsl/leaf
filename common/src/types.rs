@@ -15,6 +15,9 @@ pub type TypeId = NonZero<u128>;
 
 pub type AssignmentId = u16;
 
+#[cfg(feature = "std")]
+pub type AssignmentIdMap = std::vec::Vec<BasicBlockIndex>;
+
 // FIXME: Convert to enum
 pub type InstanceKindDiscr = u8;
 

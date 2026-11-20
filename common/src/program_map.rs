@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::types::InstanceKindId;
-pub use super::types::{BasicBlockIndex, trace::RawCaseValue};
+pub use super::types::{AssignmentId, AssignmentIdMap, BasicBlockIndex, trace::RawCaseValue};
 use super::utils::MessagedError;
 
 mod cfg {
@@ -275,6 +275,8 @@ pub use debug_info::DebugInfo;
 #[derive(Default, Clone, Serialize, Deserialize)]
 pub struct ProgramMap<I: Eq + Hash = InstanceKindId> {
     pub cfgs: HashMap<I, ControlFlowGraph>,
+    #[serde(default)]
+    pub assignment_id_maps: HashMap<I, AssignmentIdMap>,
     pub ret_points: HashMap<I, ReturnPoints>,
     pub call_graph: CallGraph<I>,
     pub entry_points: EntryPoints<I>,
