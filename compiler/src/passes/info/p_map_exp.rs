@@ -268,7 +268,10 @@ mod call_graph {
         ty::TyCtxt,
     };
 
-    use common::program_map::{CallDebugInfo, CallGraphEdgeDestination};
+    use common::{
+        program_map::{CallDebugInfo, CallGraphEdgeDestination},
+        types::InstanceKindId,
+    };
 
     use crate::utils::mir::{InstanceKindExt, TyCtxtExt};
 
@@ -284,33 +287,35 @@ mod call_graph {
                 continue;
             };
 
+            let debug_info = CallDebugInfo {
+                location: tcx.sess.source_map().span_to_short_string(
+                    *fn_span,
+                    rustc_span::RemapPathScopeComponents::DEBUGINFO,
+                ),
+            };
+
+            let callee_ty = func.ty(body.local_decls(), tcx);
             use rustc_type_ir::TyKind::*;
-            match func.ty(body.local_decls(), tcx).kind() {
+            match callee_ty.kind() {
                 FnDef(def_id, generic_args)
                 | Closure(def_id, generic_args)
                 | Coroutine(def_id, generic_args)
                 | CoroutineClosure(def_id, generic_args) => {
-                    if let Some(instance_kind) = tcx.try_resolve_instance_raw(
+                    let instance_kind = tcx.try_resolve_instance_raw(
                         tcx.typing_env_in_body(body.source.def_id()),
                         *def_id,
                         generic_args,
-                    ) {
-                        calls.push((
-                            index.as_u32(),
-                            instance_kind.def.to_plain_id(tcx),
-                            CallDebugInfo {
-                                location: tcx.sess.source_map().span_to_short_string(
-                                    *fn_span,
-                                    rustc_span::RemapPathScopeComponents::DEBUGINFO,
-                                ),
-                            },
-                        ));
-                    }
+                    );
+                    calls.push((
+                        index.as_u32(),
+                        instance_kind
+                            .map(|instance| instance.def.to_plain_id(tcx))
+                            .unwrap_or(InstanceKindId::INVALID),
+                        debug_info,
+                    ));
                 }
-                FnPtr(..) => {
-                    // TODO
-                }
-                _ => {}
+                FnPtr(..) => calls.push((index.as_u32(), InstanceKindId::INVALID, debug_info)),
+                _ => unreachable!("Unexpected callee type: {:?}", callee_ty),
             }
         }
 
