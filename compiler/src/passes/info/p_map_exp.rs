@@ -1,25 +1,13 @@
-use rustc_middle::{
-    mir::{BasicBlock, Body, HasLocalDecls},
-    ty::{InstanceKind, TyCtxt},
-};
+use rustc_middle::{mir::Body, ty::TyCtxt};
 
 use common::{
     log_info,
-    program_map::{
-        BasicBlockIndex, CallDebugInfo, CallGraphEdgeDestination, CfgConstraint,
-        CfgEdgeDestination, ControlFlowGraph, ProgramMap,
-    },
+    program_map::{ProgramMap, rw::write_program_map_to},
 };
 
-use crate::utils::{
-    file::InfoArtifact,
-    mir::{InstanceKindExt, TyCtxtExt},
-};
+use crate::utils::{file::InfoArtifact, mir::InstanceKindExt};
 
 use super::super::{CompilationPass, OverrideFlags, Storage, StorageExt};
-
-type Calls = Vec<CallGraphEdgeDestination>;
-type ReturnPoints = Vec<BasicBlockIndex>;
 
 #[derive(Default)]
 pub(crate) struct ProgramMapExporter {
@@ -73,11 +61,7 @@ impl CompilationPass for ProgramMapExporter {
                 visit_and_add(&mut p_map, tcx, tcx.instance_mir(instance));
             });
 
-        p_map.entry_points.extend(
-            tcx.entry_fn(())
-                .iter()
-                .map(|(def_id, _)| InstanceKind::Item(*def_id).to_plain_id(tcx)),
-        );
+        entry_points::add_to(tcx, &mut p_map);
 
         let artifact = InfoArtifact::new(
             tcx,
@@ -86,9 +70,7 @@ impl CompilationPass for ProgramMapExporter {
             EXTENSION_MAP,
         );
 
-        p_map
-            .write(&artifact.out_file)
-            .expect("Failed to write program map");
+        write_program_map_to(&p_map, &artifact.out_file).expect("Failed to write program map");
 
         artifact.write_compatibility_copy(FILENAME_MAP, "program map");
     }
@@ -100,151 +82,277 @@ fn visit_and_add<'tcx>(p_map: &mut ProgramMap, tcx: TyCtxt<'tcx>, body: &Body<'t
         return;
     }
 
-    let data = visit_body(tcx, &body);
-    p_map.cfgs.insert(key, data.0);
-    p_map.ret_points.insert(key, data.1);
-    p_map.call_graph.insert(key, data.2);
+    p_map.cfgs.insert(key, cfg::from_body(body));
+    p_map.ret_points.insert(key, return_points::from_body(body));
+    p_map
+        .call_graph
+        .insert(key, call_graph::from_body(tcx, body));
     p_map
         .debug_info
         .func_names
-        .insert(key, tcx.def_path_str(body.source.def_id()));
+        .insert(key, debug_info::function_name(tcx, body));
 }
 
-fn visit_body<'tcx>(
-    tcx: TyCtxt<'tcx>,
-    body: &Body<'tcx>,
-) -> (ControlFlowGraph, ReturnPoints, Calls) {
-    let mut cfg = ControlFlowGraph::new();
-    let mut ret_points = Vec::new();
-    let mut calls = Calls::new();
+mod cfg {
+    use rustc_middle::mir::{BasicBlock, Body};
 
-    let predecessors_map = body.basic_blocks.predecessors();
-    // FIXME: Can be replaced with a preprocessed map.
-    let merged_chain_head = |bb: BasicBlock| {
-        let mut current = bb;
-        // Walk back goto predecessors.
-        while let Some(prev) = {
-            let predecessors = &predecessors_map[current];
-            if predecessors.len() != 1 {
-                None
-            } else {
-                let prev = predecessors[0];
-                body.basic_blocks[prev]
-                    .terminator()
-                    .kind
-                    .as_goto()
-                    .is_some()
-                    .then_some(prev)
+    use core::range::RangeInclusive;
+
+    use common::program_map::{BasicBlockIndex, CfgConstraint, CfgEdge, ControlFlowGraph};
+
+    type BlockRangeAndEdges = (RangeInclusive<BasicBlockIndex>, Vec<CfgEdge>);
+
+    pub(super) fn from_body(body: &Body<'_>) -> ControlFlowGraph {
+        let predecessors_map = body.basic_blocks.predecessors();
+        let blocks_successors = body.basic_blocks.iter_enumerated().map(|(index, _)| {
+            (
+                index.as_u32(),
+                terminator_edges_cleanup_agnostic(body, index),
+            )
+        });
+        let nodes = group_block_strings(blocks_successors, |block| {
+            let block: BasicBlock = block.into();
+            predecessors_map[block].len() == 1
+        });
+        build_cfg(nodes)
+    }
+
+    fn terminator_edges_cleanup_agnostic(body: &Body<'_>, block: BasicBlock) -> Vec<CfgEdge> {
+        use rustc_middle::mir::{CallReturnPlaces, TerminatorEdges};
+
+        match body.basic_blocks[block].terminator().edges() {
+            TerminatorEdges::None => Vec::new(),
+            TerminatorEdges::Single(target) | TerminatorEdges::Double(target, _) => {
+                vec![(target.as_u32(), None)]
             }
-        } {
-            current = prev;
-        }
-        current
-    };
-
-    for (index, block) in body.basic_blocks.iter_enumerated() {
-        use rustc_middle::mir::TerminatorKind::*;
-
-        let mut insert_to_cfg = |targets: Vec<CfgEdgeDestination>| {
-            cfg.insert(
-                merged_chain_head(index).as_u32(),
-                targets
+            TerminatorEdges::AssignOnReturn { return_, place, .. } => match place {
+                CallReturnPlaces::Call(_) | CallReturnPlaces::Yield(_) => return_
+                    .first()
+                    .map(|target| (target.as_u32(), None))
                     .into_iter()
-                    .map(|(bb, c)| (merged_chain_head(bb.into()).as_u32(), c))
                     .collect(),
-            );
-        };
-
-        let mut insert_to_calls = |def_id, generic_args, dbg| {
-            if let Some(instance_kind) = tcx.try_resolve_instance_raw(
-                tcx.typing_env_in_body(body.source.def_id()),
-                def_id,
-                generic_args,
-            ) {
-                calls.push((index.as_u32(), instance_kind.def.to_plain_id(tcx), dbg));
-            }
-        };
-
-        // FIXME: Utilize the `edges` instead.
-        match &block.terminator().kind {
-            FalseEdge {
-                real_target: target,
-                imaginary_target: _,
-            }
-            | FalseUnwind {
-                real_target: target,
-                unwind: _,
-            }
-            | Drop {
-                target, unwind: _, ..
-            }
-            | Goto { target } => {
-                insert_to_cfg(vec![(target.as_u32(), None)]);
-            }
-            SwitchInt { discr: _, targets } => {
-                let mut successors: Vec<CfgEdgeDestination> = Vec::new();
-                for (value, block) in targets.iter() {
-                    successors.push((block.as_u32(), Some(CfgConstraint::Case(value))));
+                CallReturnPlaces::InlineAsm(_) => return_
+                    .iter()
+                    .map(|target| (target.as_u32(), None))
+                    .collect(),
+            },
+            TerminatorEdges::SwitchInt { targets, .. } => {
+                let mut successors = Vec::new();
+                for (value, target) in targets.iter() {
+                    successors.push((target.as_u32(), Some(CfgConstraint::Case(value))));
                 }
                 if !body.basic_blocks[targets.otherwise()].is_empty_unreachable() {
                     successors.push((targets.otherwise().as_u32(), Some(CfgConstraint::Otherwise)));
                 }
-                insert_to_cfg(successors);
-            }
-            Assert {
-                target,
-                expected,
-                unwind: _,
-                ..
-            } => {
-                // TODO: Handle unwind
-                insert_to_cfg(vec![(
-                    target.as_u32(),
-                    Some(CfgConstraint::Case(*expected as u128)),
-                )]);
-            }
-            Return => ret_points.push(index.as_u32()),
-            UnwindResume | UnwindTerminate(_) | Unreachable | CoroutineDrop => {}
-            kind @ (Call { func, fn_span, .. } | TailCall { func, fn_span, .. }) => {
-                use rustc_type_ir::TyKind::*;
-                match func.ty(body.local_decls(), tcx).kind() {
-                    FnDef(def_id, generic_args)
-                    | Closure(def_id, generic_args)
-                    | Coroutine(def_id, generic_args)
-                    | CoroutineClosure(def_id, generic_args) => {
-                        let dbg = CallDebugInfo {
-                            location: tcx.sess.source_map().span_to_short_string(
-                                *fn_span,
-                                rustc_span::RemapPathScopeComponents::DEBUGINFO,
-                            ),
-                        };
-                        insert_to_calls(*def_id, generic_args, dbg);
-                    }
-                    FnPtr(..) => {
-                        // TODO
-                    }
-                    _ => {}
-                }
-
-                if let Call {
-                    target: Some(target),
-                    ..
-                } = kind
-                {
-                    insert_to_cfg(vec![(target.as_u32(), None)]);
-                }
-            }
-            Yield { resume, .. } => {
-                insert_to_cfg(vec![(resume.as_u32(), None)]);
-            }
-
-            InlineAsm { targets, .. } => {
-                // TODO: Handle unwind
-                for target in targets.iter() {
-                    insert_to_cfg(vec![(target.as_u32(), None)]);
-                }
+                successors
             }
         }
     }
-    (cfg, ret_points, calls)
+
+    fn group_block_strings(
+        blocks: impl IntoIterator<Item = (BasicBlockIndex, Vec<CfgEdge>)>,
+        has_single_predecessor: impl Fn(BasicBlockIndex) -> bool,
+    ) -> Vec<BlockRangeAndEdges> {
+        let mut nodes: Vec<BlockRangeAndEdges> = Vec::new();
+
+        for (block, successors) in blocks {
+            let continues_previous = nodes.last().is_some_and(|(block_range, outgoing_edges)| {
+                block_range.last.checked_add(1) == Some(block)
+                    && outgoing_edges.len() == 1
+                    && outgoing_edges[0].0 == block
+                    && outgoing_edges[0].1.is_none()
+                    && has_single_predecessor(block)
+            });
+
+            if continues_previous {
+                let previous = nodes.last_mut().unwrap();
+                previous.0.last = block;
+                previous.1 = successors;
+            } else {
+                nodes.push((RangeInclusive::from(block..=block), successors));
+            }
+        }
+
+        nodes
+    }
+
+    fn build_cfg(nodes: Vec<BlockRangeAndEdges>) -> ControlFlowGraph {
+        let mut cfg = ControlFlowGraph::new();
+        for (block_range, _) in &nodes {
+            let _ = cfg
+                .insert_range(*block_range, Vec::new())
+                .expect("CFG node ranges must be valid and non-overlapping");
+        }
+
+        for (block_range, outgoing_edges) in nodes {
+            let outgoing_edges = outgoing_edges
+                .into_iter()
+                .map(|(target, constraint)| {
+                    let target_node = cfg
+                        .node_containing(target)
+                        .expect("MIR successor must belong to a CFG node");
+                    (target_node, constraint)
+                })
+                .collect();
+            let _ = cfg
+                .insert_range(block_range, outgoing_edges)
+                .expect("CFG node ranges must be valid and non-overlapping");
+        }
+
+        cfg
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn node_ranges(nodes: &[BlockRangeAndEdges]) -> Vec<(BasicBlockIndex, BasicBlockIndex)> {
+            nodes
+                .iter()
+                .map(|(range, _)| (range.start, range.last))
+                .collect()
+        }
+
+        #[test]
+        fn groups_linear_blocks_into_one_range() {
+            let nodes = group_block_strings(
+                vec![(0, vec![(1, None)]), (1, vec![(2, None)]), (2, Vec::new())],
+                |_| true,
+            );
+
+            assert_eq!(node_ranges(&nodes), vec![(0, 2)]);
+            assert!(nodes[0].1.is_empty());
+        }
+
+        #[test]
+        fn keeps_non_index_ordered_linear_chain_in_separate_ranges() {
+            let nodes = group_block_strings(
+                vec![(0, vec![(2, None)]), (1, Vec::new()), (2, vec![(1, None)])],
+                |_| true,
+            );
+
+            assert_eq!(node_ranges(&nodes), vec![(0, 0), (1, 1), (2, 2)]);
+        }
+
+        #[test]
+        fn keeps_branch_and_join_targets_as_separate_nodes() {
+            let nodes = group_block_strings(
+                vec![
+                    (0, vec![(1, None), (2, None)]),
+                    (1, vec![(3, None)]),
+                    (2, vec![(3, None)]),
+                    (3, vec![(4, None)]),
+                    (4, Vec::new()),
+                ],
+                |block| block != 3,
+            );
+
+            assert_eq!(node_ranges(&nodes), vec![(0, 0), (1, 1), (2, 2), (3, 4)]);
+        }
+
+        #[test]
+        fn call_normal_continuation_is_sequential() {
+            let nodes = group_block_strings(
+                vec![(0, vec![(1, None)]), (1, vec![(2, None)]), (2, Vec::new())],
+                |_| true,
+            );
+
+            assert_eq!(node_ranges(&nodes), vec![(0, 2)]);
+        }
+    }
+}
+
+mod call_graph {
+    use rustc_middle::{
+        mir::{Body, HasLocalDecls, TerminatorKind},
+        ty::TyCtxt,
+    };
+
+    use common::program_map::{CallDebugInfo, CallGraphEdgeDestination};
+
+    use crate::utils::mir::{InstanceKindExt, TyCtxtExt};
+
+    type Calls = Vec<CallGraphEdgeDestination>;
+
+    pub(super) fn from_body<'tcx>(tcx: TyCtxt<'tcx>, body: &Body<'tcx>) -> Calls {
+        let mut calls = Calls::new();
+
+        for (index, block) in body.basic_blocks.iter_enumerated() {
+            let (TerminatorKind::Call { func, fn_span, .. }
+            | TerminatorKind::TailCall { func, fn_span, .. }) = &block.terminator().kind
+            else {
+                continue;
+            };
+
+            use rustc_type_ir::TyKind::*;
+            match func.ty(body.local_decls(), tcx).kind() {
+                FnDef(def_id, generic_args)
+                | Closure(def_id, generic_args)
+                | Coroutine(def_id, generic_args)
+                | CoroutineClosure(def_id, generic_args) => {
+                    if let Some(instance_kind) = tcx.try_resolve_instance_raw(
+                        tcx.typing_env_in_body(body.source.def_id()),
+                        *def_id,
+                        generic_args,
+                    ) {
+                        calls.push((
+                            index.as_u32(),
+                            instance_kind.def.to_plain_id(tcx),
+                            CallDebugInfo {
+                                location: tcx.sess.source_map().span_to_short_string(
+                                    *fn_span,
+                                    rustc_span::RemapPathScopeComponents::DEBUGINFO,
+                                ),
+                            },
+                        ));
+                    }
+                }
+                FnPtr(..) => {
+                    // TODO
+                }
+                _ => {}
+            }
+        }
+
+        calls
+    }
+}
+
+mod return_points {
+    use rustc_middle::mir::{Body, TerminatorKind};
+
+    use common::program_map::BasicBlockIndex;
+
+    pub(super) fn from_body(body: &Body<'_>) -> Vec<BasicBlockIndex> {
+        body.basic_blocks
+            .iter_enumerated()
+            .filter_map(|(index, block)| {
+                matches!(&block.terminator().kind, TerminatorKind::Return).then_some(index.as_u32())
+            })
+            .collect()
+    }
+}
+
+mod debug_info {
+    use rustc_middle::{mir::Body, ty::TyCtxt};
+
+    pub(super) fn function_name(tcx: TyCtxt<'_>, body: &Body<'_>) -> String {
+        tcx.def_path_str(body.source.def_id())
+    }
+}
+
+mod entry_points {
+    use rustc_middle::ty::{InstanceKind, TyCtxt};
+
+    use common::program_map::ProgramMap;
+
+    use crate::utils::mir::InstanceKindExt;
+
+    pub(super) fn add_to<'tcx>(tcx: TyCtxt<'tcx>, p_map: &mut ProgramMap) {
+        p_map.entry_points.extend(
+            tcx.entry_fn(())
+                .iter()
+                .map(|(def_id, _)| InstanceKind::Item(*def_id).to_plain_id(tcx)),
+        );
+    }
 }
